@@ -16,6 +16,14 @@ export async function verifyRemoteDeployment(db: Database) {
   const created: { id: string; email: string; password: string }[] = [];
   const uploaded: string[] = [];
   const checks: string[] = [];
+  const report = {
+    checks,
+    passed: 0,
+    fixturesRemoved: 0,
+    blobCleanupPending: 0,
+    emailDelivery: 'not-tested',
+    google: 'not-tested',
+  };
   const pass = (name: string) => {
     checks.push(name);
     console.log('REMOTE_CHECK_OK', name);
@@ -58,6 +66,10 @@ export async function verifyRemoteDeployment(db: Database) {
     await anonymous('/documents', 'GET', undefined, 401);
     pass('anonymous-access-denied');
     const configuration = (await anonymous('/config')).data;
+    report.emailDelivery = configuration.email
+      ? 'configured-not-delivery-tested'
+      : 'not-configured';
+    report.google = configuration.google ? 'configured-not-oauth-tested' : 'not-configured';
     if (!configuration.email) {
       await anonymous(
         '/auth/sign-up/email',
@@ -82,15 +94,13 @@ export async function verifyRemoteDeployment(db: Database) {
         await tx
           .insert(user)
           .values({ id, email, name: 'Contrôle de déploiement temporaire', emailVerified: true });
-        await tx
-          .insert(account)
-          .values({
-            id: randomUUID(),
-            accountId: id,
-            providerId: 'credential',
-            userId: id,
-            password: hash,
-          });
+        await tx.insert(account).values({
+          id: randomUUID(),
+          accountId: id,
+          providerId: 'credential',
+          userId: id,
+          password: hash,
+        });
         await tx.insert(profiles).values({ userId: id });
       });
       created.push({ id, email, password });
@@ -191,16 +201,20 @@ export async function verifyRemoteDeployment(db: Database) {
         google: configuration.google ? 'configured-not-oauth-tested' : 'not-configured',
       }),
     );
+    report.passed = checks.length;
+    return report;
   } finally {
     for (const key of uploaded) {
       try {
         await getStore({ name: 'laboratoire-assets', consistency: 'strong' }).delete(key);
       } catch {
+        report.blobCleanupPending++;
         console.warn('REMOTE_CHECK_BLOB_CLEANUP_PENDING', key);
       }
     }
     for (const fixture of created) {
       await db.delete(user).where(and(eq(user.id, fixture.id), eq(user.email, fixture.email)));
+      report.fixturesRemoved++;
     }
     console.log('REMOTE_CHECK_FIXTURES_REMOVED', created.length);
   }

@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
@@ -58,7 +59,20 @@ async function prepare() {
     console.log('DEPLOY_MIGRATIONS_OK', JSON.stringify({ tables: tables.rows[0].count }));
     await client.query('select pg_advisory_unlock(62601, 1)');
     // The remote smoke check targets the currently published service, not an unserved build.
-    if (process.env.LAB_VERIFY_REMOTE === '1') await verifyRemoteDeployment(db);
+    const remote = process.env.LAB_VERIFY_REMOTE === '1' ? await verifyRemoteDeployment(db) : null;
+    // Non-secret build evidence, published as a Netlify plugin status (not as a public route).
+    await mkdir('.netlify', { recursive: true });
+    await writeFile(
+      '.netlify/deployment-report.json',
+      JSON.stringify({
+        database: identity.rows[0].database,
+        labExistedBefore: labExists,
+        previouslyApplied: applied.length,
+        migrationsApplied: pending,
+        tables: tables.rows[0].count,
+        remote,
+      }),
+    );
   } finally {
     client.release();
     await pool.end();
