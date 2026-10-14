@@ -1,0 +1,7 @@
+package-lock.json
+migrations/meta/
+.local/
+.netlify/
+dist/
+playwright-report/
+test-results/
