@@ -13,7 +13,7 @@ Node 24.19.0 et Chromium système. Dernière exécution après ajout du déploie
 | `npm test` | 25 tests réussis, 5 fichiers |
 | `npm run build` | Build de production réussi |
 | `npm run build:functions` | Paquet officiel Netlify ZIP généré, API v2, environ 3 Mo |
-| `npm run test:e2e` | 3 parcours Chromium réussis |
+| `npm run test:e2e` | 4 tests Chromium réussis |
 
 Le build conserve un avertissement de taille sur le module d’éditeur chargé à la demande : environ 865 ko minifiés, 263 ko compressés. L’import et l’export DOCX sont chargés séparément. TypeScript est fixé à 5.9.3 : la version 7 testée ne fournissait pas l’API JavaScript attendue par le bundler Netlify.
 
@@ -21,11 +21,12 @@ Les tests API utilisent une base PostgreSQL PGlite réelle et le schéma/API des
 
 Le contrat documentaire teste la recherche traversant les styles, la réidentification de copies, les fragments formatés et le rejet des structures invalides. Les tests d’éditeur vérifient aussi le couper-coller préservant l’identité et le saut de page préservant l’image sélectionnée. Les tests de formats examinent le contenu XML du DOCX produit, sa réimportation sémantique et le refus d’archives trop volumineuses.
 
-Les trois parcours Chromium couvrent :
+Les quatre tests Chromium couvrent :
 
 1. Inscription, confirmation depuis la boîte locale, dossier, document, mise en forme, recherche/remplacement, tableau modifiable, équation, image, saut de page, versions, exports DOCX/PDF, déconnexion/reconnexion et contenu conservé. Le PDF produit contient plusieurs pages A4 ; les erreurs JavaScript sont surveillées.
 2. Conflit entre deux onglets, conservation dans une nouvelle copie, interruption réseau, rechargement et récupération/synchronisation de la copie locale.
 3. Import DOCX, liste, case à cocher, lien, collage HTML enrichi et affichage mobile sans débordement horizontal.
+4. Message explicite et inscription désactivée lorsque l’email est indisponible, tout en conservant la connexion. Ce test d’interface simule uniquement la réponse de configuration sans SMTP.
 
 Captures et exports : `test-results/`, ignoré par Git. Le workflow `.github/workflows/ci.yml` reproduit les vérifications ; son exécution distante n’est pas attestée par les résultats locaux.
 
@@ -47,6 +48,8 @@ Le déploiement `6acff50a52807745eacd6afb` a été constaté `ready`, plugin `su
 | Déconnexion/reconnexion et lecture directe Neon | Même contenu et même révision conservés |
 
 Deux comptes gratuits temporaires `@example.test` sont provisionnés administrativement pour la recette, puis supprimés avec leurs documents et sessions. Cette provision de fixtures **ne valide pas une inscription par email public**. Les images de test restantes sont signalées séparément pour nettoyage ciblé par l’API Netlify : un jeton de build ne peut pas supprimer un fichier du magasin partagé.
+
+Le nettoyage ciblé des images des recettes terminées a été effectué via l’API Netlify après vérification de leur identité, taille et empreinte. Les réponses DELETE 204 puis GET 404 confirment leur suppression. La liste du magasin peut temporairement conserver des entrées périmées ; aucun fichier utilisateur ni magasin complet n’a été supprimé.
 
 La machine Codex reste soumise à sa liste de domaines autorisés : la recette hébergée a été exécutée dans le déploiement Netlify. Les tests Chromium restent une recette locale ; aucune recette navigateur distante n’est revendiquée.
 

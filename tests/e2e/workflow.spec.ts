@@ -4,6 +4,22 @@ import { makeDocx } from '../../src/editor/docx-export';
 import { defaultLayout } from '../../src/shared/document';
 import { PDFDocument } from 'pdf-lib';
 const password = 'Browser-Validation-Password42!';
+
+test('explique l’indisponibilité des emails tout en conservant la connexion', async ({ page }) => {
+  await page.route('**/api/config', (route) =>
+    route.fulfill({
+      json: { local: false, google: false, email: false },
+    }),
+  );
+  await page.goto('/');
+  await expect(page.getByRole('status')).toContainText(
+    'L’envoi des emails est en cours de configuration',
+  );
+  await expect(page.getByRole('button', { name: 'Entrer dans mon laboratoire' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Créer mon espace' }).click();
+  await expect(page.getByRole('button', { name: 'Créer mon compte' })).toBeDisabled();
+});
+
 async function register(page: Page) {
   const email = `browser-${crypto.randomUUID()}@example.test`;
   await page.goto('/');

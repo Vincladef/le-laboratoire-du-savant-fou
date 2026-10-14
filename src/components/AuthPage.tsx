@@ -143,6 +143,13 @@ export function AuthPage() {
               envoi externe.
             </p>
           )}
+          {config.data && !config.data.local && !config.data.email && (
+            <p className="alert info" role="status">
+              L’envoi des emails est en cours de configuration. Les inscriptions et la récupération
+              de compte sont temporairement indisponibles. La connexion des comptes déjà confirmés
+              reste disponible.
+            </p>
+          )}
           {config.data?.google && ['signin', 'signup'].includes(mode) && (
             <>
               <button
