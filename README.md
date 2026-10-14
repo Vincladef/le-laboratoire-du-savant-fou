@@ -2,6 +2,8 @@
 
 Application d’écriture et bibliothèque privée. Mission 1 : React / Tiptap / PostgreSQL, API Netlify Functions, comptes Better Auth, historique et récupération des sauvegardes.
 
+Site déployé : https://le-laboratoire-du-savant-fou.netlify.app. La base de production est Neon. L’ouverture des inscriptions publiques attend encore la configuration de l’envoi d’emails ; Google est facultatif et non configuré.
+
 ## Démarrer
 
 Node.js 24 et npm :
@@ -13,7 +15,7 @@ npm run dev
 
 Interface sur le port 5173, API sur 3001. Le développement utilise **PGlite, PostgreSQL embarqué persistant**, dans `.local/`. Ce mode n’est pas un branchement à Neon. En production, `DATABASE_URL` est obligatoire, sans repli vers une base locale.
 
-Les migrations sont appliquées automatiquement uniquement à la base locale. Les emails de développement sont déposés dans `.local/mail/*.json` : ouvrir le lien du fichier correspondant à son inscription pour confirmer le compte. Ces fichiers contiennent des liens d’authentification et ne doivent pas être publiés. Aucun compte ni mot de passe de production n’est prédéfini.
+Au démarrage local, seules les migrations de la base locale sont appliquées. Les emails de développement sont déposés dans `.local/mail/*.json` : ouvrir le lien du fichier correspondant à son inscription pour confirmer le compte. Ces fichiers contiennent des liens d’authentification et ne doivent pas être publiés. Aucun compte ni mot de passe de production n’est prédéfini.
 
 ## Vérifier
 
@@ -40,7 +42,7 @@ Les conversions Word ne sont pas sans perte ; le JSON référence les images san
 
 ## Déploiement et documentation
 
-Le [guide Netlify/Neon](docs/deployment.md) indique les accès et variables nécessaires. Le build n’exécute aucune migration distante. Une configuration absente produit `503 SETUP_REQUIRED`, jamais un faux compte ou une fausse sauvegarde.
+Le [guide Netlify/Neon](docs/deployment.md) indique les ressources réutilisées et les variables nécessaires. Le build n’exécute aucune migration distante par défaut ; une préparation contrôlée est disponible sur activation explicite. Une configuration absente produit `503 SETUP_REQUIRED`, jamais un faux compte ou une fausse sauvegarde.
 
 [Architecture](docs/architecture.md) · [Choix du moteur et licences](docs/editor-decision.md) · [Contrat des passages](docs/document-contract.md) · [Résultats de validation](docs/validation.md)
 

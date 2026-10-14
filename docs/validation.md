@@ -1,12 +1,16 @@
 # Validation
 
-Recette locale du 14 octobre 2026, Node 24.19.0 et Chromium système. Les résultats ci-dessous ne sont pas une recette du service hébergé.
+Recettes du 14 octobre 2026. Les résultats locaux et ceux du service hébergé sont distingués ci-dessous.
+
+## Tests locaux
+
+Node 24.19.0 et Chromium système. Dernière exécution après ajout du déploiement contrôlé :
 
 | Vérification exécutée | Résultat |
 | --- | --- |
 | `npm ci --cache /workspace/.npm-cache` | Installation reproductible : 624 paquets |
 | `npm run typecheck` | Réussi, aucune erreur TypeScript |
-| `npm test` | 22 tests réussis, 4 fichiers |
+| `npm test` | 25 tests réussis, 5 fichiers |
 | `npm run build` | Build de production réussi |
 | `npm run build:functions` | Paquet officiel Netlify ZIP généré, API v2, environ 3 Mo |
 | `npm run test:e2e` | 3 parcours Chromium réussis |
@@ -25,6 +29,27 @@ Les trois parcours Chromium couvrent :
 
 Captures et exports : `test-results/`, ignoré par Git. Le workflow `.github/workflows/ci.yml` reproduit les vérifications ; son exécution distante n’est pas attestée par les résultats locaux.
 
+## Service Netlify avec Neon réel
+
+URL : https://le-laboratoire-du-savant-fou.netlify.app. Ressources existantes réutilisées : site `449cbaf7-eaaa-43ce-8b27-50460f3d036c`, projet Neon `little-dust-51900608`, branche `production`, base `laboratoire`.
+
+Le déploiement `6acff50a52807745eacd6afb` a été constaté `ready`, plugin `success`. Le rapport a été récupéré par l’API authentifiée Netlify `plugin_runs/latest` : **15 tables, une migration déjà appliquée, zéro migration rejouée et 8 contrôles distants réussis**. Il provient de requêtes HTTPS vers le service de production depuis le build Netlify, pas de PGlite ni d’un faux serveur.
+
+| Contrôle hébergé | Résultat |
+| --- | --- |
+| Santé du service, connexion PostgreSQL réelle | Réussi |
+| Accès sans session | Refusé, HTTP 401 attendu |
+| Inscription sans SMTP | Refusée proprement, HTTP 503 attendu |
+| Connexion email/mot de passe des comptes de contrôle | Réussie ; cookies Secure, HttpOnly, SameSite=Lax |
+| Dossiers, contenu riche, sauvegarde et historique | Réussi |
+| Image Netlify Blobs et isolation entre deux comptes | Octets conservés ; accès croisés refusés |
+| Sauvegarde avec révision obsolète | Conflit HTTP 409 attendu |
+| Déconnexion/reconnexion et lecture directe Neon | Même contenu et même révision conservés |
+
+Deux comptes gratuits temporaires `@example.test` sont provisionnés administrativement pour la recette, puis supprimés avec leurs documents et sessions. Cette provision de fixtures **ne valide pas une inscription par email public**. Les images de test restantes sont signalées séparément pour nettoyage ciblé par l’API Netlify : un jeton de build ne peut pas supprimer un fichier du magasin partagé.
+
+La machine Codex reste soumise à sa liste de domaines autorisés : la recette hébergée a été exécutée dans le déploiement Netlify. Les tests Chromium restent une recette locale ; aucune recette navigateur distante n’est revendiquée.
+
 ## Audit des dépendances
 
 `npm audit --omit=dev` : **7 alertes modérées, aucune haute ni critique** à cette date. L’audit sort donc avec un code non nul ; il n’est pas présenté comme intégralement réussi.
@@ -34,6 +59,6 @@ Captures et exports : `test-results/`, ignoré par Git. Le workflow `.github/wor
 
 Les rétrogradations majeures proposées automatiquement par npm ne sont pas appliquées. Cette analyse de portée ne remplace pas le suivi des correctifs amont ni un audit de sécurité complet.
 
-## Vérifications encore bloquées
+## Vérifications encore en attente
 
-Non attesté sans configuration externe : Neon hébergé, publication Netlify, Blobs en production, réception SMTP externe et OAuth Google réel. Les accès correspondants ne sont pas fournis à cet environnement. La recette locale utilise des emails déposés sur disque, pas un envoi SMTP simulé présenté comme reçu.
+Réception SMTP externe, inscription/confirmation/récupération avec un véritable email, et OAuth Google réel restent non validés. Aucun fournisseur email ni identifiant Google n’est configuré. L’inscription et la récupération publiques restent donc désactivées ; les clés Neon/Netlify ne donnent pas accès à un fournisseur SMTP ou à un projet Google Cloud. Les confirmations de la recette locale utilisent explicitement la boîte locale.

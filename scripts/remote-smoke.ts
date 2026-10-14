@@ -21,6 +21,7 @@ export async function verifyRemoteDeployment(db: Database) {
     passed: 0,
     fixturesRemoved: 0,
     blobCleanupPending: 0,
+    blobCleanupKeys: [] as string[],
     emailDelivery: 'not-tested',
     google: 'not-tested',
   };
@@ -209,6 +210,7 @@ export async function verifyRemoteDeployment(db: Database) {
         await getStore({ name: 'laboratoire-assets', consistency: 'strong' }).delete(key);
       } catch {
         report.blobCleanupPending++;
+        report.blobCleanupKeys.push(key);
         console.warn('REMOTE_CHECK_BLOB_CLEANUP_PENDING', key);
       }
     }
