@@ -5,16 +5,25 @@ import type { Database } from '../server/db';
 import { createApp } from '../server/app';
 import { getConfig } from '../server/config';
 import { verifyHostedBrowser } from './hosted-browser-smoke';
+import { verifyManagedSignup } from './managed-signup-smoke';
 
-/** Development-only real Neon Auth check; never alters existing users or credentials. */
+/** Development-first checks; production additionally requires an explicit deployment gate. */
 export async function verifyManagedAuth(client: PoolClient, db: Database) {
   const config = getConfig();
-  if (
-    process.env.CONTEXT !== 'branch-deploy' ||
-    process.env.BRANCH !== 'mission-2' ||
-    !config.neonAuthURL?.includes('ep-holy-breeze-bap2004l.neonauth.')
-  )
-    throw new Error('La recette de migration est réservée à development.');
+  const development =
+    process.env.CONTEXT === 'branch-deploy' &&
+    process.env.BRANCH === 'mission-2' &&
+    config.neonAuthURL?.includes('ep-holy-breeze-bap2004l.neonauth.');
+  const production =
+    process.env.CONTEXT === 'production' &&
+    process.env.BRANCH === 'main' &&
+    process.env.LAB_ALLOW_PRODUCTION_CHECKS === '1' &&
+    process.env.LAB_EXPECTED_DATABASE_HOST ===
+      'ep-wispy-lake-ba7v96jl-pooler.c-8.eu-central-1.aws.neon.tech' &&
+    config.neonAuthURL?.includes('ep-wispy-lake-ba7v96jl.neonauth.') &&
+    config.baseURL === 'https://le-laboratoire-du-savant-fou.netlify.app';
+  if (!development && !production)
+    throw new Error('Recette réservée aux cibles explicitement autorisées.');
   const counts = async () =>
     (
       await client.query(
@@ -40,6 +49,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     foreignEmail = `migration-${foreignId}@example.test`;
   const checks: string[] = [];
   let browser: Awaited<ReturnType<typeof verifyHostedBrowser>> | null = null;
+  let signup: Awaited<ReturnType<typeof verifyManagedSignup>> | null = null;
   try {
     await client.query(
       'insert into lab."user" (id,name,email,email_verified) values ($1,$2,$3,true)',
@@ -282,6 +292,12 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     await call('/profile');
     await call('/auth/sign-out', 'POST', {});
     checks.push('managed-password-reset-and-session-revocation');
+    signup = await verifyManagedSignup(client, call, config.baseURL);
+    checks.push(
+      signup.verification === 'completed-with-managed-db-fixture-otp'
+        ? 'managed-public-signup-and-otp-verification'
+        : 'managed-public-signup-and-unverified-access-denied',
+    );
   } catch (error) {
     if (error instanceof Error) {
       error.message = error.message.replaceAll(password, '[redacted]');
@@ -300,13 +316,18 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     await client.query('delete from lab."user" where id=$1 and email=$2', [legacyId, email]);
   }
   const after = await counts();
-  if (JSON.stringify(before) !== JSON.stringify(after))
-    throw new Error('Le nettoyage de la recette ne correspond pas à l’inventaire initial');
+  const leftovers = await client.query(
+    'select (select count(*) from lab."user" where id=$1 or id in (select user_id from lab.auth_identities where subject=$2)) + (select count(*) from neon_auth."user" where id=$3 or id=$2::uuid) as count',
+    [legacyId, foreignId, id],
+  );
+  if (Number(leftovers.rows[0].count) !== 0)
+    throw new Error('Des fixtures de recette sont encore présentes.');
   return {
     checks,
     passed: checks.length,
     before,
     after,
+    inventoryStable: JSON.stringify(before) === JSON.stringify(after),
     emailDelivery: 'shared-provider-not-inbox-tested',
     google: 'shared-provider-not-interactive-tested',
     ownerCandidate:
@@ -321,5 +342,6 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
         ? 'published-https'
         : 'in-process-with-real-neon-auth-and-database',
     browser,
+    signup,
   };
 }
