@@ -41,7 +41,11 @@ Les comptes de recette sont nettoyés précisément ; inventaires avant/après i
 
 L’inventaire **READ ONLY** de production a trouvé **1 utilisateur applicatif, 1 document, 14 versions, 2 identités Auth**, sans identité historique non associée. Deux inventaires consécutifs ont donné le même hash documentaire. La connexion secondaire de cet inventaire et le drapeau d’inspection des liens ont été retirés après usage ; ils sont régénérables par API.
 
-La recette de production est enregistrée après confirmation, distinctement de development.
+Production : le déploiement **`6ad12759575b4460b98aeb2d`**, commit `99fee3aff5b8c99661b7b3815e3ef15cfc77e5c5`, est `ready` et a appliqué les **5 nouvelles migrations**, soit 10 migrations connues et 19 tables. Ses 15 contrôles avec Neon réel ont réussi. Le déploiement suivant **`6ad128bda6b2bf2faf7672e5`**, commit `355aa863ecaa98d99a1a98e7f42618843d4c9747`, est également `ready` : **16 contrôles HTTPS et 6 parcours Chromium contre le site public réussis**, sur ordinateur et 390×844, sans erreur JavaScript.
+
+Les lectures SQL avant/après attestent la conservation de l’utilisateur applicatif existant, de son document, de ses **14 versions**, de son passage et de sa carte FSRS ; les 2 identités Auth sont conservées. Le hash documentaire reste strictement identique à l’inventaire préalable. Le profil historique dispose de la protection des 100 versions. Les fixtures ajoutées pendant la recette sont supprimées ; `inventoryStable: true`. Aucun abonnement ou événement de paiement fictif n’est ajouté à la vraie base.
+
+Ces contrôles de production valident le fonctionnement réellement livré **avec ventes fermées**, pas un achat Stripe, un portail client raccordé ou un webhook provenant de Stripe. La récupération testée emploie les seuls jetons des fixtures ; la réception dans une boîte personnelle et le consentement Google personnel ne sont pas attestés.
 
 ## Environnement et dépendances
 

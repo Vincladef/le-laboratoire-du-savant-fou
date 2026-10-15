@@ -67,6 +67,8 @@ Stripe Tax et toute option payante supplémentaire ne sont pas activés. L’éd
 
 Réutiliser les produits existants et ne créer aucun nouveau compte/projet. Un secret de signature déjà créé ne peut pas être relu par l’API Stripe : préserver sa valeur serveur ou prévoir une rotation autorisée, pas un endpoint dupliqué silencieusement. Les tests de paiement réels nécessitent une sandbox/test Stripe ; aucune carte réelle ne doit être utilisée.
 
+Avant toute activation, inventorier également les éventuels abonnements déjà achetés via les Payment Links et préparer leur rattachement à une identité vérifiée. Ne pas recréer aveuglément des clients/abonnements ni attribuer des droits sur la seule déclaration d’un email ou d’un navigateur. Cet inventaire exige l’API autorisée et n’a pas pu être réalisé depuis les seules pages publiques.
+
 ## Administration et propriétaire
 
 `/admin` et les API `/api/admin/*` exigent le propriétaire calculé côté serveur. En mode Neon déployé, le profil et l’identité persistante doivent correspondre au sujet `OWNER_NEON_SUBJECT`. Aucun champ du profil public, email arbitraire ou retour Stripe ne promeut un compte. Le propriétaire conserve Premium à vie sans abonnement.

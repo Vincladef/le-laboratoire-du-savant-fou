@@ -15,6 +15,8 @@ La priorité (`high`, `medium`, `low`) est indépendante du calendrier. Ses modi
 
 Les indices sont limités à 1 000 caractères. Les éléments qui n’ont pas de texte sélectionnable, par exemple une image seule, ne deviennent pas des cartes textuelles.
 
+Depuis la mission 3, un quota de passages actifs est contrôlé dans la transaction documentaire (voir [billing.md](billing.md)). Les passages supprimés restent archivés mais libèrent une place ; la corbeille compte tant que ses annotations existent. Un dépassement refuse la croissance et annule ensemble document/version/index/cartes, sans effacer le brouillon local. Un compte déjà au-dessus du plafond peut modifier son texte ou retirer des annotations ; aucune carte ni révision existante n’est supprimée à cause d’un changement d’offre.
+
 Le JSON documentaire conserve les annotations, indices et priorités. Son import crée un nouveau document avec de nouvelles identités et filiation, donc un nouvel apprentissage. La restauration depuis l’historique du même document conserve ses identités. DOCX et PDF conservent le contenu lisible et les styles pris en charge, sans transporter les calendriers ou historiques FSRS ; les limites de conversion Word restent celles de la mission 1.
 
 ## Deux modes

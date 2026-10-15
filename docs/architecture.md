@@ -20,7 +20,7 @@ La confirmation email est obligatoire. Neon fournit des codes avec son email par
 4. Une révision obsolète produit HTTP 409. Le client conserve sa copie et propose un nouveau document, la version distante ou un remplacement explicite.
 5. Les erreurs réseau déclenchent des tentatives espacées et au retour réseau. Les copies non synchronisées sont proposées à la réouverture.
 
-Pas de collaboration temps réel ni de fusion automatique. Les positions de lecture ne génèrent pas de versions. L’interface montre les 100 dernières versions ; aucun nettoyage automatique des versions n’est activé. Une politique de rétention compatible avec les limites Neon devra être définie pour une exploitation commerciale prolongée.
+Pas de collaboration temps réel ni de fusion automatique. Les positions de lecture ne génèrent pas de versions. La fenêtre d’historique est désormais contrôlée côté serveur par formule : 10/30/100 pour les nouveaux comptes ; les profils préexistants conservent 100 via `legacy_version_limit`. Aucune archive n’est purgée automatiquement et les sauvegardes ne s’arrêtent pas lorsque la fenêtre est pleine. Une politique de rétention compatible avec les limites Neon devra être définie pour une exploitation commerciale prolongée.
 
 Les copies navigateur ne sont pas chiffrées contre quelqu’un ayant accès au profil de cet appareil. Leur effacement, le mode privé ou une panne de stockage peuvent les supprimer ; les erreurs sont signalées avec export possible. Elles ne remplacent pas une sauvegarde serveur.
 
