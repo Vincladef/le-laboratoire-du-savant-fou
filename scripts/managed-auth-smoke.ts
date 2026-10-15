@@ -262,6 +262,11 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
         throw new Error('Données navigateur non persistées dans Neon');
       checks.push('hosted-browser-learning-direct-neon-persistence');
     }
+  } catch (error) {
+    if (error instanceof Error) {
+      error.message = error.message.replaceAll(password, '[redacted]');
+    }
+    throw error;
   } finally {
     await client.query(
       'delete from lab."user" where id in (select user_id from lab.auth_identities where subject=$1) and email=$2',

@@ -20,6 +20,20 @@ export async function cleanupFailedFixtures(client: PoolClient) {
       ['2026-10-15T15:35:36Z', '2026-10-15T15:40:17Z'],
     )
   ).rows;
+  // Earlier cleanup removed the managed identity before the failed SQL cascade.
+  // Resolve those exact orphaned fixtures by the persisted subject and time window.
+  const orphans = (
+    await client.query(
+      `select i.subject::uuid as subject,l.email,l.id as local_id,p.role,
+    (select count(*)::int from lab.documents d where d.owner_id=l.id) as documents,
+    (select count(*)::int from lab.documents d where d.owner_id=l.id and d.title='Document préexistant de contrôle') as fixture_documents
+    from lab."user" l join lab.auth_identities i on i.user_id=l.id join lab.profiles p on p.user_id=l.id
+    where l.created_at>=$1 and l.created_at<=$2 and l.email='migration-'||i.subject||'@example.test'
+      and l.name='Recette migration' and not exists(select 1 from neon_auth."user" n where n.id::text=i.subject)`,
+      ['2026-10-15T15:35:36Z', '2026-10-15T15:40:17Z'],
+    )
+  ).rows;
+  candidates.push(...orphans);
   if (
     candidates.some(
       (row) =>
