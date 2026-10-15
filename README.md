@@ -62,4 +62,4 @@ scripts/          serveur local et migration distante
 tests/            tests API, contrat documentaire et navigateur
 ```
 
-Le schéma `lab` ne remplace aucune table d’un autre produit ; Neon Auth conserve son schéma géré `neon_auth`. Les abonnements restent réservés à la mission 3. Consulter [le fonctionnement de la mémorisation](docs/learning.md), [les prérequis](docs/prerequisites.md) et [les résultats de validation](docs/validation.md).
+Le schéma `lab` ne remplace aucune table d’un autre produit ; Neon Auth conserve son schéma géré `neon_auth`. Les abonnements restent réservés à la mission 3. Consulter [le fonctionnement de la mémorisation](docs/learning.md), [les prérequis](docs/prerequisites.md) et [les résultats de validation](docs/validation-mission-2.md).

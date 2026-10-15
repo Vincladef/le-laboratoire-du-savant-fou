@@ -1,5 +1,7 @@
 # Validation
 
+La recette actuelle des textes à trous, de FSRS et de Neon Managed Better Auth est dans [validation-mission-2.md](validation-mission-2.md). Les résultats ci-dessous sont l’archive de la mission 1.
+
 Recettes du 14 octobre 2026. Les résultats locaux et ceux du service hébergé sont distingués ci-dessous.
 
 ## Tests locaux
