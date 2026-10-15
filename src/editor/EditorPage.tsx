@@ -27,6 +27,7 @@ import {
   type PageLayout,
   plainText,
   validateDocument,
+  copyWithNewAnchors,
 } from '../shared/document';
 import { Brand } from '../components/Brand';
 import { Modal } from '../components/Modal';
@@ -653,20 +654,9 @@ function DocumentEditor({
             } else {
               if (file.size > 2_500_000) throw new Error('Source JSON trop volumineuse.');
               const source = JSON.parse(await file.text());
-              content = validateDocument(source.content);
+              content = copyWithNewAnchors(validateDocument(source.content));
               importedTitle = source.title || importedTitle;
               if (source.layout) importedLayout = source.layout;
-              const ids = new Map<string, string>();
-              const visit = (n: RichNode) => {
-                for (const mark of n.marks || [])
-                  if (mark.type === 'memoryAnchor') {
-                    const original = mark.attrs!.id;
-                    if (!ids.has(original)) ids.set(original, crypto.randomUUID());
-                    mark.attrs = { id: ids.get(original), sourceId: original };
-                  }
-                n.content?.forEach(visit);
-              };
-              visit(content);
             }
             const imported = await api<DocumentRecord>('/documents', {
               method: 'POST',

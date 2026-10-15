@@ -15,6 +15,8 @@ La priorité (`high`, `medium`, `low`) est indépendante du calendrier. Ses modi
 
 Les indices sont limités à 1 000 caractères. Les éléments qui n’ont pas de texte sélectionnable, par exemple une image seule, ne deviennent pas des cartes textuelles.
 
+Le JSON documentaire conserve les annotations, indices et priorités. Son import crée un nouveau document avec de nouvelles identités et filiation, donc un nouvel apprentissage. La restauration depuis l’historique du même document conserve ses identités. DOCX et PDF conservent le contenu lisible et les styles pris en charge, sans transporter les calendriers ou historiques FSRS ; les limites de conversion Word restent celles de la mission 1.
+
 ## Deux modes
 
 Le mode libre masque les annotations actives correspondant aux priorités choisies, permet d’afficher les indices, de révéler une réponse ou toutes les réponses, et de recommencer. Il n’envoie aucune note et ne modifie pas les cartes FSRS.
