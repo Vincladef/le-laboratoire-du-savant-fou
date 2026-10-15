@@ -50,7 +50,17 @@ Deux essais development avaient mis en évidence une contrainte de suppression d
 
 L’inventaire préalable en lecture seule a constaté 0 utilisateur auto-hébergé, 0 document, 0 version et 0 identité Auth dans la branche production ; aucun ancien mot de passe n’était donc à transférer. Neon Auth était activé mais son espace production était vide, indépendamment des identités development.
 
-La bascule et sa recette publiée sont enregistrées dans le rapport de livraison final. Ne pas confondre le déploiement development ci-dessus avec une validation de production.
+La bascule n’a eu lieu qu’après la recette development. Le déploiement `6ad0fe4d888c88a51896f8f4`, commit `5889a638ce3e034f69a3cc06a6a9bee0cec55c6f` publié sur `main`, est `ready` : les **4 nouvelles migrations** ont été appliquées, soit **5 migrations connues et 18 tables**, puis **13 contrôles avec les vrais services Neon** ont réussi avant publication. Aucun schéma ni document existant n’a été écrasé.
+
+Après cette publication, le déploiement de recette `6ad0ff300316f42b9914ed37`, même commit, est également `ready`. Il a visé **https://le-laboratoire-du-savant-fou.netlify.app** et non l’URL de branche : **14 contrôles HTTPS et 5 parcours Chromium hébergés réussis**, aucune erreur JavaScript, affichages ordinateur et 390×844. Ce sont les mêmes contrôles détaillés dans la section development : connexion, document formaté et annotations, mode libre, calendrier FSRS, reprise de séance, reconnexion, conflits, isolation, récupération et démarrage Google.
+
+La lecture SQL après les actions du navigateur a confirmé les **3 cartes et 3 révisions** dans la vraie base de production. Les fixtures ont ensuite été supprimées précisément. Les inventaires avant/après sont identiques : **0 utilisateur d’application, document, passage, carte, révision ou séance de test conservé ; 1 identité Auth conservée**, celle réservée au propriétaire. `inventoryStable: true`. Aucun compte personnel n’a été utilisé pour la recette.
+
+Le compte propriétaire a été réservé par API à partir de l’identité vérifiée du titulaire Netlify et associé à son sujet Neon, distinct dans chaque branche. Le privilège n’est accordé qu’après authentification Neon et vérification de cette identité exacte : droit Premium permanent, exempt de facturation. Sa connexion personnelle et sa réception email ne sont pas présentées comme testées.
+
+Après la recette, les **10 variables temporaires** ont été supprimées des deux contextes Netlify, y compris la connexion secondaire d’inventaire production. Elles sont régénérables par les API autorisées. Seules les **5 variables permanentes** listées dans [deployment.md](deployment.md) restent présentes, avec valeurs distinctes production/development. Les builds ordinaires ne rejouent donc ni migrations ni fixtures de test.
+
+Le dernier contrôle local sur ce commit a de nouveau exécuté **45 tests réussis**. Le démarrage `npm run dev` avec origine locale explicite a répondu HTTP 200 pour l’interface et `status: ok`, `database: local-postgresql`, `authentication: local` pour l’API ; il n’utilise pas la base de production. Le serveur lancé pour ce contrôle a été arrêté.
 
 ## Limites attestées
 
