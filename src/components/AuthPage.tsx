@@ -8,9 +8,9 @@ import { Brand } from './Brand';
 export function AuthPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [mode, setMode] = useState<
-    'signin' | 'signup' | 'forgot' | 'reset' | 'verify' | 'otp-reset'
-  >(params.has('token') ? 'reset' : 'signin');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot' | 'reset' | 'verify'>(
+    params.has('token') ? 'reset' : 'signin',
+  );
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,38 +40,40 @@ export function AuthPage() {
       const result =
         mode === 'verify'
           ? await authClient.emailOtp.verifyEmail({ email, otp })
-          : mode === 'otp-reset'
-            ? await authClient.emailOtp.resetPassword({ email, otp, password })
-            : mode === 'forgot' && config.data?.managed
-              ? await authClient.emailOtp.requestPasswordReset({ email })
-              : mode === 'signup'
-                ? await authClient.signUp.email({
-                    name,
-                    email,
-                    password,
-                    callbackURL: config.data?.managed
-                      ? `${window.location.origin}/api/auth/complete`
-                      : '/library',
+          : mode === 'signup'
+            ? await authClient.signUp.email({
+                name,
+                email,
+                password,
+                callbackURL: config.data?.managed
+                  ? `${window.location.origin}/api/auth/complete`
+                  : '/library',
+              })
+            : mode === 'forgot'
+              ? await authClient.requestPasswordReset({
+                  email,
+                  redirectTo: `${window.location.origin}/reset-password`,
+                })
+              : mode === 'reset'
+                ? await authClient.resetPassword({
+                    newPassword: password,
+                    token: params.get('token') || '',
                   })
-                : mode === 'forgot'
-                  ? await authClient.requestPasswordReset({
-                      email,
-                      redirectTo: `${window.location.origin}/reset-password`,
-                    })
-                  : mode === 'reset'
-                    ? await authClient.resetPassword({
-                        newPassword: password,
-                        token: params.get('token') || '',
-                      })
-                    : await authClient.signIn.email({ email, password });
+                : await authClient.signIn.email({ email, password });
       if (result.error) throw new Error(result.error.message || 'La demande a échoué.');
-      if (mode === 'signin' || mode === 'verify') navigate('/library');
+      if (mode === 'verify') {
+        const session = await authClient.getSession({ query: { disableCookieCache: true } });
+        if (session.error)
+          throw new Error(session.error.message || 'La session ne peut pas être ouverte.');
+        if (session.data?.user) navigate('/library');
+        else {
+          changeMode('signin');
+          setNotice('Votre adresse est confirmée. Vous pouvez vous connecter.');
+        }
+      } else if (mode === 'signin') navigate('/library');
       else if (mode === 'signup' && config.data?.managed) {
         changeMode('verify');
         setNotice('Saisissez le code reçu par email pour confirmer votre adresse.');
-      } else if (mode === 'forgot' && config.data?.managed) {
-        changeMode('otp-reset');
-        setNotice('Si ce compte existe, un code de récupération vous a été envoyé.');
       } else if (mode === 'signup')
         setNotice(
           'Un lien de confirmation vous a été envoyé. Confirmez votre adresse pour ouvrir votre espace.',
@@ -145,7 +147,7 @@ export function AuthPage() {
                 ? 'Retrouvez votre compte.'
                 : mode === 'verify'
                   ? 'Confirmez votre adresse.'
-                  : mode === 'reset' || mode === 'otp-reset'
+                  : mode === 'reset'
                     ? 'Un nouveau mot de passe.'
                     : 'Heureux de vous retrouver.'}
           </h2>
@@ -225,7 +227,7 @@ export function AuthPage() {
                 />
               </label>
             )}
-            {['verify', 'otp-reset'].includes(mode) && (
+            {mode === 'verify' && (
               <label>
                 Code reçu par email
                 <input
@@ -284,12 +286,10 @@ export function AuthPage() {
                 : mode === 'signup'
                   ? 'Créer mon compte'
                   : mode === 'forgot'
-                    ? config.data?.managed
-                      ? 'Envoyer le code de récupération'
-                      : 'Envoyer le lien de récupération'
+                    ? 'Envoyer le lien de récupération'
                     : mode === 'verify'
                       ? 'Confirmer mon adresse'
-                      : mode === 'reset' || mode === 'otp-reset'
+                      : mode === 'reset'
                         ? 'Changer le mot de passe'
                         : 'Entrer dans mon laboratoire'}
               <ArrowRight size={18} />

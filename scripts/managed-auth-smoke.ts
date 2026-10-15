@@ -262,6 +262,26 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
         throw new Error('Données navigateur non persistées dans Neon');
       checks.push('hosted-browser-learning-direct-neon-persistence');
     }
+    cookies.clear();
+    await call('/auth/sign-in/email', 'POST', { email: foreignEmail, password });
+    await call('/auth/request-password-reset', 'POST', {
+      email: foreignEmail,
+      redirectTo: `${config.baseURL}/reset-password`,
+    });
+    const resets = await client.query(
+      'select identifier from neon_auth.verification where value=$1 and identifier like $2 and "expiresAt">now() order by "createdAt" desc limit 1',
+      [foreignId, 'reset-password:%'],
+    );
+    const resetToken = resets.rows[0]?.identifier?.slice('reset-password:'.length);
+    if (!resetToken) throw new Error('Jeton de récupération de la fixture introuvable');
+    const resetPassword = randomBytes(32).toString('base64url');
+    await call('/auth/reset-password', 'POST', { token: resetToken, newPassword: resetPassword });
+    await call('/documents', 'GET', undefined, 401);
+    cookies.clear();
+    await call('/auth/sign-in/email', 'POST', { email: foreignEmail, password: resetPassword });
+    await call('/profile');
+    await call('/auth/sign-out', 'POST', {});
+    checks.push('managed-password-reset-and-session-revocation');
   } catch (error) {
     if (error instanceof Error) {
       error.message = error.message.replaceAll(password, '[redacted]');

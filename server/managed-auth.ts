@@ -129,8 +129,6 @@ export function managedAuth(config: AppConfig) {
           'revoke-sessions',
           'email-otp/send-verification-otp',
           'email-otp/verify-email',
-          'email-otp/request-password-reset',
-          'email-otp/reset-password',
         ]).has(path)
       )
         return c.json({ message: 'Route d’authentification indisponible.' }, 404);

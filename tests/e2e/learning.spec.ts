@@ -175,14 +175,16 @@ test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise 
   await page.screenshot({ path: testInfo.outputPath('mission-2-mobile.png'), fullPage: true });
   expect(errors).toEqual([]);
 });
-test('les écrans Neon emploient les codes pour confirmation et récupération', async ({ page }) => {
+test('les écrans Neon proposent la confirmation par code et la récupération par lien', async ({
+  page,
+}) => {
   await page.route('**/api/config', (r) =>
     r.fulfill({ json: { local: false, google: true, email: true, managed: true } }),
   );
   await page.route('**/api/auth/sign-up/email', (r) =>
     r.fulfill({ json: { user: { id: crypto.randomUUID() }, token: null } }),
   );
-  await page.route('**/api/auth/email-otp/request-password-reset', (r) =>
+  await page.route('**/api/auth/request-password-reset', (r) =>
     r.fulfill({ json: { status: true } }),
   );
   await page.goto('/');
@@ -196,7 +198,6 @@ test('les écrans Neon emploient les codes pour confirmation et récupération',
   await expect(page.getByRole('button', { name: 'Confirmer mon adresse' })).toBeVisible();
   await page.getByRole('button', { name: 'Revenir à la connexion' }).click();
   await page.getByRole('button', { name: 'Mot de passe oublié ?' }).click();
-  await page.getByRole('button', { name: 'Envoyer le code de récupération' }).click();
-  await expect(page.getByLabel('Code reçu par email')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Changer le mot de passe' })).toBeVisible();
+  await page.getByRole('button', { name: 'Envoyer le lien de récupération' }).click();
+  await expect(page.getByRole('status')).toContainText('un email de récupération');
 });

@@ -2,13 +2,15 @@
 
 ## API, comptes et isolation
 
-La SPA React communique avec `/api/*`, une fonction Netlify/Hono. Chaque route privée vérifie une session Better Auth puis filtre par propriétaire. Les écritures exigent l’origine exacte configurée. Cookies HttpOnly, SameSite=Lax et Secure en production ; pas de jeton de session dans localStorage. La limitation de tentatives d’authentification est persistée en base.
+La SPA React communique avec `/api/*`, une fonction Netlify/Hono. Chaque route privée fait revalider la session par Neon Managed Better Auth puis filtre par propriétaire. Les écritures exigent l’origine exacte configurée. Cookies HttpOnly, SameSite=Lax et Secure en production ; aucun jeton de session dans localStorage. Le proxy utilise le toolkit serveur officiel `@neondatabase/auth` 0.6.0-beta, fixé au lockfile ; le backend d’authentification est géré par Neon.
 
 Le schéma PostgreSQL `lab` est isolé des autres produits. Des clés étrangères composées imposent le même propriétaire aux dossiers parents, documents, versions et futures cartes. Drizzle versionne les migrations. Les mots de passe, sessions, confirmation et réinitialisation sont gérés par Better Auth, sans cryptographie artisanale.
 
-Neon Auth est pertinent, mais aucun endpoint ni activation existante n’était disponible et les accès Neon manquent. Le choix effectif est Better Auth, libre, compatible PostgreSQL Neon et Netlify, qui permet de valider les mêmes parcours en local. Il ne prétend pas utiliser un service Neon Auth déjà configuré.
+L’inventaire de la mission 2 a confirmé les intégrations Neon existantes, initialement inaccessibles à la mission 1. Les mots de passe et sessions gérés résident dans `neon_auth`. Better Auth auto-hébergé reste disponible pour le mode local et un repli de déploiement contrôlé ; la configuration gérée utilise `NEON_AUTH_BASE_URL`. Les enregistrements historiques `lab.user` et leurs clés documentaires ne sont pas supprimés.
 
-La confirmation email est obligatoire. La réinitialisation révoque les sessions. Google est invisible sans configuration serveur ; liaison automatique de fournisseurs désactivée. Les rôles `free`, `pro`, `premium`, `owner` sont serveur ; le rôle initial est toujours `free`. Aucun endpoint public ne permet de promotion. Une attribution propriétaire nécessite une opération administrative explicite sur l’identité interne vérifiée, pas une comparaison d’email navigateur.
+`auth_identities` relie le sujet Neon vérifié au propriétaire historique des documents. Un email ne peut rattacher un compte existant que si les deux identités sont vérifiées côté serveur. Les collisions et anciens comptes non vérifiés restent bloqués avec leurs données préservées. Aucun mot de passe en clair n’est récupéré et aucun jeton OAuth historique n’est copié. Les anciens mots de passe auto-hébergés ne sont pas automatiquement ceux du service Neon ; l’inventaire de production détermine si des comptes nécessitent un traitement avant bascule.
+
+La confirmation email est obligatoire. Neon fournit des codes avec son email partagé, et Google utilise son intégration partagée pour les essais. La révocation des sessions est vérifiée auprès du service, sans autoriser des écritures à partir du cache local de session. Les rôles `free`, `pro`, `premium`, `owner` restent propres à l’application ; un rôle administrateur d’organisation Neon ne confère aucun privilège documentaire. Le rôle initial est `free`. `OWNER_NEON_SUBJECT`, attribué administrativement à un sujet vérifié, réserve l’accès Premium permanent au propriétaire ; aucune comparaison d’email fourni par le navigateur ne confère ce rôle.
 
 ## Sauvegardes
 
@@ -30,4 +32,6 @@ Limites actuelles : 100 documents par compte, corbeille comprise ; 2 Mo de JSON 
 
 ## Suite
 
-Mission 2 : contrat `memoryAnchor` et tables réservées, sans interface pédagogique active. FSRS disposera de la version de l’algorithme, des paramètres et de l’historique avant/après. Mission 3 : `subscriptions` et `billing_events` préparent les webhooks Stripe idempotents ; les droits devront provenir de webhooks vérifiés et jamais d’une redirection navigateur.
+Mission 2 : `memoryAnchor`, `memory_anchors`, `fsrs_cards`, `review_history`, `study_sessions` et `study_items` portent l’apprentissage actif. Voir [learning.md](learning.md) pour FSRS, les conflits et la reprise. La migration personnalisée `0004` rend la référence entre historique et élément de séance différable : une suppression de compte termine ses cascades avant de vérifier cette référence.
+
+Mission 3 : `subscriptions` et `billing_events` préparent les webhooks Stripe idempotents ; les droits devront provenir de webhooks vérifiés et jamais d’une redirection navigateur. Un événement de facturation ne doit jamais retirer le rôle propriétaire ni déclencher un paiement pour ce compte.
