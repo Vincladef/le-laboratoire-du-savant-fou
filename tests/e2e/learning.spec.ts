@@ -153,7 +153,10 @@ test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise 
   await page.keyboard.press('Space');
   await expect(page.getByRole('button', { name: '4 · Facile' })).toBeVisible();
   await page.getByRole('document', { name: 'Document de révision' }).click();
+  await page.context().setOffline(true);
   await page.keyboard.press('4');
+  await expect(page.getByRole('button', { name: 'Réessayer l’envoi' })).toBeVisible();
+  await page.context().setOffline(false);
   await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages.map((p: any) => p.card.reps)).toEqual([1, 1]);

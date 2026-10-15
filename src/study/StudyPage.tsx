@@ -456,6 +456,14 @@ export function ScheduledStudyPage({ user }: Props) {
       if (!sent) await load();
     });
   }, [id, user.id]);
+  useEffect(() => {
+    const online = () =>
+      void run(async () => {
+        if (!(await sendPending())) await load();
+      });
+    window.addEventListener('online', online);
+    return () => window.removeEventListener('online', online);
+  }, [id, user.id]);
   async function reveal() {
     if (!session?.current || session.current.revealed || hasPending) return;
     await run(async () => {

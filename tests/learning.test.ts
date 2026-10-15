@@ -272,6 +272,10 @@ describe('Passages documentaires et vrai calendrier FSRS PostgreSQL', () => {
     const id = crypto.randomUUID();
     let d = await doc([marked(id, 'Déplacer')]);
     const initial = d;
+    const initialVersion = (await alice.call(`/documents/${d.id}/versions`)).find(
+      (v: any) => v.revision === 1,
+    );
+    const historical = await alice.call(`/documents/${d.id}/versions/${initialVersion.id}`);
     d = await save(d, [
       { type: 'text', text: 'Avant ' },
       marked(id, 'Déplacer', 'high', 'Un indice', 'italic'),
@@ -296,7 +300,7 @@ describe('Passages documentaires et vrai calendrier FSRS PostgreSQL', () => {
       { revision: obsolete.revision, title: d.title, content: initial.content, layout: d.layout },
       409,
     );
-    d = await save(d, initial.content.content[0].content);
+    d = await save(d, historical.content.content[0].content);
     expect((await anchors(d))[0].status).toBe('active');
     expect((await anchors(d))[0].id).toBe(id);
   });

@@ -298,6 +298,28 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
         ? 'managed-public-signup-and-otp-verification'
         : 'managed-public-signup-and-unverified-access-denied',
     );
+    const oauthResponse = await call('/auth/sign-in/social', 'POST', {
+      provider: 'google',
+      callbackURL: `${config.baseURL}/api/auth/complete`,
+    });
+    const oauth = await oauthResponse.json();
+    const authorizationURL = new URL(oauth.url);
+    if (
+      authorizationURL.protocol !== 'https:' ||
+      !(
+        authorizationURL.hostname === 'accounts.google.com' ||
+        authorizationURL.hostname.endsWith('.neon.tech') ||
+        authorizationURL.hostname.endsWith('.myneon.app')
+      )
+    )
+      throw new Error('Redirection Google inattendue.');
+    const state = authorizationURL.searchParams.get('state');
+    if (state)
+      await client.query(
+        'delete from neon_auth.verification where identifier=$1 or identifier=$2',
+        [state, `auth-state:${state}`],
+      );
+    checks.push('managed-google-shared-oauth-initial-redirect');
   } catch (error) {
     if (error instanceof Error) {
       error.message = error.message.replaceAll(password, '[redacted]');
@@ -329,7 +351,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     after,
     inventoryStable: JSON.stringify(before) === JSON.stringify(after),
     emailDelivery: 'shared-provider-not-inbox-tested',
-    google: 'shared-provider-not-interactive-tested',
+    google: 'shared-provider-initial-redirect-tested-consent-not-tested',
     ownerCandidate:
       ownerCandidates.length === 1
         ? {

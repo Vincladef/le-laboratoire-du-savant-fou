@@ -126,6 +126,24 @@ it('signale un passage devenu disjoint après insertion sans annotation', () => 
   };
   expect(extractAnchors(doc)[0].disconnected).toBe(true);
 });
+it('annote une équation en ligne sans changer son expression', () => {
+  const editor = new Editor({
+    element: document.createElement('div'),
+    extensions: editorExtensions(),
+    content: {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'inlineMath', attrs: { latex: 'E=mc^2' } }] },
+      ],
+    },
+  });
+  editor.commands.selectAll();
+  const id = createPassage(editor, 'Énergie', 'high');
+  expect(extractAnchors(editor.getJSON() as RichNode)[0].quote).toBe('E=mc^2');
+  modifyPassage(editor, id, null);
+  expect((editor.getJSON() as RichNode).content?.[0].content?.[0].attrs?.latex).toBe('E=mc^2');
+  editor.destroy();
+});
 it('conserve l’identité lors d’un couper-coller complet dans le même éditeur', () => {
   const id = crypto.randomUUID();
   const editor = new Editor({

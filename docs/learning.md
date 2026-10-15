@@ -42,6 +42,8 @@ Stabilité, difficulté, état, échéance, dernière révision, compteurs et é
 
 Les instants sont des `timestamptz`, évalués à l’heure du serveur et transportés en ISO UTC. Le navigateur affiche les dates dans son fuseau ; un changement de fuseau ne change pas les échéances. Les intervalles sont calculés par FSRS à partir d’instants, sans addition manuelle de jours calendaires à minuit local.
 
+Une note conservée hors connexion est appliquée à son instant de synchronisation. La séance attend sa confirmation avant de passer au passage suivant ; elle ne simule pas un calendrier FSRS hors ligne à partir de l’horloge du navigateur. L’envoi est repris au retour réseau, au rechargement ou via le bouton de retransmission.
+
 Une note exige une réponse révélée et les révisions courantes de la carte et du passage. Les sauvegardes documentaires et les notes sérialisent leurs changements par propriétaire, puis vérifient le document. L’état FSRS, l’historique et l’avancement sont modifiés dans une transaction.
 
 Un UUID d’action est conservé dans le navigateur avant l’envoi d’une note. La retransmission avec le même UUID rend le résultat déjà enregistré ; une seconde note pour le même élément est refusée. Une réponse reçue par le serveur dont la réponse HTTP est perdue peut donc être renvoyée après rechargement sans double révision. Le navigateur doit pouvoir conserver quelques octets de stockage local pour garantir cette reprise ; une impossibilité d’écriture empêche l’envoi et produit une erreur explicite.
