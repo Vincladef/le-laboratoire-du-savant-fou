@@ -114,6 +114,8 @@ export function validateDocument(value: unknown): RichNode {
         throw new Error('Lien non autorisé.');
       if (m.type === 'memoryAnchor' && (!validId(ma.id) || (ma.sourceId && !validId(ma.sourceId))))
         throw new Error('Identité de passage invalide.');
+      if (m.type === 'memoryAnchor' && !['text', 'inlineMath', 'hardBreak'].includes(node.type))
+        throw new Error('Une annotation de passage doit porter sur un contenu textuel.');
       if (
         m.type === 'memoryAnchor' &&
         ma.hint != null &&

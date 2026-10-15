@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, isNull, or } from 'drizzle-orm';
 import type { Database } from './db';
 import { fsrsCards, memoryAnchors } from './db/schema';
 import { initialCard } from './scheduling';
@@ -6,11 +6,13 @@ import { initialCard } from './scheduling';
 export async function prepareLearning(db: Database) {
   return db.transaction(async (tx) => {
     const anchors = await tx
-      .select({ id: memoryAnchors.id, ownerId: memoryAnchors.ownerId })
-      .from(memoryAnchors);
+      .select({ id: memoryAnchors.id, ownerId: memoryAnchors.ownerId, existing: fsrsCards })
+      .from(memoryAnchors)
+      .leftJoin(fsrsCards, eq(fsrsCards.anchorId, memoryAnchors.id))
+      .where(or(isNull(fsrsCards.id), eq(fsrsCards.algorithmVersion, 'uninitialized')));
     let initialized = 0;
     for (const a of anchors) {
-      const [existing] = await tx.select().from(fsrsCards).where(eq(fsrsCards.anchorId, a.id));
+      const existing = a.existing;
       if (!existing) {
         await tx
           .insert(fsrsCards)

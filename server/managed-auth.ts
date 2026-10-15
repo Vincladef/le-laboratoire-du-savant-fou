@@ -76,7 +76,7 @@ export async function resolveManagedIdentity(
   });
 }
 
-export function managedAuth(config: AppConfig) {
+export function managedAuth(config: AppConfig, db: Database) {
   const proxy = {
     baseUrl: config.neonAuthURL!,
     cookieSecret: config.secret,
@@ -136,15 +136,38 @@ export function managedAuth(config: AppConfig) {
       if (path === 'get-session') url.searchParams.set('disableCookieCache', 'true');
       const headers = new Headers(c.req.raw.headers);
       headers.set('Origin', config.baseURL);
-      return handleAuthProxyRequest({
+      const body = c.req.method === 'POST' ? await c.req.text() : undefined;
+      let resetSubject: string | undefined;
+      if (path === 'reset-password' && c.req.method === 'POST') {
+        const token = JSON.parse(body || '{}').token;
+        if (typeof token !== 'string' || token.length < 16 || token.length > 256)
+          return c.json({ message: 'Lien de récupération invalide.' }, 400);
+        // The opaque token is resolved in the managed store before Neon consumes it.
+        // No email or subject supplied by the browser decides which sessions to revoke.
+        const result = await db.execute(
+          sql`select value from neon_auth.verification where identifier=${'reset-password:' + token} and "expiresAt">clock_timestamp()`,
+        );
+        resetSubject = result.rows[0]?.value as string | undefined;
+        if (!resetSubject)
+          return c.json(
+            { message: 'Ce lien de récupération a expiré ou a déjà été utilisé.' },
+            400,
+          );
+      }
+      const response = await handleAuthProxyRequest({
         ...proxy,
         path,
         request: new Request(url, {
           method: c.req.method,
           headers,
-          ...(c.req.method === 'POST' ? { body: await c.req.text() } : {}),
+          ...(body !== undefined ? { body } : {}),
         }),
       });
+      if (resetSubject && response.ok) {
+        // Neon currently keeps old sessions on password reset. Revoke them explicitly.
+        await db.execute(sql`delete from neon_auth.session where "userId"=${resetSubject}::uuid`);
+      }
+      return response;
     },
     async session(c: Context) {
       // Always revalidate upstream: revoked or expired sessions never authorize document access.

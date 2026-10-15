@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, sql, getTableColumns } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Grade } from 'ts-fsrs';
 import type { Database } from './db';
@@ -18,6 +18,11 @@ import { extractAnchors, type RichNode } from '../src/shared/document';
 import { filtersSchema, type StudyFilters } from '../src/shared/learning';
 import { initialCard, previews, schedule, toStored } from './scheduling';
 const uuid = z.string().uuid();
+const {
+  originalSlice: _originalSlice,
+  metadata: _metadata,
+  ...anchorFields
+} = getTableColumns(memoryAnchors);
 function fail(status: 404 | 409, message: string): never {
   throw new HTTPException(status, { message });
 }
@@ -46,7 +51,7 @@ export function learningRoutes(db: Database) {
       if (!changed) break;
     }
     const docs = await tx
-      .select()
+      .select({ id: documents.id, folderId: documents.folderId })
       .from(documents)
       .where(and(eq(documents.ownerId, userId), isNull(documents.deletedAt)));
     if (filters.documentIds.some((id) => !docs.some((d: any) => d.id === id)))
@@ -127,7 +132,12 @@ export function learningRoutes(db: Database) {
         itemId: item.id,
         revealed: item.status === 'revealed',
         document: p!.document,
-        anchor: { ...p!.anchor, card: p!.card },
+        anchor: {
+          ...Object.fromEntries(
+            Object.keys(anchorFields).map((key) => [key, (p!.anchor as any)[key]]),
+          ),
+          card: p!.card,
+        },
         ...(item.status === 'revealed' ? { previews: previews(p!.card, now) } : {}),
       };
       break;
@@ -155,7 +165,7 @@ export function learningRoutes(db: Database) {
       .where(own(documents, c.req.param('id'), userId));
     if (!doc) fail(404, 'Document introuvable.');
     const rows = await db
-      .select({ anchor: memoryAnchors, card: fsrsCards })
+      .select({ anchor: anchorFields, card: fsrsCards })
       .from(memoryAnchors)
       .leftJoin(
         fsrsCards,
@@ -302,16 +312,14 @@ export function learningRoutes(db: Database) {
         })
         .returning();
       if (candidates.length)
-        await tx
-          .insert(studyItems)
-          .values(
-            candidates.map((a, index) => ({
-              sessionId: created.id,
-              ownerId: userId,
-              anchorId: a.anchorId,
-              position: index,
-            })),
-          );
+        await tx.insert(studyItems).values(
+          candidates.map((a, index) => ({
+            sessionId: created.id,
+            ownerId: userId,
+            anchorId: a.anchorId,
+            position: index,
+          })),
+        );
       return result(tx, created, userId);
     });
     return c.json(session, 201);
@@ -393,18 +401,16 @@ export function learningRoutes(db: Database) {
           .update(fsrsCards)
           .set(after)
           .where(own(fsrsCards, p!.card.id, userId));
-        await tx
-          .insert(reviews)
-          .values({
-            id: data.actionId,
-            cardId: p!.card.id,
-            ownerId: userId,
-            sessionItemId: item.id,
-            rating: data.rating,
-            before: p!.card,
-            after: { ...after, log: computed.log },
-            reviewedAt: now,
-          });
+        await tx.insert(reviews).values({
+          id: data.actionId,
+          cardId: p!.card.id,
+          ownerId: userId,
+          sessionItemId: item.id,
+          rating: data.rating,
+          before: p!.card,
+          after: { ...after, log: computed.log },
+          reviewedAt: now,
+        });
         await tx
           .update(studyItems)
           .set({ status: 'reviewed' })

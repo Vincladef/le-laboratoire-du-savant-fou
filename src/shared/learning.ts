@@ -24,7 +24,7 @@ export type MemoryPassage = {
   status: 'active' | 'deleted' | 'needs_review';
   revision: number;
   documentRevision: number;
-  originalSlice: RichNode[];
+  originalSlice?: RichNode[];
   card: null | {
     id: string;
     due: string;

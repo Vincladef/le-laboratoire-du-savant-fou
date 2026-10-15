@@ -31,7 +31,7 @@ Les tests navigateur créent une base distincte par exécution et des serveurs s
 
 ## Fonctions du socle
 
-- Comptes Neon Managed Better Auth avec codes de confirmation/récupération et Google partagé. Sessions vérifiées côté serveur ; identifiants documentaires historiques préservés.
+- Comptes Neon Managed Better Auth avec codes de confirmation, récupération par lien et Google partagé. Sessions vérifiées côté serveur ; identifiants documentaires historiques préservés.
 - Documents, dossiers hiérarchiques, déplacement, recherche, corbeille restaurable et reprise du travail.
 - Texte riche, polices/tailles/couleurs, titres, plan, alignement, interlignes, retraits, listes/tâches, tableaux, images privées, liens et équations LaTeX.
 - Recherche/remplacement, undo/redo, raccourcis, collage enrichi, sauvegarde automatique, conflits explicites et copies locales de récupération.

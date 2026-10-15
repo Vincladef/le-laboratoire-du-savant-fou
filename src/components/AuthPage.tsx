@@ -81,6 +81,7 @@ export function AuthPage() {
       else if (mode === 'forgot')
         setNotice('Si ce compte existe, un email de récupération vous a été envoyé.');
       else {
+        if (config.data?.managed) await authClient.signOut();
         changeMode('signin');
         setNotice('Votre mot de passe a été modifié. Vous pouvez vous connecter.');
       }

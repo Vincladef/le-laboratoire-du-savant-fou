@@ -38,7 +38,7 @@ const failure = (status: 400 | 403 | 404 | 409 | 413 | 429 | 503, message: strin
 const quota = { documents: 100, bytes: 25 * 1024 * 1024, image: 4 * 1024 * 1024 };
 export function createApp(db: Database, config: AppConfig) {
   const auth = config.neonAuthURL ? null : createAuth(db, config);
-  const managed = config.neonAuthURL ? managedAuth(config) : null;
+  const managed = config.neonAuthURL ? managedAuth(config, db) : null;
   const storage = createStorage(config);
   const app = new Hono<{ Variables: { userId: string } }>();
   app.use(
@@ -78,15 +78,40 @@ export function createApp(db: Database, config: AppConfig) {
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
     if (managed) {
       const response = await managed.handler(c);
-      if (c.req.path === '/api/auth/get-session' && response.ok) {
+      if (
+        [
+          '/api/auth/get-session',
+          '/api/auth/sign-in/email',
+          '/api/auth/email-otp/verify-email',
+        ].includes(c.req.path) &&
+        response.ok
+      ) {
         const data = await response.clone().json();
         if (data?.user) {
           const id = await resolveManagedIdentity(db, data.user, config.ownerNeonSubject);
           // Stable local identifiers also preserve this account's unsynchronized browser drafts.
-          return new Response(JSON.stringify({ ...data, user: { ...data.user, id } }), {
-            status: response.status,
-            headers: response.headers,
-          });
+          const headers = new Headers(response.headers);
+          headers.delete('Content-Length');
+          const safeUser = {
+            id,
+            name: data.user.name,
+            email: data.user.email,
+            emailVerified: data.user.emailVerified,
+            image: data.user.image,
+            createdAt: data.user.createdAt,
+            updatedAt: data.user.updatedAt,
+          };
+          return new Response(
+            JSON.stringify({
+              ...data,
+              user: safeUser,
+              ...(data.session ? { session: { ...data.session, userId: id } } : {}),
+            }),
+            {
+              status: response.status,
+              headers,
+            },
+          );
         }
       }
       return response;

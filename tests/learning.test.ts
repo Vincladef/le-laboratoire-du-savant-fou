@@ -8,7 +8,7 @@ import { fsrs } from 'ts-fsrs';
 import { openLocalDatabase } from '../scripts/local-database';
 import { createApp } from '../server/app';
 import { account, fsrsCards, memoryAnchors, reviews, user } from '../server/db/schema';
-import { fsrsParameters, toEngine } from '../server/scheduling';
+import { fsrsParameters, toEngine, initialCard, schedule } from '../server/scheduling';
 import { copyWithNewAnchors, defaultLayout, type RichNode } from '../src/shared/document';
 const origin = 'http://localhost:5173',
   password = 'Learning-Test-Password-42!';
@@ -328,41 +328,62 @@ describe('Passages documentaires et vrai calendrier FSRS PostgreSQL', () => {
     expect((await alice.call(`/learning/sessions/${session.id}`)).status).toBe('completed');
     await bob.call(`/learning/sessions/${session.id}`, 'GET', undefined, 404);
   });
-  it('ne confond pas un instant UTC avec sa représentation dans un autre fuseau', () => {
-    const instant = new Date('2026-10-25T01:30:00.000Z');
-    const paris = new Intl.DateTimeFormat('fr', {
-      timeZone: 'Europe/Paris',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(instant);
-    const newYork = new Intl.DateTimeFormat('fr', {
-      timeZone: 'America/New_York',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(instant);
-    expect(paris).not.toBe(newYork);
-    expect(instant.toISOString()).toBe('2026-10-25T01:30:00.000Z');
+  it('conserve le calcul FSRS et dix minutes réelles pendant le changement d’heure', () => {
+    const now = new Date('2026-10-25T00:55:00.000Z');
+    const card = {
+      id: crypto.randomUUID(),
+      anchorId: crypto.randomUUID(),
+      ownerId: alice.id,
+      ...initialCard(now),
+      revision: 1,
+    };
+    const utc = schedule(card, 3, now),
+      paris = schedule(card, 3, new Date('2026-10-25T02:55:00+02:00'));
+    expect(paris.card).toEqual(utc.card);
+    expect(utc.card.due.toISOString()).toBe('2026-10-25T01:05:00.000Z');
+    expect(new Date('2026-10-25T02:05:00+01:00').getTime()).toBe(utc.card.due.getTime());
+  });
+  it('conserve des centaines de passages et borne la séance sans perdre les suivants', async () => {
+    const nodes: RichNode[] = [];
+    for (let i = 0; i < 420; i++) {
+      nodes.push(marked(crypto.randomUUID(), `Passage ${i}`));
+      nodes.push({ type: 'text', text: ' | ' });
+    }
+    let d = await doc(nodes);
+    const before = await anchors(d);
+    expect(before).toHaveLength(420);
+    expect((await start([d.id])).total).toBe(200);
+    expect((await alice.call('/learning/eligible', 'POST', { documentIds: [d.id] })).count).toBe(
+      420,
+    );
+    d = await save(
+      d,
+      nodes.map((n) =>
+        n.marks
+          ? { ...n, marks: n.marks.map((m) => (m.type === 'bold' ? { type: 'italic' } : m)) }
+          : n,
+      ),
+    );
+    const after = await anchors(d);
+    expect(after.map((a: any) => a.card)).toEqual(before.map((a: any) => a.card));
+    expect(after.every((a: any) => a.status === 'active')).toBe(true);
   });
   it('supprime un compte de contrôle et ses historiques sans laisser d’orphelins', async () => {
     const id = crypto.randomUUID(),
       temporary = new Client();
-    await connection.db
-      .insert(user)
-      .values({
-        id: temporary.id,
-        email: temporary.email,
-        name: 'Temporaire',
-        emailVerified: true,
-      });
-    await connection.db
-      .insert(account)
-      .values({
-        id: crypto.randomUUID(),
-        accountId: temporary.id,
-        userId: temporary.id,
-        providerId: 'credential',
-        password: await hashPassword(password),
-      });
+    await connection.db.insert(user).values({
+      id: temporary.id,
+      email: temporary.email,
+      name: 'Temporaire',
+      emailVerified: true,
+    });
+    await connection.db.insert(account).values({
+      id: crypto.randomUUID(),
+      accountId: temporary.id,
+      userId: temporary.id,
+      providerId: 'credential',
+      password: await hashPassword(password),
+    });
     await temporary.login();
     const d = await temporary.call(
       '/documents',
