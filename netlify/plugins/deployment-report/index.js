@@ -5,7 +5,7 @@ export async function onPostBuild({ utils }) {
   const report = JSON.parse(await readFile('.netlify/deployment-report.json', 'utf8'));
   utils.status.show({
     title: 'Neon et recette du service publié',
-    summary: `${report.tables} tables ; ${report.remote?.passed || 0} contrôles distants réussis`,
+    summary: `${report.tables} tables ; ${report.remote?.passed || 0} contrôles du site ; ${report.managedAuth?.passed || 0} contrôles Neon Auth`,
     text: JSON.stringify(report),
   });
 }

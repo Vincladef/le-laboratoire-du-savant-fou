@@ -11,13 +11,29 @@ export function getConfig() {
     throw new Error('AUTH_BASE_URL et BETTER_AUTH_SECRET (32 caractères minimum) sont requis.');
   if (!development && (!baseURL.startsWith('https://') || !process.env.DATABASE_URL))
     throw new Error('Production : URL HTTPS et DATABASE_URL requis.');
+  const neonAuthURL = development ? undefined : process.env.NEON_AUTH_BASE_URL;
+  if (neonAuthURL) {
+    const url = new URL(neonAuthURL);
+    if (
+      url.protocol !== 'https:' ||
+      !url.hostname.endsWith('.neon.tech') ||
+      !url.pathname.endsWith('/auth') ||
+      url.search ||
+      url.hash ||
+      url.username
+    )
+      throw new Error('URL Neon Auth serveur invalide.');
+  }
   return {
     development,
     baseURL: new URL(baseURL).origin,
     secret,
     localDir: path.resolve(process.env.LAB_LOCAL_DIR || '.local'),
-    google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-    mail: Boolean(process.env.SMTP_HOST && process.env.MAIL_FROM),
+    ...(neonAuthURL ? { neonAuthURL } : {}),
+    google: Boolean(
+      neonAuthURL || (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    ),
+    mail: Boolean(neonAuthURL || (process.env.SMTP_HOST && process.env.MAIL_FROM)),
   };
 }
-export type AppConfig = ReturnType<typeof getConfig>;
+export type AppConfig = ReturnType<typeof getConfig> & { neonAuthURL?: string };

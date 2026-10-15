@@ -101,6 +101,16 @@ export const profiles = lab.table('profiles', {
   createdAt: created(),
   updatedAt: updated(),
 });
+// Stable application identities: do not rewrite document ownership during auth migration.
+// Provider subjects are trusted only after server-side validation by Neon Auth.
+export const authIdentities = lab.table('auth_identities', {
+  subject: text('subject').primaryKey(),
+  userId: text('user_id')
+    .notNull()
+    .unique()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  createdAt: created(),
+});
 export const folders = lab.table(
   'folders',
   {

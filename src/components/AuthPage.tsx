@@ -19,7 +19,8 @@ export function AuthPage() {
   const [busy, setBusy] = useState(false);
   const config = useQuery({
     queryKey: ['config'],
-    queryFn: () => api<{ local: boolean; google: boolean; email: boolean }>('/config'),
+    queryFn: () =>
+      api<{ local: boolean; google: boolean; email: boolean; managed?: boolean }>('/config'),
     retry: false,
   });
   function changeMode(value: typeof mode) {
@@ -36,7 +37,14 @@ export function AuthPage() {
     try {
       const result =
         mode === 'signup'
-          ? await authClient.signUp.email({ name, email, password, callbackURL: '/library' })
+          ? await authClient.signUp.email({
+              name,
+              email,
+              password,
+              callbackURL: config.data?.managed
+                ? `${window.location.origin}/api/auth/complete`
+                : '/library',
+            })
           : mode === 'forgot'
             ? await authClient.requestPasswordReset({
                 email,
@@ -159,7 +167,9 @@ export function AuthPage() {
                   setBusy(true);
                   const result = await authClient.signIn.social({
                     provider: 'google',
-                    callbackURL: '/library',
+                    callbackURL: config.data?.managed
+                      ? `${window.location.origin}/api/auth/complete`
+                      : '/library',
                   });
                   if (result.error) {
                     setError(result.error.message || 'Connexion Google indisponible.');

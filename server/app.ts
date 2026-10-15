@@ -5,6 +5,7 @@ import { and, eq, isNull, isNotNull, desc, ilike, or, sql, inArray, notInArray }
 import { z } from 'zod';
 import type { Database } from './db';
 import { createAuth } from './auth';
+import { managedAuth, resolveManagedIdentity } from './managed-auth';
 import type { AppConfig } from './config';
 import { documents, folders, versions, profiles, assets, memoryAnchors, user } from './db/schema';
 import {
@@ -35,7 +36,8 @@ const failure = (status: 400 | 403 | 404 | 409 | 413 | 429 | 503, message: strin
 };
 const quota = { documents: 100, bytes: 25 * 1024 * 1024, image: 4 * 1024 * 1024 };
 export function createApp(db: Database, config: AppConfig) {
-  const auth = createAuth(db, config);
+  const auth = config.neonAuthURL ? null : createAuth(db, config);
+  const managed = config.neonAuthURL ? managedAuth(config) : null;
   const storage = createStorage(config);
   const app = new Hono<{ Variables: { userId: string } }>();
   app.use(
@@ -61,6 +63,7 @@ export function createApp(db: Database, config: AppConfig) {
       status: 'ok',
       database: config.development ? 'local-postgresql' : 'postgresql',
       email: config.development ? 'local-mailbox' : config.mail ? 'configured' : 'missing',
+      authentication: managed ? 'neon-managed' : config.development ? 'local' : 'legacy',
     });
   });
   app.get('/api/config', (c) =>
@@ -68,9 +71,25 @@ export function createApp(db: Database, config: AppConfig) {
       local: config.development,
       google: config.google,
       email: config.development || config.mail,
+      managed: Boolean(managed),
     }),
   );
   app.on(['GET', 'POST'], '/api/auth/*', async (c) => {
+    if (managed) {
+      const response = await managed.handler(c);
+      if (c.req.path === '/api/auth/get-session' && response.ok) {
+        const data = await response.clone().json();
+        if (data?.user) {
+          const id = await resolveManagedIdentity(db, data.user);
+          // Stable local identifiers also preserve this account's unsynchronized browser drafts.
+          return new Response(JSON.stringify({ ...data, user: { ...data.user, id } }), {
+            status: response.status,
+            headers: response.headers,
+          });
+        }
+      }
+      return response;
+    }
     if (
       !config.development &&
       !config.mail &&
@@ -84,12 +103,14 @@ export function createApp(db: Database, config: AppConfig) {
         { message: 'L’envoi des emails doit être configuré par le propriétaire du service.' },
         503,
       );
-    return auth.handler(c.req.raw);
+    return auth!.handler(c.req.raw);
   });
   app.use('/api/*', async (c, next) => {
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    const session = managed
+      ? await managed.session(c)
+      : await auth!.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Connectez-vous pour accéder à votre espace.' }, 401);
-    c.set('userId', session.user.id);
+    c.set('userId', managed ? await resolveManagedIdentity(db, session.user) : session.user.id);
     await next();
   });
   const owner = (id: string, userId: string) =>
@@ -205,6 +226,7 @@ export function createApp(db: Database, config: AppConfig) {
       })
       .strict()
       .parse(await c.req.json());
+    if (managed) await managed.updateName(c, data.name);
     await db.transaction(async (tx) => {
       await tx
         .update(user)
