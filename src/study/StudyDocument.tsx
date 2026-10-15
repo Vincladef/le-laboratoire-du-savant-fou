@@ -33,6 +33,7 @@ function maskExtension(reveal: (id: string) => void) {
                 );
                 if (buttons.has(id)) return;
                 buttons.add(id);
+                const index = buttons.size;
                 decorations.push(
                   Decoration.widget(
                     pos,
@@ -41,7 +42,7 @@ function maskExtension(reveal: (id: string) => void) {
                       button.type = 'button';
                       button.className = 'study-reveal';
                       button.textContent = '[ Révéler ]';
-                      button.setAttribute('aria-label', `Révéler le passage ${buttons.size}`);
+                      button.setAttribute('aria-label', `Révéler le passage ${index}`);
                       button.addEventListener('click', () => reveal(id));
                       return button;
                     },

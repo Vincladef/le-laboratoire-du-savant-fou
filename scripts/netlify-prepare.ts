@@ -8,6 +8,8 @@ import * as schema from '../server/db/schema';
 import { verifyRemoteDeployment } from './remote-smoke';
 import { verifyManagedAuth } from './managed-auth-smoke';
 import { prepareLearning } from '../server/prepare-learning';
+import { surveyProduction } from './production-survey';
+import { cleanupFailedFixtures } from './cleanup-failed-fixtures';
 
 let stage = 'target-validation';
 async function prepare() {
@@ -66,6 +68,7 @@ async function prepare() {
     stage = 'migrations';
     await migrate(db, { migrationsFolder: 'migrations' });
     const learning = await prepareLearning(db);
+    const fixtureCleanup = await cleanupFailedFixtures(client);
     const tables = await client.query(
       "select count(*)::int as count from pg_tables where schemaname = 'lab'",
     );
@@ -74,6 +77,7 @@ async function prepare() {
     stage = 'managed-auth-and-learning-checks';
     const managedAuth =
       process.env.LAB_VERIFY_MANAGED_AUTH === '1' ? await verifyManagedAuth(client, db) : null;
+    const productionSurvey = await surveyProduction();
     // The remote smoke check targets the currently published service, not an unserved build.
     const remote = process.env.LAB_VERIFY_REMOTE === '1' ? await verifyRemoteDeployment(db) : null;
     // Non-secret build evidence, published as a Netlify plugin status (not as a public route).
@@ -90,6 +94,8 @@ async function prepare() {
         remote,
         managedAuth,
         learning,
+        productionSurvey,
+        fixtureCleanup,
       }),
     );
   } finally {
@@ -111,6 +117,8 @@ prepare().catch(async (error) => {
       deployId: process.env.DEPLOY_ID,
       stage,
       code: error?.code || error?.cause?.code || error?.name || 'Error',
+      constraint: error?.constraint || error?.cause?.constraint,
+      table: error?.table || error?.cause?.table,
       ...(error instanceof Error && !('code' in error) && !('cause' in error)
         ? { message: error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[redacted]').slice(0, 500) }
         : {}),

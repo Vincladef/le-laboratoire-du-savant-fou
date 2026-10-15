@@ -61,15 +61,13 @@ beforeAll(async () => {
     await connection.db
       .insert(user)
       .values({ id: client.id, email: client.email, name: 'Apprentissage', emailVerified: true });
-    await connection.db
-      .insert(account)
-      .values({
-        id: crypto.randomUUID(),
-        accountId: client.id,
-        userId: client.id,
-        providerId: 'credential',
-        password: await hashPassword(password),
-      });
+    await connection.db.insert(account).values({
+      id: crypto.randomUUID(),
+      accountId: client.id,
+      userId: client.id,
+      providerId: 'credential',
+      password: await hashPassword(password),
+    });
     await client.login();
   }
 });
@@ -344,5 +342,48 @@ describe('Passages documentaires et vrai calendrier FSRS PostgreSQL', () => {
     }).format(instant);
     expect(paris).not.toBe(newYork);
     expect(instant.toISOString()).toBe('2026-10-25T01:30:00.000Z');
+  });
+  it('supprime un compte de contrôle et ses historiques sans laisser d’orphelins', async () => {
+    const id = crypto.randomUUID(),
+      temporary = new Client();
+    await connection.db
+      .insert(user)
+      .values({
+        id: temporary.id,
+        email: temporary.email,
+        name: 'Temporaire',
+        emailVerified: true,
+      });
+    await connection.db
+      .insert(account)
+      .values({
+        id: crypto.randomUUID(),
+        accountId: temporary.id,
+        userId: temporary.id,
+        providerId: 'credential',
+        password: await hashPassword(password),
+      });
+    await temporary.login();
+    const d = await temporary.call(
+      '/documents',
+      'POST',
+      { title: 'Temporaire', content: content([marked(id, 'Réponse temporaire')]) },
+      201,
+    );
+    const s = await temporary.call(
+      '/learning/sessions',
+      'POST',
+      { id: crypto.randomUUID(), filters: { documentIds: [d.id] } },
+      201,
+    );
+    await temporary.call(`/learning/sessions/${s.id}/items/${s.current.itemId}/reveal`, 'POST', {});
+    await temporary.call(`/learning/sessions/${s.id}/items/${s.current.itemId}/rate`, 'POST', {
+      actionId: crypto.randomUUID(),
+      rating: 3,
+    });
+    await connection.db.delete(user).where(eq(user.id, temporary.id));
+    expect(
+      await connection.db.select().from(reviews).where(eq(reviews.ownerId, temporary.id)),
+    ).toHaveLength(0);
   });
 });

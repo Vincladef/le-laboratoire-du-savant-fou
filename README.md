@@ -1,8 +1,8 @@
 # Le Laboratoire du Savant Fou
 
-Application d’écriture et bibliothèque privée. Mission 1 : React / Tiptap / PostgreSQL, API Netlify Functions, comptes Better Auth, historique et récupération des sauvegardes.
+Application d’écriture, bibliothèque privée et mémorisation intégrée. React / Tiptap / PostgreSQL, API Netlify Functions, Neon Managed Better Auth, historique et récupération des sauvegardes. La mission 2 ajoute les textes à trous et FSRS 6.
 
-Site déployé : https://le-laboratoire-du-savant-fou.netlify.app. La base de production est Neon. L’ouverture des inscriptions publiques attend encore la configuration de l’envoi d’emails ; Google est facultatif et non configuré.
+Site : https://le-laboratoire-du-savant-fou.netlify.app. Les ressources Neon et Netlify existantes sont conservées. Les essais de migration et de mémorisation utilisent d’abord la branche Neon `development` et un déploiement de branche Netlify ; la production n’est mise à jour qu’après leur validation. Les intégrations partagées email et Google de Neon évitent la configuration d’un SMTP externe pour cette étape.
 
 ## Démarrer
 
@@ -31,12 +31,15 @@ Les tests navigateur créent une base distincte par exécution et des serveurs s
 
 ## Fonctions du socle
 
-- Comptes avec confirmation email, connexion, récupération et profil ; Google activable par configuration OAuth serveur.
+- Comptes Neon Managed Better Auth avec codes de confirmation/récupération et Google partagé. Sessions vérifiées côté serveur ; identifiants documentaires historiques préservés.
 - Documents, dossiers hiérarchiques, déplacement, recherche, corbeille restaurable et reprise du travail.
 - Texte riche, polices/tailles/couleurs, titres, plan, alignement, interlignes, retraits, listes/tâches, tableaux, images privées, liens et équations LaTeX.
 - Recherche/remplacement, undo/redo, raccourcis, collage enrichi, sauvegarde automatique, conflits explicites et copies locales de récupération.
 - Historique, import/export DOCX, PDF via l’impression, export texte et JSON.
 - A4/Letter, marges, orientation et sauts de page manuels. **Pas de pagination automatique exacte à l’écran** : le document s’affiche en continu et se pagine à l’impression.
+- Textes à trous : sélection multistyle, indices et priorités, annotations supprimables sans effacer le texte, identité persistante et filiation des copies.
+- Révision libre sans modification du calendrier ; révision programmée filtrée par documents/dossiers/priorités, séances conservées côté serveur, notes dédupliquées et reprise après interruption réseau.
+- FSRS 6 avec `ts-fsrs` 5.4.2. Les réponses modifiées ou fragmentées sont suspendues jusqu’à validation explicite ; changer la priorité conserve l’apprentissage.
 
 Les conversions Word ne sont pas sans perte ; le JSON référence les images sans leurs fichiers. Voir [les limites des formats](docs/formats.md).
 
@@ -59,4 +62,4 @@ scripts/          serveur local et migration distante
 tests/            tests API, contrat documentaire et navigateur
 ```
 
-Le schéma `lab` ne remplace aucune table d’un autre produit. Les tables FSRS, passages et abonnements anticipent les missions suivantes ; aucune fonctionnalité pédagogique ou Stripe n’est active dans cette mission.
+Le schéma `lab` ne remplace aucune table d’un autre produit ; Neon Auth conserve son schéma géré `neon_auth`. Les abonnements restent réservés à la mission 3. Consulter [le fonctionnement de la mémorisation](docs/learning.md), [les prérequis](docs/prerequisites.md) et [les résultats de validation](docs/validation.md).

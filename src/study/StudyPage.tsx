@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { z } from 'zod';
 import { ArrowLeft, BookOpen, RotateCcw } from 'lucide-react';
 import { Brand } from '../components/Brand';
 import { api, ApiError, json } from '../lib/api';
@@ -377,7 +378,15 @@ export function FreeStudyPage({ user }: Props) {
   );
 }
 
-type PendingRating = { sessionId: string; itemId: string; actionId: string; rating: number };
+const pendingRatingSchema = z
+  .object({
+    sessionId: z.string().uuid(),
+    itemId: z.string().uuid(),
+    actionId: z.string().uuid(),
+    rating: z.number().int().min(1).max(4),
+  })
+  .strict();
+type PendingRating = z.infer<typeof pendingRatingSchema>;
 export function ScheduledStudyPage({ user }: Props) {
   const { id } = useParams();
   const [session, setSession] = useState<StudySession | null>(null),
@@ -386,17 +395,34 @@ export function ScheduledStudyPage({ user }: Props) {
     [showHint, setShowHint] = useState(false),
     [hasPending, setHasPending] = useState(false);
   const storageKey = `lab-rating/${user.id}/${id}`;
+  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
   const requestInFlight = useRef(false);
   async function load() {
     setSession(await api<StudySession>(`/learning/sessions/${id}`));
   }
   async function sendPending() {
-    const raw = localStorage.getItem(storageKey);
+    let raw: string | null;
+    try {
+      raw = localStorage.getItem(storageKey);
+    } catch {
+      throw new Error(
+        'Le navigateur ne permet pas de lire la réponse conservée. Autorisez le stockage local pour reprendre la séance.',
+      );
+    }
     if (!raw) {
       setHasPending(false);
       return false;
     }
-    const pending = JSON.parse(raw) as PendingRating;
+    setHasPending(true);
+    let pending: PendingRating;
+    try {
+      pending = pendingRatingSchema.parse(JSON.parse(raw));
+    } catch {
+      throw new Error(
+        'La réponse locale est illisible. Vérifiez l’état enregistré de la séance avant de l’écarter.',
+      );
+    }
+    setPendingItemId(pending.itemId);
     if (pending.sessionId !== id)
       throw new Error('La réponse locale ne correspond pas à cette séance.');
     const result = await api<{ recorded: boolean; session: StudySession }>(
@@ -425,7 +451,6 @@ export function ScheduledStudyPage({ user }: Props) {
   }
   useEffect(() => {
     setSession(null);
-    setHasPending(Boolean(localStorage.getItem(storageKey)));
     void run(async () => {
       const sent = await sendPending();
       if (!sent) await load();
@@ -452,7 +477,13 @@ export function ScheduledStudyPage({ user }: Props) {
         rating,
       };
       // Persist before sending: a lost HTTP response can safely be retried after refresh.
-      localStorage.setItem(storageKey, JSON.stringify(pending));
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(pending));
+      } catch {
+        throw new Error(
+          'Le navigateur ne peut pas conserver cette réponse. Aucun envoi n’a été effectué ; libérez du stockage local puis réessayez.',
+        );
+      }
       setHasPending(true);
       await sendPending();
     });
@@ -501,20 +532,18 @@ export function ScheduledStudyPage({ user }: Props) {
               >
                 Vérifier l’état de la séance
               </button>
-              {session &&
-                session.current?.itemId !==
-                  JSON.parse(localStorage.getItem(storageKey) || '{}').itemId && (
-                  <button
-                    className="button subtle"
-                    onClick={() => {
-                      localStorage.removeItem(storageKey);
-                      setHasPending(false);
-                      setError('');
-                    }}
-                  >
-                    Écarter la réponse devenue obsolète
-                  </button>
-                )}
+              {session && session.current?.itemId !== pendingItemId && (
+                <button
+                  className="button subtle"
+                  onClick={() => {
+                    localStorage.removeItem(storageKey);
+                    setHasPending(false);
+                    setError('');
+                  }}
+                >
+                  Écarter la réponse devenue obsolète
+                </button>
+              )}
             </>
           ) : (
             <button className="button" disabled={busy} onClick={() => void run(load)}>
