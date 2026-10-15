@@ -9,6 +9,7 @@ import { verifyRemoteDeployment } from './remote-smoke';
 import { verifyManagedAuth } from './managed-auth-smoke';
 import { prepareLearning } from '../server/prepare-learning';
 
+let stage = 'target-validation';
 async function prepare() {
   // Opt-in for one controlled deployment, never enabled by default or on previews.
   if (process.env.LAB_DEPLOY_PREPARE !== '1') return;
@@ -62,6 +63,7 @@ async function prepare() {
       }),
     );
     const db = drizzle(client, { schema });
+    stage = 'migrations';
     await migrate(db, { migrationsFolder: 'migrations' });
     const learning = await prepareLearning(db);
     const tables = await client.query(
@@ -69,6 +71,7 @@ async function prepare() {
     );
     console.log('DEPLOY_MIGRATIONS_OK', JSON.stringify({ tables: tables.rows[0].count }));
     await client.query('select pg_advisory_unlock(62601, 1)');
+    stage = 'managed-auth-and-learning-checks';
     const managedAuth =
       process.env.LAB_VERIFY_MANAGED_AUTH === '1' ? await verifyManagedAuth(client, db) : null;
     // The remote smoke check targets the currently published service, not an unserved build.
@@ -78,6 +81,7 @@ async function prepare() {
     await writeFile(
       '.netlify/deployment-report.json',
       JSON.stringify({
+        deployId: process.env.DEPLOY_ID,
         database: identity.rows[0].database,
         labExistedBefore: labExists,
         previouslyApplied: applied.length,
@@ -94,10 +98,22 @@ async function prepare() {
   }
 }
 
-prepare().catch((error) => {
+prepare().catch(async (error) => {
   // Drivers may include connection details in errors. Do not log the raw exception.
   console.error('DEPLOY_PREPARE_FAILED', error?.code || error?.name || 'Error');
   if (error instanceof Error && !('code' in error))
     console.error(error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[redacted]'));
   process.exitCode = 1;
+  await mkdir('.netlify', { recursive: true });
+  await writeFile(
+    '.netlify/deployment-failure.json',
+    JSON.stringify({
+      deployId: process.env.DEPLOY_ID,
+      stage,
+      code: error?.code || error?.cause?.code || error?.name || 'Error',
+      ...(error instanceof Error && !('code' in error) && !('cause' in error)
+        ? { message: error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[redacted]').slice(0, 500) }
+        : {}),
+    }),
+  );
 });

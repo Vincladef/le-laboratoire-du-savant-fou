@@ -4,6 +4,7 @@ import type { PoolClient } from 'pg';
 import type { Database } from '../server/db';
 import { createApp } from '../server/app';
 import { getConfig } from '../server/config';
+import { verifyHostedBrowser } from './hosted-browser-smoke';
 
 /** Development-only real Neon Auth check; never alters existing users or credentials. */
 export async function verifyManagedAuth(client: PoolClient, db: Database) {
@@ -38,6 +39,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
   const foreignId = randomUUID(),
     foreignEmail = `migration-${foreignId}@example.test`;
   const checks: string[] = [];
+  let browser: Awaited<ReturnType<typeof verifyHostedBrowser>> | null = null;
   try {
     await client.query(
       'insert into lab."user" (id,name,email,email_verified) values ($1,$2,$3,true)',
@@ -250,6 +252,16 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     cookies.clear();
     for (const [k, v] of ownCookies) cookies.set(k, v);
     checks.push('neon-managed-learning-user-isolation');
+    if (process.env.LAB_VERIFY_BROWSER === '1') {
+      browser = await verifyHostedBrowser(config.baseURL, email, password, docId);
+      const persisted = await client.query(
+        'select count(*)::int as count, sum(c.reps)::int as reps from lab.fsrs_cards c join lab.memory_anchors a on a.id=c.anchor_id where a.document_id=$1 and a.owner_id=$2',
+        [docId, legacyId],
+      );
+      if (persisted.rows[0].count !== 3 || persisted.rows[0].reps !== 3)
+        throw new Error('Données navigateur non persistées dans Neon');
+      checks.push('hosted-browser-learning-direct-neon-persistence');
+    }
   } finally {
     await client.query(
       'delete from lab."user" where id in (select user_id from lab.auth_identities where subject=$1) and email=$2',
@@ -283,5 +295,6 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
       process.env.LAB_VERIFY_PUBLISHED === '1'
         ? 'published-https'
         : 'in-process-with-real-neon-auth-and-database',
+    browser,
   };
 }

@@ -9,3 +9,14 @@ export async function onPostBuild({ utils }) {
     text: JSON.stringify(report),
   });
 }
+export async function onError({ utils }) {
+  const report = await readFile('.netlify/deployment-failure.json', 'utf8')
+    .then(JSON.parse)
+    .catch(() => null);
+  if (report?.deployId === process.env.DEPLOY_ID)
+    utils.status.show({
+      title: 'Échec de la préparation contrôlée',
+      summary: `${report.stage} : ${report.code}`,
+      text: JSON.stringify(report),
+    });
+}
