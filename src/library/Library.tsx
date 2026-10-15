@@ -167,6 +167,7 @@ export function Library({ user }: { user: User }) {
           <Plus size={20} /> Nouveau document
         </button>
         <nav aria-label="Bibliothèque">
+          <button onClick={() => navigate('/billing')}>Mon abonnement</button>
           <button onClick={() => navigate(folderId ? `/study?folder=${folderId}` : '/study')}>
             <BookOpen size={19} />
             Réviser mes passages
@@ -272,6 +273,9 @@ export function Library({ user }: { user: User }) {
         </header>
         <main className="library-content">
           <div className="mobile-navigation">
+            <button className="button subtle" onClick={() => navigate('/billing')}>
+              Abonnement
+            </button>
             <button
               className="button subtle"
               onClick={() => navigate(folderId ? `/study?folder=${folderId}` : '/study')}

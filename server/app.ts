@@ -10,6 +10,11 @@ import type { AppConfig } from './config';
 import { documents, folders, versions, profiles, assets, user } from './db/schema';
 import { syncAnchors } from './anchors';
 import { learningRoutes } from './learning';
+import { billingService } from './billing/service';
+import { billingRoutes } from './billing/routes';
+import { stripeGateway, type StripeGateway } from './billing/stripe';
+import { rights } from './billing/rights';
+import { plans, offerVersion } from '../src/shared/plans';
 import {
   contentSchema,
   layoutSchema,
@@ -35,11 +40,19 @@ const saveSchema = z
 const failure = (status: 400 | 403 | 404 | 409 | 413 | 429 | 503, message: string) => {
   throw new HTTPException(status, { message });
 };
-const quota = { documents: 100, bytes: 25 * 1024 * 1024, image: 4 * 1024 * 1024 };
-export function createApp(db: Database, config: AppConfig) {
+export function createApp(
+  db: Database,
+  config: AppConfig,
+  dependencies: { stripe?: StripeGateway } = {},
+) {
   const auth = config.neonAuthURL ? null : createAuth(db, config);
   const managed = config.neonAuthURL ? managedAuth(config, db) : null;
   const storage = createStorage(config);
+  const billing = billingService(
+    db,
+    config,
+    dependencies.stripe || (config.billing ? stripeGateway(config.billing) : undefined),
+  );
   const app = new Hono<{ Variables: { userId: string } }>();
   app.use(
     '/api/*',
@@ -53,11 +66,35 @@ export function createApp(db: Database, config: AppConfig) {
     c.header('X-Content-Type-Options', 'nosniff');
     if (
       !['GET', 'HEAD', 'OPTIONS'].includes(c.req.method) &&
-      c.req.header('Origin') !== config.baseURL
+      c.req.header('Origin') !== config.baseURL &&
+      !(c.req.method === 'POST' && c.req.path === '/api/billing/webhook')
     )
       return c.json({ error: 'Origine de la requête non autorisée.' }, 403);
     await next();
   });
+  // Only this exact server-to-server endpoint is exempt from browser Origin checking.
+  // It authenticates the original bytes with Stripe's official signature verifier instead.
+  app.post('/api/billing/webhook', async (c) => {
+    const signature = c.req.header('stripe-signature');
+    if (!signature) return c.json({ error: 'Signature Stripe requise.' }, 400);
+    const body = await c.req.text();
+    if (new TextEncoder().encode(body).length > 1024 * 1024)
+      return c.json({ error: 'Événement trop volumineux.' }, 413);
+    return c.json(await billing.webhook(body, signature));
+  });
+  app.get('/api/billing/plans', (c) =>
+    c.json({
+      plans,
+      offerVersion,
+      checkoutReady: billing.checkoutReady(),
+      mode: config.billing?.mode || null,
+      limitsApproved: Boolean(config.legal?.reviewed && config.billing?.enabled),
+      termsVersion: config.legal?.termsVersion || null,
+    }),
+  );
+  app.get('/api/legal', (c) =>
+    c.json({ configured: Boolean(config.legal), details: config.legal || null }),
+  );
   app.get('/api/health', async (c) => {
     await db.execute(sql`select 1`);
     return c.json({
@@ -185,6 +222,7 @@ export function createApp(db: Database, config: AppConfig) {
     await syncAnchors(tx, doc);
   }
   app.route('/api', learningRoutes(db));
+  app.route('/api', billingRoutes(db, config, billing));
   app.get('/api/profile', async (c) => {
     await db
       .insert(profiles)
@@ -194,14 +232,12 @@ export function createApp(db: Database, config: AppConfig) {
       .select()
       .from(profiles)
       .where(eq(profiles.userId, c.get('userId')));
+    const effective = await rights(db, c.get('userId'), config);
     return c.json({
       ...profile,
-      quotas: quota,
-      entitlements: {
-        tier: profile.role === 'owner' ? 'premium' : profile.role,
-        permanent: profile.role === 'owner',
-        billingExempt: profile.role === 'owner',
-      },
+      role: effective.role,
+      quotas: effective.quotas,
+      entitlements: effective,
     });
   });
   app.patch('/api/profile', async (c) => {
@@ -376,8 +412,12 @@ export function createApp(db: Database, config: AppConfig) {
         .select({ count: sql<number>`count(*)::int` })
         .from(documents)
         .where(eq(documents.ownerId, c.get('userId')));
+      const quota = (await rights(tx, c.get('userId'), config)).quotas;
       if (count >= quota.documents)
-        failure(413, 'La limite actuelle de 100 documents est atteinte.');
+        failure(
+          413,
+          `La limite de ${quota.documents} documents de votre formule est atteinte (corbeille incluse).`,
+        );
       const [created] = await tx
         .insert(documents)
         .values({
@@ -514,7 +554,8 @@ export function createApp(db: Database, config: AppConfig) {
   app.post('/api/assets', async (c) => {
     const form = await c.req.formData();
     const file = form.get('file');
-    if (!(file instanceof File) || file.size === 0 || file.size > quota.image)
+    const limits = (await rights(db, c.get('userId'), config)).quotas;
+    if (!(file instanceof File) || file.size === 0 || file.size > limits.image)
       failure(413, 'Image requise, de 4 Mo maximum.');
     const image = file as File;
     const buffer = await image.arrayBuffer();
@@ -534,12 +575,16 @@ export function createApp(db: Database, config: AppConfig) {
     try {
       await db.transaction(async (tx) => {
         await lockProfile(tx, c.get('userId'));
+        const quota = (await rights(tx, c.get('userId'), config)).quotas;
         const [{ used }] = await tx
           .select({ used: sql<number>`coalesce(sum(${assets.bytes}), 0)::int` })
           .from(assets)
           .where(eq(assets.ownerId, c.get('userId')));
         if (used + image.size > quota.bytes)
-          failure(413, 'Le quota de fichiers de 25 Mo est atteint.');
+          failure(
+            413,
+            `Le quota de fichiers de ${quota.bytes / 1024 / 1024} Mo de votre formule est atteint.`,
+          );
         await storage.put(id, buffer);
         await tx.insert(assets).values({
           id,

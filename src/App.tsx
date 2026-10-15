@@ -3,6 +3,9 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { authClient } from './lib/auth-client';
 import { AuthPage } from './components/AuthPage';
 import { Library } from './library/Library';
+import { BillingPage, PricingPage } from './billing/BillingPage';
+import { LegalPage } from './billing/LegalPage';
+import { AdminPage } from './billing/AdminPage';
 const EditorPage = lazy(() =>
   import('./editor/EditorPage').then((module) => ({ default: module.EditorPage })),
 );
@@ -27,6 +30,13 @@ export function App() {
         <Routes>
           <Route path="/" element={user ? <Navigate to="/library" replace /> : <AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/legal/:page" element={<LegalPage />} />
+          <Route
+            path="/billing"
+            element={user ? <BillingPage /> : <AuthPage returnTo="/billing" />}
+          />
+          <Route path="/admin" element={user ? <AdminPage /> : <AuthPage returnTo="/admin" />} />
           <Route
             path="/library"
             element={user ? <Library user={user} /> : <Navigate to="/" replace />}

@@ -137,6 +137,32 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     await call('/auth/sign-in/email', 'POST', { email, password });
     await call(`/documents/${docId}`);
     checks.push('managed-relogin-persists-document');
+    if (process.env.LAB_VERIFY_BILLING === '1') {
+      const catalog = await (await call('/billing/plans')).json();
+      const state = await (await call('/billing')).json();
+      if (
+        catalog.checkoutReady !== false ||
+        state.rights.tier !== 'free' ||
+        state.manageReady !== false
+      )
+        throw new Error('La facturation non raccordée ne doit donner ni accès payant ni paiement.');
+      checks.push('billing-real-neon-free-rights-and-closed-sales');
+      await call(
+        '/billing/checkout',
+        'POST',
+        {
+          plan: 'pro',
+          requestId: randomUUID(),
+          accepted: true,
+          immediateAccess: true,
+          termsVersion: 'unconfigured',
+          offerVersion: '2026-10-15-v1',
+        },
+        503,
+      );
+      await call('/admin/accounts', 'GET', undefined, 403);
+      checks.push('billing-server-purchase-gate-and-owner-only-admin');
+    }
     const anchorId = randomUUID(),
       otherAnchorId = randomUUID();
     const content = {

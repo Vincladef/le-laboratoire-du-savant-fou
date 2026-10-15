@@ -351,20 +351,67 @@ export const studyItems = lab.table(
     check('study_item_status', sql`${t.status} IN ('pending','revealed','reviewed','skipped')`),
   ],
 );
-export const subscriptions = lab.table('subscriptions', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: text('user_id')
-    .notNull()
-    .unique()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  stripeCustomerId: text('stripe_customer_id').unique(),
-  stripeSubscriptionId: text('stripe_subscription_id').unique(),
-  status: text('status').notNull().default('inactive'),
-  currentPeriodEnd: date('current_period_end'),
-  updatedAt: updated(),
-});
+export const subscriptions = lab.table(
+  'subscriptions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id')
+      .notNull()
+      .unique()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    stripeCustomerId: text('stripe_customer_id').unique(),
+    stripeSubscriptionId: text('stripe_subscription_id').unique(),
+    status: text('status').notNull().default('inactive'),
+    plan: text('plan').notNull().default('free'),
+    stripePriceId: text('stripe_price_id'),
+    mode: text('mode'),
+    currentPeriodEnd: date('current_period_end'),
+    cancelAtPeriodEnd: boolean('cancel_at_period_end').notNull().default(false),
+    cancelAt: date('cancel_at'),
+    invoiceStatus: text('invoice_status'),
+    paidEntitlement: jsonb('paid_entitlement').$type<{
+      plan: 'pro' | 'premium';
+      priceId: string;
+      through: string;
+      invoiceId: string;
+      subscriptionId: string;
+    }>(),
+    syncedAt: date('synced_at'),
+    checkoutSessionId: text('checkout_session_id').unique(),
+    checkoutRequestId: uuid('checkout_request_id'),
+    checkoutPlan: text('checkout_plan'),
+    checkoutExpiresAt: date('checkout_expires_at'),
+    checkoutUrl: text('checkout_url'),
+    acceptedTermsVersion: text('accepted_terms_version'),
+    acceptedOfferVersion: text('accepted_offer_version'),
+    acceptedAt: date('accepted_at'),
+    immediateAccessRequestedAt: date('immediate_access_requested_at'),
+    acceptedLegal: jsonb('accepted_legal').$type<Record<string, unknown>>(),
+    acceptedOffer: jsonb('accepted_offer').$type<Record<string, unknown>>(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    check('subscription_plan_valid', sql`${t.plan} IN ('free','pro','premium')`),
+    check('subscription_mode_valid', sql`${t.mode} IS NULL OR ${t.mode} IN ('test','live')`),
+    check(
+      'checkout_plan_valid',
+      sql`${t.checkoutPlan} IS NULL OR ${t.checkoutPlan} IN ('pro','premium')`,
+    ),
+  ],
+);
 export const billingEvents = lab.table('billing_events', {
   stripeEventId: text('stripe_event_id').primaryKey(),
   receivedAt: created(),
   processedAt: date('processed_at'),
+  type: text('type'),
+  mode: text('mode'),
+  objectId: text('object_id'),
+  outcome: text('outcome'),
+});
+export const billingAdminAudit = lab.table('billing_admin_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  actorId: text('actor_id').references(() => user.id, { onDelete: 'set null' }),
+  targetId: text('target_id').references(() => user.id, { onDelete: 'set null' }),
+  action: text('action').notNull(),
+  createdAt: created(),
 });

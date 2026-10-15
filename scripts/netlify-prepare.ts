@@ -10,6 +10,7 @@ import { verifyManagedAuth } from './managed-auth-smoke';
 import { prepareLearning } from '../server/prepare-learning';
 import { surveyProduction } from './production-survey';
 import { cleanupFailedFixtures } from './cleanup-failed-fixtures';
+import { inspectStripeLinks } from './inspect-stripe-links';
 
 let stage = 'target-validation';
 async function prepare() {
@@ -78,6 +79,8 @@ async function prepare() {
     const managedAuth =
       process.env.LAB_VERIFY_MANAGED_AUTH === '1' ? await verifyManagedAuth(client, db) : null;
     const productionSurvey = await surveyProduction();
+    stage = 'public-stripe-link-inspection';
+    const stripeLinks = await inspectStripeLinks();
     // The remote smoke check targets the currently published service, not an unserved build.
     const remote = process.env.LAB_VERIFY_REMOTE === '1' ? await verifyRemoteDeployment(db) : null;
     // Non-secret build evidence, published as a Netlify plugin status (not as a public route).
@@ -96,6 +99,7 @@ async function prepare() {
         learning,
         productionSurvey,
         fixtureCleanup,
+        stripeLinks,
       }),
     );
   } finally {

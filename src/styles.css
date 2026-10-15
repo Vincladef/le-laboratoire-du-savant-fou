@@ -12,6 +12,91 @@
   --cream: #f5f5ee;
   --accent: #d9ab67;
 }
+.account-page {
+  max-width: 1100px;
+  margin: auto;
+  padding: 32px 24px 60px;
+  overflow-wrap: anywhere;
+}
+.account-page > h1 {
+  margin-top: 28px;
+}
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  margin: 24px 0;
+}
+.plan-card,
+.account-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 24px;
+  background: white;
+  margin-bottom: 16px;
+}
+.plan-price {
+  font-size: 32px;
+  font-weight: 700;
+}
+.plan-price small {
+  font-size: 14px;
+  font-weight: 400;
+}
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.check-label {
+  display: flex;
+  flex-direction: row;
+  align-items: start;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-weight: 400;
+}
+.check-label input {
+  width: auto;
+  flex: 0 0 18px;
+  margin: 3px 0;
+}
+.legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.legal-links a {
+  color: var(--green);
+}
+.legal-page {
+  max-width: 850px;
+}
+.legal-page h2 {
+  margin-top: 32px;
+}
+.legal-page blockquote {
+  margin: 24px 0;
+  padding: 20px;
+  border-left: 3px solid var(--accent);
+  line-height: 1.9;
+}
+@media (max-width: 700px) {
+  .plan-grid {
+    grid-template-columns: 1fr;
+  }
+  .account-page {
+    padding: 20px 16px 40px;
+  }
+  .account-actions .button {
+    width: 100%;
+  }
+}
 * {
   box-sizing: border-box;
 }

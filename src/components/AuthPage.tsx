@@ -5,7 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { authClient } from '../lib/auth-client';
 import { api } from '../lib/api';
 import { Brand } from './Brand';
-export function AuthPage() {
+import { LegalLinks } from '../billing/LegalPage';
+export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot' | 'reset' | 'verify'>(
@@ -65,12 +66,12 @@ export function AuthPage() {
         const session = await authClient.getSession({ query: { disableCookieCache: true } });
         if (session.error)
           throw new Error(session.error.message || 'La session ne peut pas être ouverte.');
-        if (session.data?.user) navigate('/library');
+        if (session.data?.user) navigate(returnTo);
         else {
           changeMode('signin');
           setNotice('Votre adresse est confirmée. Vous pouvez vous connecter.');
         }
-      } else if (mode === 'signin') navigate('/library');
+      } else if (mode === 'signin') navigate(returnTo);
       else if (mode === 'signup' && config.data?.managed) {
         changeMode('verify');
         setNotice('Saisissez le code reçu par email pour confirmer votre adresse.');
@@ -337,6 +338,7 @@ export function AuthPage() {
             </button>
           )}
           <p className="auth-fine">Vos documents sont privés et rattachés à votre compte.</p>
+          <LegalLinks />
         </div>
       </section>
     </main>

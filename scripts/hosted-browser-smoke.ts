@@ -97,6 +97,27 @@ export async function verifyHostedBrowser(
     await page.goto(sessionURL);
     await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
     checks.push('hosted-browser-relogin-persistence');
+    if (process.env.LAB_VERIFY_BILLING === '1') {
+      await page.goto(`${origin}/billing`);
+      await expect(
+        page.getByRole('heading', { name: 'Mon abonnement', exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole('heading', { name: 'Formule Gratuit', exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Choisir Pro', exact: true })).toBeDisabled();
+      await expect(
+        page.getByText('Les souscriptions sont fermées', { exact: false }),
+      ).toBeVisible();
+      await page.goto(`${origin}/legal/mentions`);
+      await expect(
+        page.getByRole('heading', { name: 'Mentions légales', exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('status')).toContainText('Document préparatoire');
+      if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2))
+        throw new Error('Débordement mobile des pages commerciales');
+      checks.push('hosted-browser-billing-gate-and-mobile-legal-pages');
+    }
     if (errors.length) throw new Error(`Erreurs JavaScript navigateur : ${errors.length}`);
     return { passed: checks.length, checks, viewport: 'desktop-and-390x844', javascriptErrors: 0 };
   } finally {

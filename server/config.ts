@@ -1,6 +1,20 @@
 import path from 'node:path';
+import { readBillingConfig, type BillingConfig } from './billing/config';
+import { readLegalConfig, type LegalConfig } from './legal';
 
-export function getConfig() {
+export type AppConfig = {
+  development: boolean;
+  baseURL: string;
+  secret: string;
+  localDir: string;
+  neonAuthURL?: string;
+  ownerNeonSubject?: string;
+  google: boolean;
+  mail: boolean;
+  billing?: BillingConfig;
+  legal?: LegalConfig;
+};
+export function getConfig(): AppConfig {
   const development =
     process.env.LAB_LOCAL === '1' && process.env.NODE_ENV !== 'production' && !process.env.NETLIFY;
   const baseURL = process.env.AUTH_BASE_URL || (development ? 'http://localhost:5173' : '');
@@ -37,6 +51,7 @@ export function getConfig() {
       neonAuthURL || (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     ),
     mail: Boolean(neonAuthURL || (process.env.SMTP_HOST && process.env.MAIL_FROM)),
+    billing: readBillingConfig(),
+    legal: readLegalConfig(),
   };
 }
-export type AppConfig = ReturnType<typeof getConfig> & { neonAuthURL?: string };

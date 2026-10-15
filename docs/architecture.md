@@ -28,10 +28,10 @@ Les copies navigateur ne sont pas chiffrées contre quelqu’un ayant accès au 
 
 Images PNG/JPEG/WebP dans Netlify Blobs, servies par une route authentifiée. PostgreSQL ne stocke que les métadonnées. Images distantes arbitraires et SVG refusés. Vérification du type et de la taille serveur.
 
-Limites actuelles : 100 documents par compte, corbeille comprise ; 2 Mo de JSON par document ; 4 Mo par image ; 25 Mo de fichiers. Les réservations sont sérialisées par propriétaire. Tous les rôles utilisent ces limites tant que les offres ne sont pas implémentées. Les images retirées restent disponibles aux versions historiques et continuent de compter dans le quota ; pas de purge automatique.
+Les limites sont centralisées dans `src/shared/plans.ts`, appliquées via `server/billing/rights.ts` dans les transactions de création : gratuit 100 documents/25 Mo d’images, plafonds payants provisoires dans [billing.md](billing.md). Maximum 2 Mo de JSON par document et 4 Mo par image. Les réservations sont sérialisées par propriétaire. Les images retirées restent disponibles aux versions historiques et continuent de compter dans le quota ; pas de purge automatique. Une baisse de droits ne supprime pas les données existantes.
 
 ## Suite
 
 Mission 2 : `memoryAnchor`, `memory_anchors`, `fsrs_cards`, `review_history`, `study_sessions` et `study_items` portent l’apprentissage actif. Voir [learning.md](learning.md) pour FSRS, les conflits et la reprise. La migration personnalisée `0004` rend la référence entre historique et élément de séance différable : une suppression de compte termine ses cascades avant de vérifier cette référence.
 
-Mission 3 : `subscriptions` et `billing_events` préparent les webhooks Stripe idempotents ; les droits devront provenir de webhooks vérifiés et jamais d’une redirection navigateur. Un événement de facturation ne doit jamais retirer le rôle propriétaire ni déclencher un paiement pour ce compte.
+Mission 3 : `subscriptions`, `billing_events` et `billing_admin_audit` portent la facturation. Le SDK Stripe vérifie les signatures ; les événements et la projection des droits sont transactionnels. L’état courant est relu par API pour éviter les inversions lors d’événements tardifs. Les intentions Checkout sont persistées avant l’appel externe. Un événement ne retire pas le droit propriétaire et ne déclenche pas son paiement. Voir [billing.md](billing.md), notamment le blocage volontaire des ventes non raccordées ou non validées juridiquement.

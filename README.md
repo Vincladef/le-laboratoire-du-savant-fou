@@ -2,6 +2,8 @@
 
 Application d’écriture, bibliothèque privée et mémorisation intégrée. React / Tiptap / PostgreSQL, API Netlify Functions, Neon Managed Better Auth, historique et récupération des sauvegardes. La mission 2 ajoute les textes à trous et FSRS 6.
 
+La mission 3 ajoute droits/quotas serveur, Checkout/Portal, webhooks signés idempotents, administration et pages légales. **Les ventes restent fermées tant que l’accès serveur Stripe et les informations juridiques ne sont pas finalisés** : aucun faux paiement n’est présenté comme opérationnel. Voir [facturation et prérequis](docs/billing.md).
+
 Site : https://le-laboratoire-du-savant-fou.netlify.app. Les ressources Neon et Netlify existantes sont conservées. Les essais de migration et de mémorisation utilisent d’abord la branche Neon `development` et un déploiement de branche Netlify ; la production n’est mise à jour qu’après leur validation. Les intégrations partagées email et Google de Neon évitent la configuration d’un SMTP externe pour cette étape.
 
 ## Démarrer
@@ -62,4 +64,4 @@ scripts/          serveur local et migration distante
 tests/            tests API, contrat documentaire et navigateur
 ```
 
-Le schéma `lab` ne remplace aucune table d’un autre produit ; Neon Auth conserve son schéma géré `neon_auth`. Les abonnements restent réservés à la mission 3. Consulter [le fonctionnement de la mémorisation](docs/learning.md), [les prérequis](docs/prerequisites.md) et [les résultats de validation](docs/validation-mission-2.md).
+Le schéma `lab` ne remplace aucune table d’un autre produit ; Neon Auth conserve son schéma géré `neon_auth`. Consulter [le fonctionnement de la mémorisation](docs/learning.md), [les prérequis](docs/prerequisites.md), [les résultats de la mission 2](docs/validation-mission-2.md) et [la facturation](docs/billing.md).

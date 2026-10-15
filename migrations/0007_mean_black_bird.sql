@@ -1,0 +1,1 @@
+ALTER TABLE "lab"."subscriptions" ADD COLUMN "paid_entitlement" jsonb;
