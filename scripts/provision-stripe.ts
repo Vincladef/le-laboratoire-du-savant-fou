@@ -72,6 +72,15 @@ async function configure() {
     : 'https://mission-2--le-laboratoire-du-savant-fou.netlify.app';
   const stripe = new Stripe(key, { timeout: 10000, maxNetworkRetries: 1 });
   const merchant = await stripe.accounts.retrieveCurrent();
+  if (
+    production &&
+    apply &&
+    process.argv.includes('--enable') &&
+    (!merchant.charges_enabled || !merchant.details_submitted)
+  )
+    throw Error(
+      'Le titulaire doit terminer la validation du compte Stripe avant tout encaissement.',
+    );
   const context = production ? 'production' : 'branch';
   const current: Variable[] = await netlify(`/accounts/${account}/env?site_id=${site}`);
   const value = (name: string) =>
@@ -135,6 +144,7 @@ async function configure() {
       p.type !== 'recurring' ||
       p.recurring?.interval !== 'month' ||
       p.recurring.interval_count !== 1 ||
+      p.recurring.usage_type !== 'licensed' ||
       p.tax_behavior !== 'inclusive' ||
       p.billing_scheme !== 'per_unit' ||
       p.transform_quantity ||

@@ -42,6 +42,12 @@ export async function inspectStripeLinks() {
         results.push({
           link,
           labels,
+          displayLines: text
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .slice(0, 12)
+            .map((line) => line.slice(0, 120)),
           priceLines,
           inspected: Boolean(labels.length && priceLines.length),
           testBanner: /mode test|test mode/i.test(text),

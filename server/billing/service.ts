@@ -32,10 +32,15 @@ export function billingService(db: Database, config: AppConfig, gateway?: Stripe
       deny(503, 'Le raccordement Stripe sécurisé n’est pas finalisé. Aucun achat n’a été lancé.');
     return gateway!;
   }
-  async function account() {
+  async function account(forPurchase = false) {
     const actual = await connected().account();
     if (actual.id !== settings!.accountId)
       deny(503, 'Le compte Stripe configuré ne correspond pas au compte autorisé.');
+    if (forPurchase && settings!.mode === 'live' && !actual.charges_enabled)
+      deny(
+        503,
+        'Stripe n’autorise pas encore les encaissements de ce compte. Aucun achat n’a été lancé.',
+      );
   }
   async function lock(tx: any, userId: string) {
     await tx.insert(profiles).values({ userId }).onConflictDoNothing();
@@ -59,6 +64,7 @@ export function billingService(db: Database, config: AppConfig, gateway?: Stripe
       price.type !== 'recurring' ||
       price.recurring?.interval !== 'month' ||
       price.recurring.interval_count !== 1 ||
+      price.recurring.usage_type !== 'licensed' ||
       price.tax_behavior !== 'inclusive' ||
       price.billing_scheme !== 'per_unit' ||
       price.custom_unit_amount ||
@@ -194,7 +200,7 @@ export function billingService(db: Database, config: AppConfig, gateway?: Stripe
         deny(409, 'Les CGV ont changé. Relisez-les avant de continuer.');
       if (input.offerVersion !== offerVersion)
         deny(409, 'Les formules ont changé. Rechargez la page avant de continuer.');
-      await account();
+      await account(true);
       await verifyPrice(input.plan);
       const reservation = await db.transaction(async (tx) => {
         let row = await lock(tx, userId);
@@ -317,6 +323,9 @@ export function billingService(db: Database, config: AppConfig, gateway?: Stripe
             client_reference_id: userId,
             line_items: [{ price, quantity: 1 }],
             allowed_payment_method_types: ['card'],
+            currency: 'eur',
+            adaptive_pricing: { enabled: false },
+            automatic_tax: { enabled: false },
             billing_address_collection: 'required',
             customer_update: { address: 'auto', name: 'auto' },
             success_url: `${config.baseURL}/billing?checkout=returned`,

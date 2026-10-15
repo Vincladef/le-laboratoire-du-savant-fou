@@ -38,6 +38,7 @@ class FakeStripe implements StripeGateway {
   accountId = 'acct_fixture';
   priceAmount = 900;
   priceLive = false;
+  usageType = 'licensed';
   portalCustomer = '';
   async account() {
     return { id: this.accountId } as Stripe.Account;
@@ -50,7 +51,7 @@ class FakeStripe implements StripeGateway {
       currency: 'eur',
       unit_amount: id === 'price_premium' ? 1900 : this.priceAmount,
       type: 'recurring',
-      recurring: { interval: 'month', interval_count: 1 },
+      recurring: { interval: 'month', interval_count: 1, usage_type: this.usageType },
       tax_behavior: 'inclusive',
       billing_scheme: 'per_unit',
       custom_unit_amount: null,
@@ -411,6 +412,9 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     await alice.call('/billing/checkout', 'POST', request(), 503);
     gateway.priceAmount = 900;
     gateway.priceLive = true;
+    await alice.call('/billing/checkout', 'POST', request(), 503);
+    gateway.priceLive = false;
+    gateway.usageType = 'metered';
     await alice.call('/billing/checkout', 'POST', request(), 503);
     expect(gateway.customerCalls).toBe(0);
   });
