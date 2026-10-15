@@ -38,11 +38,13 @@ Un premier essai a détecté un focus perdu et des contrastes insuffisants : cor
 
 La campagne couvre : inscription/confirmation locale, reconnexion, documents/dossiers, formats Word/PDF, texte riche, tableaux, image, équation, versions, collage, conflits entre onglets, brouillons après coupure, annotations multistyles, indices/priorités, FSRS, déduplication et reprise mobile, liens Stripe exacts et refus de privilèges.
 
-Un document de **1 000 paragraphes et 100 annotations** est créé via l’API, ouvert, modifié et relu après sauvegarde. La mesure d’ouverture et de sauvegarde est jointe au rapport Playwright ; c’est un échantillon Chromium local, pas un SLA ou une garantie sur tous les téléphones. Maximum documentaire existant : 2 Mo JSON / 50 000 nœuds.
+Un document de **1 000 paragraphes et 100 annotations** est créé via l’API, ouvert, modifié et relu après sauvegarde. Mesure du dernier passage complet : **340 495 caractères de JSON, ouverture 1 210 ms, modification et sauvegarde 2 306 ms**. La mesure est jointe au rapport Playwright ; c’est un échantillon Chromium local, pas un SLA ou une garantie sur tous les téléphones. Maximum documentaire existant : 2 Mo JSON / 50 000 nœuds.
 
 ## Déploiements et persistance
 
-En attente des contrôles de cette publication. Voir les identifiants et résultats vérifiés ajoutés ci-dessous.
+Le commit applicatif `42d6b1491dd55cc10041614757d5d347d8684a84` est présent sur la branche de test GitHub. Le déploiement development **`6ad136064ac161d0e285bf86`** est `ready`, avec **15 contrôles Auth/Neon réussis**, journal des **10 migrations** reconnu, **0 migration nouvelle**, **19 tables**. Inventaires avant/après identiques : les 4 identités Auth préexistantes sont conservées et les fixtures ont été retirées. Les contrôles du site HTTPS publié suivent cette première vérification de la vraie base.
+
+La seconde recette development, déploiement **`6ad1367885fa75fd3e38e0d6`**, est `ready` : **16 contrôles HTTPS/Neon et 7 parcours Chromium hébergés réussis**, ordinateur et 390×844, **0 erreur JavaScript**. Elle vérifie notamment la page élargie et le plan, l’annotation multistyle, les deux modes de révision, FSRS/reprise et reconnexion, les liens Stripe et la fenêtre légale mobile. La lecture SQL confirme 3 cartes et 3 révisions avant nettoyage des fixtures ; inventaires avant/après identiques.
 
 ## Limites explicites
 
