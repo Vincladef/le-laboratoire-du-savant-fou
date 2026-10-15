@@ -138,8 +138,15 @@ export function billingService(db: Database, config: AppConfig, gateway?: Stripe
             through: new Date(item.current_period_end * 1000).toISOString(),
             invoiceId: invoice.id,
             subscriptionId: sub.id,
+            pendingInvoiceReason: null,
           }
-        : row.paidEntitlement;
+        : row.paidEntitlement
+          ? {
+              ...row.paidEntitlement,
+              pendingInvoiceReason:
+                invoice && typeof invoice === 'object' ? invoice.billing_reason : null,
+            }
+          : null;
     await tx
       .update(subscriptions)
       .set({

@@ -7,7 +7,7 @@ Recette du 15 octobre 2026. Le code livré, les tests avec transport Stripe subs
 | Vérification | Résultat |
 | --- | --- |
 | TypeScript | Réussi |
-| Tests PostgreSQL/éditeur/API | **74 tests réussis, 8 fichiers**, dont 29 cas de facturation |
+| Tests PostgreSQL/éditeur/API | **75 tests réussis, 8 fichiers**, dont 30 cas de facturation |
 | Chromium | **7 parcours réussis** : les 6 régressions des missions précédentes et le parcours commercial fermé |
 | Build frontend | Réussi |
 | Netlify Functions v2 | ZIP officiel produit, environ 4,43 Mo |

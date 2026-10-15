@@ -25,7 +25,10 @@ export async function rights(db: any, userId: string, config: AppConfig, now = n
     subscription &&
     config.billing &&
     subscription.mode === config.billing.mode &&
-    subscription.status === 'active' &&
+    (subscription.status === 'active' ||
+      (subscription.status === 'past_due' &&
+        subscription.invoiceStatus !== 'paid' &&
+        subscription.paidEntitlement?.pendingInvoiceReason === 'subscription_update')) &&
     subscription.currentPeriodEnd &&
     subscription.currentPeriodEnd > now &&
     (!subscription.cancelAt || subscription.cancelAt > now)

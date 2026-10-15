@@ -475,6 +475,21 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     await alice.call('/billing/refresh', 'POST', {});
     expect((await alice.call('/profile')).entitlements.tier).toBe('pro');
   });
+  it('ne retire pas une période Pro payée quand une hausse échoue en past_due, mais ne prolonge pas ce droit', async () => {
+    const sub = await subscribed();
+    const paidEnd = sub.items.data[0].current_period_end;
+    sub.status = 'past_due';
+    sub.items.data[0].price.id = 'price_premium';
+    sub.latest_invoice = {
+      id: 'in_upgrade_failed',
+      status: 'open',
+      billing_reason: 'subscription_update',
+    } as Stripe.Invoice;
+    gateway.current = [sub];
+    await alice.call('/billing/refresh', 'POST', {});
+    expect((await alice.call('/profile')).entitlements.tier).toBe('pro');
+    expect((await rights(db.db, alice.id, config, new Date(paidEnd * 1000 + 1))).tier).toBe('free');
+  });
   it('conserve l’accès lors d’une résiliation à échéance, puis le retire à l’instant de fin UTC', async () => {
     const sub = await subscribed(alice, { cancel_at_period_end: true });
     expect((await alice.call('/profile')).entitlements.tier).toBe('pro');

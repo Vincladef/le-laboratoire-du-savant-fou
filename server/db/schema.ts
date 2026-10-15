@@ -381,6 +381,7 @@ export const subscriptions = lab.table(
       through: string;
       invoiceId: string;
       subscriptionId: string;
+      pendingInvoiceReason?: string | null;
     }>(),
     syncedAt: date('synced_at'),
     checkoutSessionId: text('checkout_session_id').unique(),
