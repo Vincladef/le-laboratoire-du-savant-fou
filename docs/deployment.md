@@ -25,6 +25,8 @@ Les valeurs sont découvertes ou générées par API puis enregistrées directem
 
 `NETLIFY_SITE_ID` est connu par API ; la liaison CLI peut utiliser `.netlify/state.json` ignoré. Aucune recopie manuelle n’est nécessaire.
 
+La mission 3 conserve ces cinq variables du socle. Les variables Stripe facultatives, leur provisionnement automatisé et les informations légales sont décrits dans [billing.md](billing.md). Une configuration absente ferme les ventes côté serveur sans bloquer l’éditeur, Neon ou FSRS. Aucune valeur fictive ne doit être injectée pour faire apparaître un état « configuré ».
+
 Netlify Free a refusé le périmètre « Functions » seul. Les variables utilisent les périmètres standards gratuits `builds`, `functions`, `runtime`, `post_processing`. Aucune variable secrète n’a de préfixe `VITE_`. Ne jamais afficher l’environnement.
 
 ## Authentification gérée
@@ -66,6 +68,7 @@ Pour une préparation Netlify ponctuelle :
 | `LAB_VERIFY_MANAGED_AUTH=1` | Recette Auth et mémorisation avec Neon réel |
 | `LAB_VERIFY_PUBLISHED=1` | Requêtes contre le site HTTPS déjà publié ; sinon API en mémoire avec Neon réel |
 | `LAB_VERIFY_BROWSER=1` | Chromium contre le site publié et contrôle SQL final |
+| `LAB_VERIFY_BILLING=1` | Droits gratuits réels, plafonds d’offre, ventes non raccordées refusées et administration protégée |
 | `LAB_ALLOW_PRODUCTION_CHECKS=1` | Autorisation supplémentaire des contrôles sur la production exacte |
 
 La branche `mission-2` ne peut migrer que son hôte development reconnu. La production requiert sa cible exacte et ses gardes supplémentaires. Les migrations prennent un verrou et sont transactionnelles/idempotentes. Seuls les cartes manquantes et les emplacements réservés sans révision sont initialisés.
@@ -87,6 +90,8 @@ Les comptes gratuits `@example.test` sont des fixtures administratives, avec mot
 Le plugin `netlify/plugins/deployment-report` expose des résultats sans secrets dans le statut Netlify. Vérifier aussi l’état du déploiement : un plugin ayant rapporté un échec ne signifie pas que le build a réussi.
 
 Les contrôles historiques auto-hébergés `LAB_VERIFY_REMOTE` restent pour référence ; ne pas les activer avec Auth géré. Le nettoyage exceptionnel des deux essais development interrompus est borné à leurs dates et identités synthétiques, puis désactivé.
+
+L’inspection optionnelle `LAB_INSPECT_STRIPE_LINKS=1` est exclusivement réservée à la branche de test et à la lecture des pages publiques fournies. Elle ne soumet aucun paiement. La connexion secondaire `LAB_PRODUCTION_DATABASE_URL` n’est utilisée qu’en transaction READ ONLY pour l’inventaire, puis retirée. Supprimer ces paramètres et tous les autres drapeaux temporaires après recette.
 
 ## Ouverture commerciale
 

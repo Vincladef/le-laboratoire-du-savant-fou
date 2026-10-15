@@ -35,7 +35,19 @@ Un premier test attendait la boîte email locale avant sa création ; il a été
 
 La préparation est d’abord réalisée sur la branche de test existante `mission-2`, liée à Neon `development`, sans créer de nouveau projet. Les nouvelles migrations `0005`–`0009` ajoutent projections de facturation, audit, contraintes, preuve du dernier droit payé, protection de l’historique et index propriétaire/statut. Les cinq migrations antérieures ne sont pas réécrites ; documents et calendriers FSRS ne sont pas modifiés par ces migrations.
 
-Les références des déploiements et résultats hébergés sont ajoutées après confirmation ; les seuls résultats locaux ci-dessus ne valent pas validation de production.
+Development : `6ad1225d37186b7504e9210d` a appliqué `0005`–`0007` et réussi 15 contrôles Neon ; `6ad12606af386205134fc0ac` a appliqué `0008`–`0009` et réussi les 15 contrôles du code avec les plafonds définitifs côté serveur. Puis le déploiement **`6ad1267dc8a186ac21589590`**, code applicatif `7a4d6d4fa9c6ca146aed6455370b372942d65fd5`, est `ready` : **10 migrations connues, 19 tables, 16 contrôles HTTPS et 6 parcours Chromium hébergés réussis**, aucune erreur JavaScript. Les fonctions testées couvrent le socle documentaire/FSRS, les droits gratuits, les plafonds repris de Stripe, les ventes fermées sans raccordement et les pages légales mobiles.
+
+Les comptes de recette sont nettoyés précisément ; inventaires avant/après identiques : les 4 identités Auth development préexistantes sont conservées ; aucun document, passage, carte, révision, séance, abonnement ou événement de facturation de test ne reste. La lecture SQL après le navigateur confirme 3 cartes et 3 révisions, avant leur nettoyage.
+
+L’inventaire **READ ONLY** de production a trouvé **1 utilisateur applicatif, 1 document, 14 versions, 2 identités Auth**, sans identité historique non associée. Deux inventaires consécutifs ont donné le même hash documentaire. La connexion secondaire de cet inventaire et le drapeau d’inspection des liens ont été retirés après usage ; ils sont régénérables par API.
+
+La recette de production est enregistrée après confirmation, distinctement de development.
+
+## Environnement et dépendances
+
+`npm ci --cache /workspace/.npm-cache` a été réexécuté avec le lockfile et vérifications d’intégrité normales, puis TypeScript et les deux builds ont réussi. Le démarrage local explicite répond HTTP 200 et `status: ok`, `authentication: local`, `database: local-postgresql`. Le catalogue expose la version d’offre `2026-10-15-v2` et `checkoutReady: false`. Le serveur lancé pour le contrôle a été arrêté.
+
+`npm audit --omit=dev` retourne **7 alertes modérées, 0 haute et 0 critique**, code 1 attendu ; ce n’est pas un audit sans alertes. Aucune correction forcée ou désactivation de sécurité. Les avertissements de dépendances paires transitives Neon restent signalés. Stripe Tax et toute offre payante supplémentaire ne sont pas activés. Les quotas techniques ne réservent pas une capacité garantie par utilisateur sur les plans gratuits Neon/Netlify ; surveiller leur capacité globale avant montée en charge.
 
 ## Blocages réels et opérations non exécutées
 

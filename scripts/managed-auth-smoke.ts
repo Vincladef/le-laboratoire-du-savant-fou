@@ -27,7 +27,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
   const counts = async () =>
     (
       await client.query(
-        'select (select count(*)::int from lab."user") as users, (select count(*)::int from lab.documents) as documents, (select count(*)::int from neon_auth."user") as managed_users, (select count(*)::int from lab.memory_anchors) as anchors, (select count(*)::int from lab.fsrs_cards) as cards, (select count(*)::int from lab.review_history) as reviews, (select count(*)::int from lab.study_sessions) as sessions, (select count(*)::int from lab.subscriptions) as subscriptions, (select count(*)::int from lab.billing_events) as billing_events, (select count(*)::int from lab.profiles where legacy_version_limit=100) as preserved_legacy_profiles',
+        'select (select count(*)::int from lab."user") as users, (select count(*)::int from lab.documents) as documents, (select count(*)::int from lab.document_versions) as versions, (select count(*)::int from neon_auth."user") as managed_users, (select count(*)::int from lab.memory_anchors) as anchors, (select count(*)::int from lab.fsrs_cards) as cards, (select count(*)::int from lab.review_history) as reviews, (select count(*)::int from lab.study_sessions) as sessions, (select count(*)::int from lab.subscriptions) as subscriptions, (select count(*)::int from lab.billing_events) as billing_events, (select count(*)::int from lab.profiles where legacy_version_limit=100) as preserved_legacy_profiles, (select md5(coalesce(string_agg(md5(id::text || owner_id || revision::text || content::text),\'\' order by id),\'\')) from lab.documents) as document_fingerprint',
       )
     ).rows[0];
   const before = await counts();
