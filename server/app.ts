@@ -1,13 +1,13 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
-import { and, eq, isNull, isNotNull, desc, ilike, or, sql, inArray } from 'drizzle-orm';
+import { and, eq, ne, isNull, isNotNull, desc, ilike, or, sql, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Database } from './db';
 import { createAuth } from './auth';
 import { managedAuth, resolveManagedIdentity } from './managed-auth';
 import type { AppConfig } from './config';
-import { documents, folders, versions, profiles, assets, user } from './db/schema';
+import { documents, folders, versions, profiles, assets, memoryAnchors, user } from './db/schema';
 import { syncAnchors } from './anchors';
 import { learningRoutes } from './learning';
 import { billingService } from './billing/service';
@@ -210,6 +210,14 @@ export function createApp(
     await tx.select().from(profiles).where(eq(profiles.userId, userId)).for('update');
   }
   async function snapshot(tx: any, doc: typeof documents.$inferSelect, reason: string) {
+    const countPassages = async () =>
+      (
+        await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(memoryAnchors)
+          .where(and(eq(memoryAnchors.ownerId, doc.ownerId), ne(memoryAnchors.status, 'deleted')))
+      )[0].count;
+    const before = await countPassages();
     await tx.insert(versions).values({
       documentId: doc.id,
       ownerId: doc.ownerId,
@@ -220,6 +228,13 @@ export function createApp(
       reason,
     });
     await syncAnchors(tx, doc);
+    const after = await countPassages();
+    const limit = (await rights(tx, doc.ownerId, config)).quotas.clozes;
+    if (after > before && after > limit)
+      failure(
+        413,
+        `Le quota de ${limit} passages actifs est atteint. Le document distant n’a pas changé ; votre copie locale est conservée.`,
+      );
   }
   app.route('/api', learningRoutes(db));
   app.route('/api', billingRoutes(db, config, billing));
@@ -391,7 +406,7 @@ export function createApp(
         .from(documents)
         .where(and(...conditions))
         .orderBy(desc(documents.updatedAt))
-        .limit(500),
+        .limit(1000),
     );
   });
   app.post('/api/documents', async (c) => {
@@ -477,6 +492,7 @@ export function createApp(
       .parse(await c.req.json());
     await ownedDocument(c.req.param('id'), c.get('userId'));
     await db.transaction(async (tx) => {
+      await lockProfile(tx, c.get('userId'));
       await tx
         .update(documents)
         .set({ cursor, lastOpenedAt: new Date() })
@@ -495,6 +511,7 @@ export function createApp(
       .object({ revision: z.number().int().positive(), deleted: z.boolean() })
       .parse(await c.req.json());
     const result = await db.transaction(async (tx) => {
+      await lockProfile(tx, c.get('userId'));
       const [current] = await tx
         .select()
         .from(documents)
@@ -533,7 +550,7 @@ export function createApp(
           and(eq(versions.documentId, c.req.param('id')), eq(versions.ownerId, c.get('userId'))),
         )
         .orderBy(desc(versions.revision))
-        .limit(100),
+        .limit((await rights(db, c.get('userId'), config)).quotas.versions),
     );
   });
   app.get('/api/documents/:id/versions/:versionId', async (c) => {
@@ -549,6 +566,18 @@ export function createApp(
         ),
       );
     if (!version) failure(404, 'Version introuvable.');
+    const limit = (await rights(db, c.get('userId'), config)).quotas.versions;
+    const window = await db
+      .select({ id: versions.id })
+      .from(versions)
+      .where(and(eq(versions.documentId, c.req.param('id')), eq(versions.ownerId, c.get('userId'))))
+      .orderBy(desc(versions.revision))
+      .limit(limit);
+    if (!window.some((v) => v.id === version.id))
+      failure(
+        403,
+        `Cette formule donne accès aux ${limit} dernières versions. Les archives ne sont pas supprimées.`,
+      );
     return c.json(version);
   });
   app.post('/api/assets', async (c) => {

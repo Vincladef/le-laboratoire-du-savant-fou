@@ -887,7 +887,8 @@ function VersionHistory({
         </button>
       </header>
       <p className="muted small">
-        Les 100 dernières versions sont affichées. Restaurer crée une nouvelle version.
+        Les dernières versions accessibles avec votre formule sont affichées. Restaurer crée une
+        nouvelle version ; les archives ne sont pas effacées lors d’un changement d’offre.
       </p>
       {error || versions.error ? (
         <p role="alert" className="alert error">

@@ -7,7 +7,7 @@ Recette du 15 octobre 2026. Le code livré, les tests avec transport Stripe subs
 | Vérification | Résultat |
 | --- | --- |
 | TypeScript | Réussi |
-| Tests PostgreSQL/éditeur/API | **72 tests réussis, 8 fichiers**, dont 27 cas de facturation |
+| Tests PostgreSQL/éditeur/API | **74 tests réussis, 8 fichiers**, dont 29 cas de facturation |
 | Chromium | **7 parcours réussis** : les 6 régressions des missions précédentes et le parcours commercial fermé |
 | Build frontend | Réussi |
 | Netlify Functions v2 | ZIP officiel produit, environ 4,43 Mo |
@@ -24,7 +24,8 @@ Les tests de facturation utilisent de vraies transactions PostgreSQL PGlite isol
 - résiliation à échéance et expiration exacte, `past_due`, `unpaid`, `incomplete`, `incomplete_expired`, `paused`, `trialing`, `canceled`, facture ouverte et prix inconnu ;
 - panne de lecture Stripe, transaction annulée et événement retransmissible ;
 - isolation du portail, administration refusée aux comptes ordinaires, correspondance exacte du propriétaire Neon et Premium permanent sans facturation ;
-- administration journalisée, quotas serveur documents/images et documents encore éditables après retour gratuit.
+- administration journalisée, quotas serveur documents/images/passages et documents encore éditables après retour gratuit ;
+- sauvegarde de 500 annotations, refus transactionnel de la 501e en gratuit puis acceptation Pro ; fenêtres de 10/30 versions et protection historique de 100, sans suppression des 35 archives utilisées dans le test.
 
 Le navigateur vérifie pages publiques, état préparatoire des textes légaux, compte privé, formule gratuite, cases de consentement sans possibilité d’achat non configuré, refus API malgré un appel direct avec bonne origine, refus administratif et affichage mobile 390×844. Les autres parcours continuent à tester les documents, les formats, la sauvegarde, les conflits et FSRS.
 
@@ -32,7 +33,7 @@ Un premier test attendait la boîte email locale avant sa création ; il a été
 
 ## Déploiement et Neon
 
-La préparation est d’abord réalisée sur la branche de test existante `mission-2`, liée à Neon `development`, sans créer de nouveau projet. Les nouvelles migrations `0005`–`0007` ajoutent les projections de facturation, l’audit, les contraintes et la preuve du dernier droit payé sans réécrire les cinq migrations appliquées ni modifier les documents ou calendriers FSRS.
+La préparation est d’abord réalisée sur la branche de test existante `mission-2`, liée à Neon `development`, sans créer de nouveau projet. Les nouvelles migrations `0005`–`0009` ajoutent projections de facturation, audit, contraintes, preuve du dernier droit payé, protection de l’historique et index propriétaire/statut. Les cinq migrations antérieures ne sont pas réécrites ; documents et calendriers FSRS ne sont pas modifiés par ces migrations.
 
 Les références des déploiements et résultats hébergés sont ajoutées après confirmation ; les seuls résultats locaux ci-dessus ne valent pas validation de production.
 

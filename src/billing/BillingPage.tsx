@@ -10,7 +10,7 @@ type Rights = {
   role: string;
   permanent: boolean;
   billingExempt: boolean;
-  quotas: { documents: number; bytes: number };
+  quotas: { documents: number; bytes: number; clozes: number; versions: number };
 };
 type Catalog = {
   checkoutReady: boolean;
@@ -20,7 +20,7 @@ type Catalog = {
 };
 type State = {
   rights: Rights;
-  usage: { documents: number; bytes: number };
+  usage: { documents: number; bytes: number; clozes: number };
   checkoutReady: boolean;
   manageReady: boolean;
   mode: string | null;
@@ -68,8 +68,9 @@ export function PricingPage() {
       <PlanCards approved={Boolean(catalog.data?.limitsApproved)} />
       <p>
         Le traitement de texte, les versions, les textes à trous et FSRS sont accessibles dans les
-        trois formules. Les plafonds concernent les documents (corbeille incluse) et les images ;
-        taille maximale d’une image : 4 Mo. Il ne s’agit pas d’un espace disque général.
+        trois formules. Les plafonds concernent les documents (corbeille incluse), passages actifs,
+        fenêtre d’historique et images ; taille maximale d’une image : 4 Mo. Il ne s’agit pas d’un
+        espace disque général.
       </p>
       <Link className="button primary" to="/billing">
         Mon abonnement
@@ -100,10 +101,14 @@ function PlanCards({
             {plans[id].documents} documents
             <br />
             {plans[id].bytes / 1024 / 1024} Mo d’images privées
+            <br />
+            {plans[id].clozes.toLocaleString('fr')} passages actifs
+            <br />
+            {plans[id].versions} dernières versions par document
           </p>
           {id !== 'free' && !approved && (
             <p className="muted small">
-              Plafonds techniques provisoires, pas une offre commerciale ouverte.
+              Plafonds repris de vos offres Stripe existantes ; ventes non ouvertes.
             </p>
           )}
           {id !== 'free' && action && (
@@ -116,7 +121,7 @@ function PlanCards({
     </div>
   );
 }
-export function BillingPage() {
+export function BillingPage({ userId }: { userId: string }) {
   const [params] = useSearchParams(),
     client = useQueryClient();
   const [accepted, setAccepted] = useState(false),
@@ -129,7 +134,7 @@ export function BillingPage() {
     queryFn: () => api<Catalog>('/billing/plans'),
   });
   const state = useQuery({
-    queryKey: ['billing'],
+    queryKey: ['billing', userId],
     queryFn: () => api<State>('/billing'),
     refetchInterval: params.has('checkout') ? 10000 : false,
   });
@@ -159,7 +164,7 @@ export function BillingPage() {
   }, [params]);
   async function checkout(plan: PaidPlan) {
     await run(async () => {
-      const key = `lab-checkout-${plan}-${catalog.data?.termsVersion}`;
+      const key = `lab-checkout-${userId}-${plan}-${catalog.data?.termsVersion}`;
       let requestId = sessionStorage.getItem(key);
       if (!requestId) {
         requestId = crypto.randomUUID();
@@ -211,6 +216,12 @@ export function BillingPage() {
             {s.usage.documents} / {s.rights.quotas.documents} documents ·{' '}
             {(s.usage.bytes / 1024 / 1024).toFixed(1)} / {s.rights.quotas.bytes / 1024 / 1024} Mo
             d’images
+          </p>
+          <p>
+            {s.usage.clozes} / {s.rights.quotas.clozes.toLocaleString('fr')} passages actifs ·{' '}
+            {s.rights.quotas.versions} dernières versions consultables par document. Les comptes
+            existants conservent leur fenêtre historique de 100 versions ; aucune archive n’est
+            supprimée.
           </p>
           {s.rights.billingExempt ? (
             <p>

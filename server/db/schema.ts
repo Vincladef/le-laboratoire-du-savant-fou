@@ -89,18 +89,23 @@ export const rateLimit = lab.table('rate_limit', {
   lastRequest: bigint('last_request', { mode: 'number' }).notNull(),
 });
 export const roleEnum = lab.enum('role', ['free', 'pro', 'premium', 'owner']);
-export const profiles = lab.table('profiles', {
-  userId: text('user_id')
-    .primaryKey()
-    .references(() => user.id, { onDelete: 'cascade' }),
-  role: roleEnum('role').notNull().default('free'),
-  preferences: jsonb('preferences')
-    .$type<{ theme?: string; timezone?: string; lastDocumentId?: string }>()
-    .notNull()
-    .default({}),
-  createdAt: created(),
-  updatedAt: updated(),
-});
+export const profiles = lab.table(
+  'profiles',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    role: roleEnum('role').notNull().default('free'),
+    legacyVersionLimit: integer('legacy_version_limit').notNull().default(0),
+    preferences: jsonb('preferences')
+      .$type<{ theme?: string; timezone?: string; lastDocumentId?: string }>()
+      .notNull()
+      .default({}),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [check('legacy_version_limit_valid', sql`${t.legacyVersionLimit} BETWEEN 0 AND 100`)],
+);
 // Stable application identities: do not rewrite document ownership during auth migration.
 // Provider subjects are trusted only after server-side validation by Neon Auth.
 export const authIdentities = lab.table('auth_identities', {
@@ -237,6 +242,7 @@ export const memoryAnchors = lab.table(
       name: 'anchor_document_owner',
     }).onDelete('cascade'),
     unique('anchors_id_owner').on(t.id, t.ownerId),
+    index('anchors_owner_status_idx').on(t.ownerId, t.status),
     check('anchor_status', sql`${t.status} IN ('active','deleted','needs_review')`),
     check('anchor_priority', sql`${t.priority} IN ('high','medium','low')`),
   ],

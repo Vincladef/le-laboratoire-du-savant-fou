@@ -9,17 +9,25 @@ Liens publics fournis par le titulaire, conservés pour retrouver les produits e
 - https://buy.stripe.com/14AcN40XQ29egaJ4ymffy0R
 - https://buy.stripe.com/9B6fZg4a25lq1fPc0Offy0S
 
-Leur ordre ne permet pas d’attribuer Pro ou Premium. Ils ne constituent ni une clé serveur ni un secret de webhook. Ils ne sont pas intégrés comme boutons d’achat anonymes : un achat non rattaché au compte applicatif ne doit pas promettre des droits. L’inspection publique automatisée ne remplit aucun formulaire et ne réalise aucun paiement.
+L’inspection Chromium depuis Netlify a identifié le premier comme Pro, le second comme Premium, avec leurs descriptions mensuelles et plafonds. Depuis la localisation du runner, les pages affichaient des USD et une conversion incluant 4 % de frais. Les Checkout de l’application sont donc explicitement en EUR, avec tarification adaptative désactivée. L’inspection publique ne fournit ni une clé serveur ni un secret de webhook ni les IDs de prix vérifiés par API. Les liens ne sont pas intégrés comme boutons d’achat anonymes : un achat non rattaché au compte applicatif ne doit pas promettre des droits. Aucun formulaire n’est rempli et aucun paiement n’est réalisé.
 
 **Les ventes restent fermées** tant que Stripe et la validation juridique ne sont pas finalisés. Il n’existe aucun faux Checkout de démonstration sur le site. Une tentative directe vers l’API refuse également l’achat.
 
 ## Formules et quotas
 
-`src/shared/plans.ts` centralise les prix, limites et version d’offre. Le gratuit conserve les limites de la mission 1 : 100 documents et 25 Mo d’images. Les plafonds techniques proposés pour Pro sont 250 documents/100 Mo et pour Premium 500 documents/250 Mo ; **ils restent provisoires tant que l’opérateur n’a pas validé l’offre**. Les prix cibles sont respectivement 9 € et 19 € par mois. Les prix Stripe doivent être fixes, EUR, mensuels, quantité 1, taxes incluses. La situation fiscale réelle reste à valider.
+`src/shared/plans.ts` centralise les prix, limites et version d’offre `2026-10-15-v2`. Les plafonds payants sont ceux lus sur les pages Stripe existantes, pas des valeurs inventées :
+
+| Formule | Prix mensuel | Documents | Passages actifs | Images | Fenêtre d’historique |
+| --- | --- | --- | --- | --- | --- |
+| Gratuit, plafonds préparatoires | 0 € | 100 | 500 | 25 Mo | 10 dernières versions |
+| Pro, description Stripe | 9 € | 100 | 5 000 | 100 Mo | 30 dernières versions |
+| Premium, description Stripe | 19 € | 1 000 | 50 000 | 500 Mo | 100 dernières versions |
+
+Les comptes antérieurs à la migration `0008` conservent leur accès historique aux 100 dernières versions, même en gratuit ou Pro. La migration ne supprime aucune archive. Les nouveaux plafonds gratuits restent centralisés et préparatoires, sans engagement commercial irréversible ; les 100 documents et 25 Mo existants sont conservés. Un compte déjà au-dessus d’un quota de passages ne perd rien et peut continuer ses modifications sans croissance du nombre de passages. Les prix Stripe doivent être fixes, EUR, mensuels, usage `licensed`, quantité 1, taxes incluses. La situation fiscale réelle reste à valider.
 
 Éditeur, versions, import/export, annotations et FSRS sont disponibles dans chaque formule. Une image reste limitée à 4 Mo pour toutes les formules. Le quota en octets concerne les images privées, pas un disque général ni une promesse de stockage PostgreSQL illimité. La corbeille compte dans le quota documentaire.
 
-Les nouvelles créations et images prennent le verrou du profil et calculent les droits dans la même transaction que la réservation du quota. Un retour gratuit ne supprime aucun document, version, carte ou historique et n’empêche pas l’édition/l’export des documents existants. Le rôle affiché en cache ne suffit jamais à attribuer les droits.
+Les nouvelles créations, annotations et images prennent le verrou du profil et calculent les droits dans la même transaction que la réservation du quota. Un dépassement d’annotations annule ensemble document, version, index et cartes ; le brouillon local reste récupérable. Retirer des annotations demeure possible. L’historique est une fenêtre consultable, pas une purge : ni les sauvegardes ni les révisions FSRS ne sont arrêtées parce que la fenêtre est pleine. Le serveur vérifie également la fenêtre sur l’accès individuel à une version. Un retour gratuit ne supprime aucun document, version, carte ou historique et n’empêche pas l’édition/l’export des documents existants. Les caches clients de facturation et d’administration sont séparés par identité ; le rôle affiché en cache ne suffit jamais à attribuer les droits.
 
 ## Cycle Stripe
 

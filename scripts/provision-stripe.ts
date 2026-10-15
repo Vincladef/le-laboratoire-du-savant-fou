@@ -121,7 +121,9 @@ async function configure() {
       if (
         typeof product !== 'string' &&
         !product.deleted &&
-        product.name.toLowerCase() === plan &&
+        [plan, `le laboratoire du savant fou • ${plan}`].includes(
+          product.name.toLowerCase().replace(/\s+/g, ' ').trim(),
+        ) &&
         p.currency === 'eur' &&
         p.unit_amount === (plan === 'pro' ? 900 : 1900) &&
         p.recurring?.interval === 'month' &&
@@ -135,6 +137,10 @@ async function configure() {
       );
     catalog[plan] = found[0];
   }
+  if (production && inspectedLinks.length !== suppliedStripeLinks.length)
+    throw Error(
+      'Les deux liens fournis ne sont pas retrouvés dans ce compte live. Aucun raccordement à un autre compte.',
+    );
   for (const [plan, p] of Object.entries(catalog)) {
     if (
       !p.active ||

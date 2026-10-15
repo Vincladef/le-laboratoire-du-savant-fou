@@ -27,7 +27,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
   const counts = async () =>
     (
       await client.query(
-        'select (select count(*)::int from lab."user") as users, (select count(*)::int from lab.documents) as documents, (select count(*)::int from neon_auth."user") as managed_users, (select count(*)::int from lab.memory_anchors) as anchors, (select count(*)::int from lab.fsrs_cards) as cards, (select count(*)::int from lab.review_history) as reviews, (select count(*)::int from lab.study_sessions) as sessions',
+        'select (select count(*)::int from lab."user") as users, (select count(*)::int from lab.documents) as documents, (select count(*)::int from neon_auth."user") as managed_users, (select count(*)::int from lab.memory_anchors) as anchors, (select count(*)::int from lab.fsrs_cards) as cards, (select count(*)::int from lab.review_history) as reviews, (select count(*)::int from lab.study_sessions) as sessions, (select count(*)::int from lab.subscriptions) as subscriptions, (select count(*)::int from lab.billing_events) as billing_events, (select count(*)::int from lab.profiles where legacy_version_limit=100) as preserved_legacy_profiles',
       )
     ).rows[0];
   const before = await counts();
@@ -143,7 +143,11 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
       if (
         catalog.checkoutReady !== false ||
         state.rights.tier !== 'free' ||
-        state.manageReady !== false
+        state.manageReady !== false ||
+        state.rights.quotas.clozes !== 500 ||
+        state.rights.quotas.versions !== 10 ||
+        catalog.plans.pro.documents !== 100 ||
+        catalog.plans.premium.documents !== 1000
       )
         throw new Error('La facturation non raccordée ne doit donner ni accès payant ni paiement.');
       checks.push('billing-real-neon-free-rights-and-closed-sales');
@@ -156,7 +160,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
           accepted: true,
           immediateAccess: true,
           termsVersion: 'unconfigured',
-          offerVersion: '2026-10-15-v1',
+          offerVersion: '2026-10-15-v2',
         },
         503,
       );

@@ -57,7 +57,13 @@ export async function rights(db: any, userId: string, config: AppConfig, now = n
     role: owner ? ('owner' as const) : tier,
     permanent: owner,
     billingExempt: owner,
-    quotas: { documents: plans[tier].documents, bytes: plans[tier].bytes, image: imageLimit },
+    quotas: {
+      documents: plans[tier].documents,
+      bytes: plans[tier].bytes,
+      image: imageLimit,
+      clozes: plans[tier].clozes,
+      versions: Math.max(plans[tier].versions, profile?.legacyVersionLimit || 0),
+    },
     features: { editor: true, versions: true, cloze: true, fsrs: true, docx: true, pdf: true },
   };
 }

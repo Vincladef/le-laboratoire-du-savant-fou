@@ -16,10 +16,12 @@ import {
   assets,
   billingAdminAudit,
   billingEvents,
+  memoryAnchors,
   documents,
   profiles,
   subscriptions,
   user,
+  versions,
 } from '../server/db/schema';
 import { offerVersion } from '../src/shared/plans';
 const origin = 'http://localhost:5173',
@@ -382,7 +384,7 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     expect(args.subscription_data.metadata.labUserId).toBe(alice.id);
     expect(args.success_url).toBe(`${origin}/billing?checkout=returned`);
     expect(r.acceptedLegal?.publisher).toBe('Fixture only');
-    expect(r.acceptedOffer?.documents).toBe(250);
+    expect(r.acceptedOffer?.documents).toBe(100);
     expect(r.immediateAccessRequestedAt).toBeInstanceOf(Date);
     expect((await alice.call('/profile')).entitlements.tier).toBe('free');
   });
@@ -564,7 +566,95 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     await owner.call('/admin/billing/reconcile', 'POST', { userId: alice.id });
     expect(await db.db.select().from(billingAdminAudit)).toHaveLength(1);
   });
-  it('applique les quotas en transaction : gratuit plein, Pro autorisé, données et édition conservées après retour gratuit', async () => {
+  it('limite les passages dans la transaction documentaire sans perte de réponse ni demi-sauvegarde', async () => {
+    const nodes = Array.from({ length: 501 }, (_, i) => ({
+      type: 'text',
+      text: `Réponse ${i}`,
+      marks: [
+        {
+          type: 'memoryAnchor',
+          attrs: { id: crypto.randomUUID(), hint: '', priority: 'high', sourceId: null },
+        },
+      ],
+    }));
+    const content = (length: number) => ({
+      type: 'doc',
+      content: [{ type: 'paragraph', content: nodes.slice(0, length) }],
+    });
+    const doc = await alice.call(
+      '/documents',
+      'POST',
+      { title: 'Quota passages', content: content(500) },
+      201,
+    );
+    await alice.call(
+      `/documents/${doc.id}`,
+      'PUT',
+      { revision: doc.revision, title: doc.title, layout: doc.layout, content: content(501) },
+      413,
+    );
+    const unchanged = await alice.call(`/documents/${doc.id}`);
+    expect(unchanged.revision).toBe(doc.revision);
+    expect(unchanged.content).toEqual(doc.content);
+    expect((await alice.call('/billing')).usage.clozes).toBe(500);
+    await subscribed();
+    const changed = await alice.call(`/documents/${doc.id}`, 'PUT', {
+      revision: doc.revision,
+      title: doc.title,
+      layout: doc.layout,
+      content: content(501),
+    });
+    expect(changed.revision).toBe(doc.revision + 1);
+    // Preserve data on downgrade; removing just one annotation remains possible above quota.
+    gateway.current[0].status = 'canceled';
+    await alice.call('/billing/refresh', 'POST', {});
+    const reduced = await alice.call(`/documents/${doc.id}`, 'PUT', {
+      revision: changed.revision,
+      title: doc.title,
+      layout: doc.layout,
+      content: content(500),
+    });
+    expect(reduced.revision).toBe(changed.revision + 1);
+    await db.db.delete(documents).where(eq(documents.id, doc.id));
+  });
+  it('limite la fenêtre des versions sans purge et préserve les 100 versions des comptes historiques', async () => {
+    const doc = await alice.call('/documents', 'POST', { title: 'Historique à préserver' }, 201);
+    const inserted = await db.db
+      .insert(versions)
+      .values(
+        Array.from({ length: 34 }, (_, i) => ({
+          documentId: doc.id,
+          ownerId: alice.id,
+          revision: i + 2,
+          title: 'Archive',
+          content: doc.content,
+          layout: doc.layout,
+          reason: 'test',
+        })),
+      )
+      .returning();
+    expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(10);
+    await alice.call(`/documents/${doc.id}/versions/${inserted[0].id}`, 'GET', undefined, 403);
+    await subscribed();
+    expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(30);
+    await db.db
+      .update(profiles)
+      .set({ legacyVersionLimit: 100 })
+      .where(eq(profiles.userId, alice.id));
+    expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(35);
+    expect((await alice.call(`/documents/${doc.id}/versions/${inserted[0].id}`)).id).toBe(
+      inserted[0].id,
+    );
+    expect(await db.db.select().from(versions).where(eq(versions.documentId, doc.id))).toHaveLength(
+      35,
+    );
+    await db.db
+      .update(profiles)
+      .set({ legacyVersionLimit: 0 })
+      .where(eq(profiles.userId, alice.id));
+    await db.db.delete(documents).where(eq(documents.id, doc.id));
+  });
+  it('applique les quotas en transaction : gratuit/Pro pleins, Premium autorisé, données conservées après retour gratuit', async () => {
     const count = (
       await db.db
         .select({ count: sql<number>`count(*)::int` })
@@ -581,7 +671,11 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
       })),
     );
     await alice.call('/documents', 'POST', { title: 'Refus gratuit' }, 413);
-    await subscribed();
+    const paid = await subscribed();
+    await alice.call('/documents', 'POST', { title: 'Refus Pro plein' }, 413);
+    paid.items.data[0].price.id = 'price_premium';
+    gateway.current = [paid];
+    await alice.call('/billing/refresh', 'POST', {});
     const doc = await alice.call('/documents', 'POST', { title: 'Document conservé' }, 201);
     gateway.current[0].status = 'canceled';
     await alice.call('/billing/refresh', 'POST', {});

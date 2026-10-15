@@ -1,0 +1,2 @@
+CREATE INDEX "anchors_owner_status_idx" ON "lab"."memory_anchors" USING btree ("owner_id","status");--> statement-breakpoint
+ALTER TABLE "lab"."profiles" ADD CONSTRAINT "legacy_version_limit_valid" CHECK ("lab"."profiles"."legacy_version_limit" BETWEEN 0 AND 100);

@@ -2,12 +2,12 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api, json } from '../lib/api';
-export function AdminPage() {
+export function AdminPage({ userId }: { userId: string }) {
   const [after, setAfter] = useState(''),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false);
   const accounts = useQuery({
-    queryKey: ['admin-accounts', after],
+    queryKey: ['admin-accounts', userId, after],
     queryFn: () =>
       api<{ accounts: any[]; next: string | null }>(
         `/admin/accounts?after=${encodeURIComponent(after)}`,
@@ -15,7 +15,7 @@ export function AdminPage() {
     retry: false,
   });
   const events = useQuery({
-    queryKey: ['admin-events'],
+    queryKey: ['admin-events', userId],
     queryFn: () => api<any[]>('/admin/billing/events'),
     retry: false,
   });

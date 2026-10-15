@@ -44,7 +44,7 @@ test('formules publiques, informations légales, abonnement privé et ventes fer
       accepted: true,
       immediateAccess: true,
       termsVersion: 'missing',
-      offerVersion: '2026-10-15-v1',
+      offerVersion: '2026-10-15-v2',
     },
   });
   expect(direct.status()).toBe(503);

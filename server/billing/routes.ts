@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { asc, desc, eq, gt, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ne, gt, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { AppConfig } from '../config';
 import type { Database } from '../db';
@@ -9,6 +9,7 @@ import {
   billingAdminAudit,
   billingEvents,
   documents,
+  memoryAnchors,
   subscriptions,
   user,
 } from '../db/schema';
@@ -32,9 +33,13 @@ export function billingRoutes(db: Database, config: AppConfig, billing: Service)
       .select({ bytes: sql<number>`coalesce(sum(${assets.bytes}),0)::bigint` })
       .from(assets)
       .where(eq(assets.ownerId, id));
+    const [passages] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(memoryAnchors)
+      .where(and(eq(memoryAnchors.ownerId, id), ne(memoryAnchors.status, 'deleted')));
     return c.json({
       rights: await rights(db, id, config),
-      usage: { documents: docs.count, bytes: Number(files.bytes) },
+      usage: { documents: docs.count, bytes: Number(files.bytes), clozes: passages.count },
       checkoutReady: billing.checkoutReady(),
       manageReady: billing.available() && Boolean(subscription?.stripeCustomerId),
       mode: config.billing?.mode || null,

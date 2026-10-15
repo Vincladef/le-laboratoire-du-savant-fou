@@ -34,9 +34,12 @@ export function App() {
           <Route path="/legal/:page" element={<LegalPage />} />
           <Route
             path="/billing"
-            element={user ? <BillingPage /> : <AuthPage returnTo="/billing" />}
+            element={user ? <BillingPage userId={user.id} /> : <AuthPage returnTo="/billing" />}
           />
-          <Route path="/admin" element={user ? <AdminPage /> : <AuthPage returnTo="/admin" />} />
+          <Route
+            path="/admin"
+            element={user ? <AdminPage userId={user.id} /> : <AuthPage returnTo="/admin" />}
+          />
           <Route
             path="/library"
             element={user ? <Library user={user} /> : <Navigate to="/" replace />}
