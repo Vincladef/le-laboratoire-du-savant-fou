@@ -35,6 +35,17 @@ export async function verifyHostedBrowser(
     await page.goto(`${origin}/document/${documentId}`);
     const editor = page.getByRole('textbox', { name: 'Contenu du document' });
     await expect(editor).toBeVisible({ timeout: 30000 });
+    await expect(
+      page.getByRole('button', { name: 'Plan du document', exact: true }),
+    ).toHaveAttribute('aria-expanded', 'false');
+    const paper = page.locator('.document-paper');
+    const paperBounds = await paper.boundingBox();
+    if (!paperBounds || paperBounds.width < 1250)
+      throw new Error('Page trop étroite sur ordinateur');
+    await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
+    await page.getByRole('button', { name: 'Masquer le plan', exact: true }).click();
+    checks.push('hosted-browser-wide-paper-and-outline-toggle');
     await expect(editor.locator('strong')).toContainText('Une réponse');
     await expect(editor.locator('em')).toContainText('formatée');
     await editor.focus();
@@ -105,10 +116,17 @@ export async function verifyHostedBrowser(
       await expect(
         page.getByRole('heading', { name: 'Formule Gratuit', exact: true }),
       ).toBeVisible();
-      await expect(page.getByRole('button', { name: 'Choisir Pro', exact: true })).toBeDisabled();
       await expect(
-        page.getByText('Les souscriptions sont fermées', { exact: false }),
-      ).toBeVisible();
+        page.getByRole('link', { name: 'Choisir Pro (Stripe, nouvel onglet)', exact: true }),
+      ).toHaveAttribute('href', 'https://buy.stripe.com/14AcN40XQ29egaJ4ymffy0R');
+      await expect(
+        page.getByRole('link', { name: 'Choisir Premium (Stripe, nouvel onglet)', exact: true }),
+      ).toHaveAttribute('href', 'https://buy.stripe.com/9B6fZg4a25lq1fPc0Offy0S');
+      await expect(page.getByRole('checkbox')).toHaveCount(0);
+      await page.getByRole('button', { name: 'CGU & confidentialité' }).click();
+      await expect(page.getByRole('dialog', { name: 'Informations et conditions' })).toBeVisible();
+      await page.keyboard.press('Escape');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
       await page.goto(`${origin}/legal/mentions`);
       await expect(
         page.getByRole('heading', { name: 'Mentions légales', exact: true }),
@@ -116,7 +134,7 @@ export async function verifyHostedBrowser(
       await expect(page.getByRole('status')).toContainText('Document préparatoire');
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2))
         throw new Error('Débordement mobile des pages commerciales');
-      checks.push('hosted-browser-billing-gate-and-mobile-legal-pages');
+      checks.push('hosted-browser-stripe-links-legal-popup-and-mobile');
     }
     if (errors.length) throw new Error(`Erreurs JavaScript navigateur : ${errors.length}`);
     return { passed: checks.length, checks, viewport: 'desktop-and-390x844', javascriptErrors: 0 };

@@ -86,6 +86,30 @@ afterAll(async () => {
   await connection?.close();
 });
 describe('Authentification et cloisonnement réels dans PostgreSQL', () => {
+  it('isole les clients du proxy local sans désactiver les limites de connexion', async () => {
+    const first = new Client('proxy-a@example.test', '192.0.2.88, 127.0.0.1');
+    const second = new Client('proxy-b@example.test', '192.0.2.89, 127.0.0.1');
+    for (let i = 0; i < 8; i++)
+      expect(
+        (
+          await first.request('/auth/sign-in/email', 'POST', {
+            email: alice.email,
+            password: 'Wrong-Password-42!',
+          })
+        ).status,
+      ).toBe(401);
+    expect(
+      (await first.request('/auth/sign-in/email', 'POST', { email: alice.email, password })).status,
+    ).toBe(429);
+    expect(
+      (
+        await second.request('/auth/sign-in/email', 'POST', {
+          email: alice.email,
+          password: 'Wrong-Password-42!',
+        })
+      ).status,
+    ).toBe(401);
+  });
   it('confirme les emails et ouvre une session HttpOnly', async () => {
     const session = await alice.request('/auth/get-session');
     const data = await session.json();

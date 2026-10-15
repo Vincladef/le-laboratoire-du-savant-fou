@@ -80,19 +80,35 @@ function DocumentEditor({
   const queryClient = useQueryClient();
   const [title, setTitle] = useState(original.title);
   const [layout, setLayout] = useState<PageLayout>(original.layout);
-  const [outline, setOutline] = useState(true);
+  const [outline, setOutline] = useState(() => {
+    try {
+      return localStorage.getItem(`lab-outline-${ownerId}`) === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const outlineToggle = useRef<HTMLButtonElement>(null);
+  const workspace = useRef<HTMLElement>(null);
+  const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const [history, setHistory] = useState(false);
   const [find, setFind] = useState(false);
   const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
-  const [zoom, setZoom] = useState(100);
+  const [zoom, setZoom] = useState<number | 'fit'>('fit');
   const fileRef = useRef<HTMLInputElement>(null);
   const save = useAutosave(original, ownerId);
   const live = useRef({ title, layout });
   live.current = { title, layout };
   const positionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(`lab-outline-${ownerId}`, String(outline));
+    } catch {
+      /* Optional UI preference. */
+    }
+  }, [outline, ownerId]);
   const editor = useEditor({
     extensions: editorExtensions(),
     content: original.content,
@@ -161,6 +177,13 @@ function DocumentEditor({
       }).catch(() => {});
     },
   });
+  useEffect(() => {
+    const element = workspace.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setWorkspaceWidth(entry.contentRect.width));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [editor]);
   useEffect(
     () => () => {
       if (positionTimer.current) clearTimeout(positionTimer.current);
@@ -217,6 +240,11 @@ function DocumentEditor({
       `${title}.laboratoire.json`,
     );
   const size = layout.format === 'A4' ? [210, 297] : [215.9, 279.4];
+  const pageWidth = size[layout.landscape ? 1 : 0];
+  const paperZoom =
+    zoom === 'fit'
+      ? Math.max(0.4, Math.min(2, (workspaceWidth - 2) / ((pageWidth * 96) / 25.4)))
+      : zoom / 100;
   return (
     <div className="editor-shell">
       <header className="editor-header">
@@ -228,6 +256,17 @@ function DocumentEditor({
           <ArrowLeft size={21} />
         </button>
         <Brand compact />
+        <button
+          ref={outlineToggle}
+          className="icon-button outline-toggle"
+          aria-label="Plan du document"
+          title={outline ? 'Masquer le plan du document' : 'Afficher le plan du document'}
+          aria-expanded={outline}
+          aria-controls="document-outline"
+          onClick={() => setOutline(!outline)}
+        >
+          <PanelLeft size={20} />
+        </button>
         <div className="document-title-area">
           <input
             aria-label="Titre du document"
@@ -261,13 +300,18 @@ function DocumentEditor({
         <div className="editor-header-actions">
           <button
             className="button subtle"
+            aria-label="Historique"
             onClick={() => setHistory(!history)}
             aria-pressed={history}
           >
             <History size={17} />
             <span>Historique</span>
           </button>
-          <button className="button primary" onClick={() => setModal('export')}>
+          <button
+            className="button primary"
+            aria-label="Exporter"
+            onClick={() => setModal('export')}
+          >
             <FileDown size={17} />
             <span>Exporter</span>
           </button>
@@ -277,20 +321,17 @@ function DocumentEditor({
         <button onClick={() => setModal('import')}>
           <Upload size={14} /> Importer
         </button>
-        <button
-          onClick={() => {
-            setOutline(!outline);
-          }}
-          aria-pressed={outline}
-        >
-          <PanelLeft size={14} /> Plan du document
-        </button>
         <button onClick={() => setModal('page')}>
           <Settings2 size={14} /> Mise en page
         </button>
         <button onClick={() => setModal('help')}>Aide et raccourcis</button>
         <span className="menubar-spacer" />
-        <select aria-label="Zoom" value={zoom} onChange={(e) => setZoom(Number(e.target.value))}>
+        <select
+          aria-label="Zoom"
+          value={zoom}
+          onChange={(e) => setZoom(e.target.value === 'fit' ? 'fit' : Number(e.target.value))}
+        >
+          <option value="fit">Largeur de page</option>
           {[75, 90, 100, 110, 125].map((n) => (
             <option key={n} value={n}>
               {n}%
@@ -437,9 +478,21 @@ function DocumentEditor({
         </div>
       )}
       <div className="editor-workspace">
-        {outline && <DocumentOutline editor={editor} />}
-        <main className="paper-workspace">
-          <div className="paper-ruler" aria-hidden="true">
+        {outline && (
+          <DocumentOutline
+            editor={editor}
+            onClose={() => {
+              setOutline(false);
+              outlineToggle.current?.focus();
+            }}
+          />
+        )}
+        <main className="paper-workspace" ref={workspace} aria-label="Espace d’écriture">
+          <div
+            className="paper-ruler"
+            aria-hidden="true"
+            style={{ width: `${((pageWidth * 96) / 25.4) * paperZoom}px` }}
+          >
             <span>0</span>
             <span>2</span>
             <span>4</span>
@@ -457,7 +510,7 @@ function DocumentEditor({
                 '--page-width': `${size[layout.landscape ? 1 : 0]}mm`,
                 '--page-height': `${size[layout.landscape ? 0 : 1]}mm`,
                 '--page-margin': `${layout.margin}mm`,
-                zoom: zoom / 100,
+                zoom: paperZoom || 1,
               } as CSSProperties
             }
           >
@@ -704,7 +757,7 @@ function DocumentEditor({
     </div>
   );
 }
-function DocumentOutline({ editor }: { editor: Editor }) {
+function DocumentOutline({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   const headings = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -717,8 +770,13 @@ function DocumentOutline({ editor }: { editor: Editor }) {
     },
   });
   return (
-    <aside className="document-outline">
-      <h2>Dans ce document</h2>
+    <aside className="document-outline" id="document-outline" aria-label="Plan du document">
+      <div className="outline-heading">
+        <h2>Dans ce document</h2>
+        <button className="icon-button" aria-label="Masquer le plan" onClick={onClose}>
+          <X size={17} />
+        </button>
+      </div>
       {headings.length ? (
         headings.map((h) => (
           <button

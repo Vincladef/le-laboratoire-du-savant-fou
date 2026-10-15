@@ -60,6 +60,8 @@ export function createAuth(db: Database, config: AppConfig) {
       useSecureCookies: !config.development,
       ipAddress: {
         ipAddressHeaders: config.development ? ['x-forwarded-for'] : ['x-nf-client-connection-ip'],
+        // Vite appends its loopback hop. Never trust arbitrary forwarded chains in production.
+        ...(config.development ? { trustedProxies: ['127.0.0.1/32', '::1/128'] } : {}),
       },
       defaultCookieAttributes: { httpOnly: true, sameSite: 'lax', secure: !config.development },
     },

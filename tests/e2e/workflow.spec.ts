@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
 import { makeDocx } from '../../src/editor/docx-export';
 import { defaultLayout } from '../../src/shared/document';

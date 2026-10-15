@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
 export function Modal({
   title,
@@ -12,14 +12,21 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
+  const titleId = useId();
+  useLayoutEffect(() => {
     const dialog = ref.current!;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.showModal();
-    return () => dialog.close();
+    return () => {
+      dialog.close();
+      // Restore before paint, not in a deferred task that could overwrite the next editor selection.
+      if (previous?.isConnected) previous.focus();
+    };
   }, []);
   return (
     <dialog
       ref={ref}
+      aria-labelledby={titleId}
       className={`modal ${wide ? 'wide' : ''}`}
       onCancel={onClose}
       onClick={(e) => {
@@ -27,7 +34,7 @@ export function Modal({
       }}
     >
       <header>
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button className="icon-button" aria-label="Fermer" onClick={onClose}>
           <X size={20} />
         </button>

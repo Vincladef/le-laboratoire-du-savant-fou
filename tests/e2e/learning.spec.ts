@@ -1,4 +1,5 @@
-import { test, expect, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
 const password = 'Learning-Browser-Password-42!';
 async function register(page: Page) {

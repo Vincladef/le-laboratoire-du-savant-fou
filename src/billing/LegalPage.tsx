@@ -2,16 +2,42 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import type { LegalConfig } from '../../server/legal';
+import { useState } from 'react';
+import { Modal } from '../components/Modal';
 
 export function LegalLinks() {
+  const [open, setOpen] = useState(false);
   return (
     <footer className="legal-links" aria-label="Informations légales">
       <Link to="/pricing">Formules</Link>
-      <Link to="/legal/mentions">Mentions légales</Link>
-      <Link to="/legal/confidentialite">Confidentialité</Link>
-      <Link to="/legal/cgv">CGV</Link>
-      <Link to="/legal/retractation">Rétractation</Link>
-      <Link to="/billing">Résilier un abonnement</Link>
+      <button className="legal-trigger" onClick={() => setOpen(true)}>
+        CGU & confidentialité
+      </button>
+      {open && (
+        <Modal title="Informations et conditions" onClose={() => setOpen(false)}>
+          <p className="muted small">
+            Les conditions et informations de l’éditeur sont en cours de préparation. Elles restent
+            à compléter et à valider ; ce panneau ne constitue pas une acceptation contractuelle.
+          </p>
+          <nav className="legal-menu" aria-label="Documents légaux">
+            <Link to="/legal/mentions" onClick={() => setOpen(false)}>
+              Mentions légales
+            </Link>
+            <Link to="/legal/confidentialite" onClick={() => setOpen(false)}>
+              Politique de confidentialité
+            </Link>
+            <Link to="/legal/cgv" onClick={() => setOpen(false)}>
+              Conditions générales de vente
+            </Link>
+            <Link to="/legal/retractation" onClick={() => setOpen(false)}>
+              Rétractation et remboursements
+            </Link>
+            <Link to="/billing" onClick={() => setOpen(false)}>
+              Gestion des abonnements
+            </Link>
+          </nav>
+        </Modal>
+      )}
     </footer>
   );
 }
@@ -38,8 +64,7 @@ export function LegalPage() {
       {!query.data?.configured && (
         <p className="notice" role="status">
           Document préparatoire : les informations de l’éditeur et la validation contractuelle
-          manquent. Les ventes sont fermées. Ces pages ne constituent pas une attestation de
-          conformité.
+          manquent. Ces pages ne constituent pas une attestation de conformité.
         </p>
       )}
       {page === 'mentions' && (
@@ -154,17 +179,17 @@ export function LegalPage() {
             ont les limites documentées dans l’application et le dépôt.
           </p>
           <p>
-            Gratuit : 0 €. Pro : 9 € par mois TTC. Premium : 19 € par mois TTC, sous réserve de
-            l’ouverture des ventes et de la validation fiscale de l’éditeur. Les limites payantes
-            préparatoires ne sont pas une offre ouverte. Le propriétaire bénéficie de Premium sans
-            facturation.
+            Gratuit : 0 €. Pro : 9 € par mois TTC. Premium : 19 € par mois TTC, sous réserve de la
+            validation fiscale de l’éditeur. Les liens de paiement sont ceux fournis par l’éditeur.
+            Leur rattachement automatique aux comptes n’est pas encore actif. Le propriétaire
+            bénéficie de Premium sans facturation.
           </p>
           <p>
-            La commande exige un compte vérifié, l’acceptation de cette version des conditions puis
-            la confirmation d’une obligation de paiement sur Stripe Checkout. Vérifiez le
-            récapitulatif avant de payer. Les droits sont activés uniquement après confirmation
-            serveur du paiement ; un retour du navigateur ne suffit pas. Les justificatifs Stripe et
-            les conditions acceptées doivent être conservés.
+            Vérifiez le récapitulatif Stripe avant de payer. Cette version ouvre des liens de
+            paiement externes et ne recueille pas encore l’acceptation de conditions définitives. Un
+            paiement ou un retour du navigateur ne suffit pas à activer des droits dans
+            l’application. Les justificatifs et les futures conditions acceptées doivent être
+            conservés.
           </p>
           <h2>Renouvellement, modification et résiliation</h2>
           <p>

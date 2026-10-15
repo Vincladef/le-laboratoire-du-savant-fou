@@ -1,13 +1,26 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
-test('formules publiques, informations légales, abonnement privé et ventes fermées sans Stripe', async ({
+test('liens Stripe directs, conditions discrètes et droits privés non falsifiables', async ({
   page,
 }) => {
   await page.goto('/pricing');
   await expect(page.getByRole('heading', { name: 'Les formules du laboratoire' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Premium', exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'CGV', exact: true }).click();
+  await expect(
+    page.getByRole('link', { name: 'Choisir Pro (Stripe, nouvel onglet)', exact: true }),
+  ).toHaveAttribute('href', 'https://buy.stripe.com/14AcN40XQ29egaJ4ymffy0R');
+  await expect(
+    page.getByRole('link', { name: 'Choisir Premium (Stripe, nouvel onglet)', exact: true }),
+  ).toHaveAttribute('href', 'https://buy.stripe.com/9B6fZg4a25lq1fPc0Offy0S');
+  const legal = page.getByRole('button', { name: 'CGU & confidentialité' });
+  await legal.click();
+  await expect(page.getByRole('dialog', { name: 'Informations et conditions' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(legal).toBeFocused();
+  await legal.click();
+  await page.getByRole('link', { name: 'Conditions générales de vente', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Document préparatoire');
   await page.goto('/');
   const email = `billing-browser-${crypto.randomUUID()}@example.test`;
@@ -32,10 +45,16 @@ test('formules publiques, informations légales, abonnement privé et ventes fer
   await expect(page).toHaveURL(/\/library$/);
   await page.getByRole('button', { name: 'Mon abonnement', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Formule Gratuit' })).toBeVisible();
-  await page.getByRole('checkbox').nth(0).check();
-  await page.getByRole('checkbox').nth(1).check();
-  await expect(page.getByRole('button', { name: 'Choisir Pro', exact: true })).toBeDisabled();
-  await expect(page.getByRole('button', { name: 'Résilier en ligne', exact: true })).toBeDisabled();
+  await expect(page.getByRole('checkbox')).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'Choisir Pro (Stripe, nouvel onglet)', exact: true }),
+  ).toHaveAttribute('target', '_blank');
+  await expect(
+    page.getByText('payer via ces liens ne débloque pas automatiquement', { exact: false }),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Gérer ou résilier mon abonnement' })).toHaveCount(
+    0,
+  );
   const direct = await page.request.post('/api/billing/checkout', {
     headers: { Origin: 'http://localhost:5174' },
     data: {
