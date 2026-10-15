@@ -21,6 +21,7 @@ import {
   RotateCcw,
   Download,
   FlaskConical,
+  BookOpen,
 } from 'lucide-react';
 import { api, json, downloadBlob } from '../lib/api';
 import { authClient } from '../lib/auth-client';
@@ -166,6 +167,10 @@ export function Library({ user }: { user: User }) {
           <Plus size={20} /> Nouveau document
         </button>
         <nav aria-label="Bibliothèque">
+          <button onClick={() => navigate(folderId ? `/study?folder=${folderId}` : '/study')}>
+            <BookOpen size={19} />
+            Réviser mes passages
+          </button>
           <button className={view === 'all' ? 'active' : ''} onClick={() => setView('all')}>
             <FileText size={19} /> Mes documents
           </button>
@@ -209,7 +214,11 @@ export function Library({ user }: { user: User }) {
               Votre espace personnel
               <small>
                 Offre{' '}
-                {profile.data?.role === 'free' ? 'Gratuite' : profile.data?.role || 'Gratuite'}
+                {profile.data?.role === 'owner'
+                  ? 'Premium permanent · Propriétaire'
+                  : profile.data?.role === 'free'
+                    ? 'Gratuite'
+                    : profile.data?.role || 'Gratuite'}
               </small>
             </div>
           </div>
@@ -263,6 +272,13 @@ export function Library({ user }: { user: User }) {
         </header>
         <main className="library-content">
           <div className="mobile-navigation">
+            <button
+              className="button subtle"
+              onClick={() => navigate(folderId ? `/study?folder=${folderId}` : '/study')}
+            >
+              <BookOpen size={17} />
+              Réviser
+            </button>
             <select
               aria-label="Vue de la bibliothèque"
               value={view}

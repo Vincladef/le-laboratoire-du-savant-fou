@@ -26,14 +26,12 @@ describe('Migration des identités Neon sans réattribution des documents', () =
   it('rattache une identité vérifiée au compte historique sans changer son rôle ni ses documents', async () => {
     const db = connection.db;
     const oldId = crypto.randomUUID();
-    await db
-      .insert(user)
-      .values({
-        id: oldId,
-        email: 'historique@example.test',
-        name: 'Ancien compte',
-        emailVerified: true,
-      });
+    await db.insert(user).values({
+      id: oldId,
+      email: 'historique@example.test',
+      name: 'Ancien compte',
+      emailVerified: true,
+    });
     await db.insert(profiles).values({ userId: oldId, role: 'premium' });
     const [doc] = await db
       .insert(documents)
@@ -68,14 +66,12 @@ describe('Migration des identités Neon sans réattribution des documents', () =
     ).rejects.toMatchObject({ status: 403 });
   });
   it('préserve un ancien compte non vérifié sans en céder les documents', async () => {
-    await connection.db
-      .insert(user)
-      .values({
-        id: crypto.randomUUID(),
-        email: 'non-verifie@example.test',
-        name: 'Ancien',
-        emailVerified: false,
-      });
+    await connection.db.insert(user).values({
+      id: crypto.randomUUID(),
+      email: 'non-verifie@example.test',
+      name: 'Ancien',
+      emailVerified: false,
+    });
     await expect(
       resolveManagedIdentity(connection.db, {
         id: crypto.randomUUID(),
@@ -106,6 +102,29 @@ describe('Migration des identités Neon sans réattribution des documents', () =
     const id = await resolveManagedIdentity(connection.db, identity);
     expect(
       (await connection.db.select().from(profiles).where(eq(profiles.userId, id)))[0].role,
+    ).toBe('free');
+  });
+  it('réserve le rôle propriétaire au sujet Neon explicitement configuré côté serveur', async () => {
+    const identity = {
+      id: crypto.randomUUID(),
+      email: 'proprietaire@example.test',
+      name: 'Propriétaire',
+      emailVerified: true,
+    };
+    const id = await resolveManagedIdentity(connection.db, identity, identity.id);
+    expect(
+      (await connection.db.select().from(profiles).where(eq(profiles.userId, id)))[0].role,
+    ).toBe('owner');
+    expect(await resolveManagedIdentity(connection.db, identity, identity.id)).toBe(id);
+    const other = {
+      id: crypto.randomUUID(),
+      email: 'gratuit@example.test',
+      name: 'Autre',
+      emailVerified: true,
+    };
+    const otherId = await resolveManagedIdentity(connection.db, other, identity.id);
+    expect(
+      (await connection.db.select().from(profiles).where(eq(profiles.userId, otherId)))[0].role,
     ).toBe('free');
   });
 });

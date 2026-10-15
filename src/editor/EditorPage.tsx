@@ -34,6 +34,7 @@ import { Toolbar } from './Toolbar';
 import { editorExtensions, findMatches, searchKey } from './extensions';
 import { useAutosave, type Snapshot } from './useAutosave';
 import { DOCX_LIMITS } from './format-limits';
+import { MemoryTools } from './MemoryTools';
 const importLimits =
   'L’import conserve le texte, les titres, les listes, les liens, les tableaux simples et les images compatibles. Les styles précis, marges, objets flottants, équations Word, en-têtes et pieds de page peuvent être perdus ou modifiés. Conservez votre original.';
 
@@ -297,6 +298,14 @@ function DocumentEditor({
         </select>
       </div>
       <Toolbar editor={editor} onFind={() => setFind(!find)} onError={setError} />
+      <MemoryTools
+        editor={editor}
+        documentId={original.id}
+        ownerId={ownerId}
+        status={save.status}
+        flush={save.flush}
+        hasLocal={() => Boolean(save.getLocal())}
+      />
       {find && <FindBar editor={editor} onClose={() => setFind(false)} />}
       {error || save.error ? (
         <div className="editor-alert alert error" role="alert">

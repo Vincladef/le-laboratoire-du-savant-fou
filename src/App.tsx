@@ -6,6 +6,13 @@ import { Library } from './library/Library';
 const EditorPage = lazy(() =>
   import('./editor/EditorPage').then((module) => ({ default: module.EditorPage })),
 );
+const StudyPage = lazy(() => import('./study/StudyPage').then((m) => ({ default: m.StudyPage })));
+const FreeStudyPage = lazy(() =>
+  import('./study/StudyPage').then((m) => ({ default: m.FreeStudyPage })),
+);
+const ScheduledStudyPage = lazy(() =>
+  import('./study/StudyPage').then((m) => ({ default: m.ScheduledStudyPage })),
+);
 export function App() {
   const { data, isPending, error } = authClient.useSession();
   const [booted, setBooted] = useState(false);
@@ -29,6 +36,18 @@ export function App() {
             element={user ? <EditorPage user={user} /> : <Navigate to="/" replace />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
+          <Route
+            path="/study"
+            element={user ? <StudyPage user={user} /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/study/free/:id"
+            element={user ? <FreeStudyPage user={user} /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/study/session/:id"
+            element={user ? <ScheduledStudyPage user={user} /> : <Navigate to="/" replace />}
+          />
         </Routes>
       </Suspense>
       {error && user && (

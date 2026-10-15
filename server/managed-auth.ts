@@ -21,7 +21,11 @@ export type ManagedIdentity = {
 };
 
 /** Link only server-verified identities. Preserve legacy IDs, roles and every foreign key. */
-export async function resolveManagedIdentity(db: Database, identity: ManagedIdentity) {
+export async function resolveManagedIdentity(
+  db: Database,
+  identity: ManagedIdentity,
+  ownerSubject?: string,
+) {
   if (!identity.id || !identity.email || identity.emailVerified !== true)
     throw new HTTPException(403, {
       message: 'Confirmez votre adresse email avant d’ouvrir votre espace.',
@@ -33,7 +37,11 @@ export async function resolveManagedIdentity(db: Database, identity: ManagedIden
       .select()
       .from(authIdentities)
       .where(eq(authIdentities.subject, identity.id));
-    if (linked) return linked.userId;
+    if (linked) {
+      if (ownerSubject && identity.id === ownerSubject)
+        await tx.update(profiles).set({ role: 'owner' }).where(eq(profiles.userId, linked.userId));
+      return linked.userId;
+    }
     const legacy = await tx
       .select()
       .from(user)
@@ -52,18 +60,18 @@ export async function resolveManagedIdentity(db: Database, identity: ManagedIden
         });
     } else {
       id = crypto.randomUUID();
-      await tx
-        .insert(user)
-        .values({
-          id,
-          email: identity.email.toLowerCase(),
-          name: identity.name || 'Utilisateur',
-          emailVerified: true,
-          image: identity.image,
-        });
+      await tx.insert(user).values({
+        id,
+        email: identity.email.toLowerCase(),
+        name: identity.name || 'Utilisateur',
+        emailVerified: true,
+        image: identity.image,
+      });
     }
     await tx.insert(authIdentities).values({ subject: identity.id, userId: id });
     await tx.insert(profiles).values({ userId: id }).onConflictDoNothing();
+    if (ownerSubject && identity.id === ownerSubject)
+      await tx.update(profiles).set({ role: 'owner' }).where(eq(profiles.userId, id));
     return id;
   });
 }
@@ -119,6 +127,10 @@ export function managedAuth(config: AppConfig) {
           'verify-email',
           'update-user',
           'revoke-sessions',
+          'email-otp/send-verification-otp',
+          'email-otp/verify-email',
+          'email-otp/request-password-reset',
+          'email-otp/reset-password',
         ]).has(path)
       )
         return c.json({ message: 'Route d’authentification indisponible.' }, 404);

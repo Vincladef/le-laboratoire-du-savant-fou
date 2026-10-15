@@ -211,7 +211,7 @@ export const assets = lab.table(
   ],
 );
 
-// Reserved for mission 2: the editor already preserves identity-bearing marks.
+// Identity-bearing annotations stay separate from the original rich document content.
 export const memoryAnchors = lab.table(
   'memory_anchors',
   {
@@ -222,7 +222,10 @@ export const memoryAnchors = lab.table(
     quote: text('quote').notNull(),
     originalSlice: jsonb('original_slice').notNull(),
     status: text('status').notNull().default('active'),
-    metadata: jsonb('metadata').notNull().default({}),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+    hint: text('hint').notNull().default(''),
+    priority: text('priority').$type<'high' | 'medium' | 'low'>().notNull().default('medium'),
+    revision: integer('revision').notNull().default(1),
     documentRevision: integer('document_revision').notNull(),
     createdAt: created(),
     updatedAt: updated(),
@@ -235,6 +238,7 @@ export const memoryAnchors = lab.table(
     }).onDelete('cascade'),
     unique('anchors_id_owner').on(t.id, t.ownerId),
     check('anchor_status', sql`${t.status} IN ('active','deleted','needs_review')`),
+    check('anchor_priority', sql`${t.priority} IN ('high','medium','low')`),
   ],
 );
 export const fsrsCards = lab.table(
@@ -252,6 +256,8 @@ export const fsrsCards = lab.table(
     reps: integer('reps').notNull().default(0),
     lapses: integer('lapses').notNull().default(0),
     lastReview: date('last_review'),
+    learningSteps: integer('learning_steps').notNull().default(0),
+    revision: integer('revision').notNull().default(1),
     algorithmVersion: text('algorithm_version').notNull().default('uninitialized'),
     parameters: jsonb('parameters'),
   },
@@ -275,6 +281,7 @@ export const reviews = lab.table(
     before: jsonb('before').notNull(),
     after: jsonb('after').notNull(),
     reviewedAt: created(),
+    sessionItemId: uuid('session_item_id').unique(),
   },
   (t) => [
     foreignKey({
@@ -283,6 +290,65 @@ export const reviews = lab.table(
       name: 'review_card_owner',
     }).onDelete('cascade'),
     check('valid_review_rating', sql`${t.rating} BETWEEN 1 AND 4`),
+    foreignKey({
+      columns: [t.sessionItemId, t.ownerId],
+      foreignColumns: [studyItems.id, studyItems.ownerId],
+      name: 'review_session_item_owner',
+    }),
+  ],
+);
+export const studySessions = lab.table(
+  'study_sessions',
+  {
+    id: uuid('id').primaryKey(),
+    ownerId: text('owner_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    filters: jsonb('filters')
+      .$type<{
+        documentIds: string[];
+        folderIds: string[];
+        priorities: ('high' | 'medium' | 'low')[];
+      }>()
+      .notNull(),
+    status: text('status').notNull().default('active'),
+    createdAt: created(),
+    updatedAt: updated(),
+  },
+  (t) => [
+    unique('study_session_id_owner').on(t.id, t.ownerId),
+    index('study_session_owner_status').on(t.ownerId, t.status),
+    check('study_session_status', sql`${t.status} IN ('active','completed')`),
+  ],
+);
+export const studyItems = lab.table(
+  'study_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sessionId: uuid('session_id').notNull(),
+    ownerId: text('owner_id').notNull(),
+    anchorId: uuid('anchor_id').notNull(),
+    position: integer('position').notNull(),
+    status: text('status').notNull().default('pending'),
+    cardRevision: integer('card_revision'),
+    anchorRevision: integer('anchor_revision'),
+    revealedAt: date('revealed_at'),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.sessionId, t.ownerId],
+      foreignColumns: [studySessions.id, studySessions.ownerId],
+      name: 'study_item_session_owner',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.anchorId, t.ownerId],
+      foreignColumns: [memoryAnchors.id, memoryAnchors.ownerId],
+      name: 'study_item_anchor_owner',
+    }).onDelete('cascade'),
+    unique('study_item_position').on(t.sessionId, t.position),
+    unique('study_item_anchor').on(t.sessionId, t.anchorId),
+    unique('study_items_id_owner').on(t.id, t.ownerId),
+    check('study_item_status', sql`${t.status} IN ('pending','revealed','reviewed','skipped')`),
   ],
 );
 export const subscriptions = lab.table('subscriptions', {

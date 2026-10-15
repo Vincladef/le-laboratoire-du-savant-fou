@@ -114,6 +114,20 @@ export function validateDocument(value: unknown): RichNode {
         throw new Error('Lien non autorisé.');
       if (m.type === 'memoryAnchor' && (!validId(ma.id) || (ma.sourceId && !validId(ma.sourceId))))
         throw new Error('Identité de passage invalide.');
+      if (
+        m.type === 'memoryAnchor' &&
+        ma.hint != null &&
+        (typeof ma.hint !== 'string' || ma.hint.length > 1000)
+      )
+        throw new Error('Indice trop long ou invalide.');
+      if (
+        m.type === 'memoryAnchor' &&
+        ma.priority != null &&
+        !['high', 'medium', 'low'].includes(ma.priority)
+      )
+        throw new Error('Priorité de passage invalide.');
+      if ((node.marks || []).filter((mark: any) => mark.type === 'memoryAnchor').length > 1)
+        throw new Error('Deux passages ne peuvent pas se superposer.');
       for (const key of ['color', 'backgroundColor'])
         if (ma[key] && !/^(#[\da-f]{3,8}|rgb\([\d.,%\s]+\)|[a-z]{1,20})$/i.test(ma[key]))
           throw new Error('Couleur invalide.');
@@ -195,6 +209,7 @@ export function validateDocument(value: unknown): RichNode {
   if ((value as any)?.type !== 'doc' || !(value as any)?.content?.length)
     throw new Error('Document vide ou invalide.');
   visit(value, 0);
+  extractAnchors(value as RichNode);
   return value as RichNode;
 }
 export const contentSchema = z.unknown().transform((value, ctx) => {
@@ -225,10 +240,24 @@ export function assetIds(node: RichNode): string[] {
     ]),
   ];
 }
-export type Anchor = { id: string; sourceId?: string; quote: string; slices: RichNode[] };
+export type Anchor = {
+  id: string;
+  sourceId?: string;
+  quote: string;
+  slices: RichNode[];
+  hint?: string;
+  priority?: 'high' | 'medium' | 'low';
+  disconnected: boolean;
+};
 export function extractAnchors(node: RichNode): Anchor[] {
   const result = new Map<string, Anchor>();
+  let previous: string | null = null;
   const visit = (n: RichNode) => {
+    if (
+      ['text', 'inlineMath', 'hardBreak'].includes(n.type) &&
+      !n.marks?.some((m) => m.type === 'memoryAnchor')
+    )
+      previous = null;
     for (const mark of n.marks || [])
       if (mark.type === 'memoryAnchor') {
         const id = mark.attrs!.id;
@@ -237,10 +266,26 @@ export function extractAnchors(node: RichNode): Anchor[] {
           sourceId: mark.attrs?.sourceId,
           quote: '',
           slices: [],
+          hint: mark.attrs?.hint ?? undefined,
+          priority: mark.attrs?.priority ?? undefined,
+          disconnected: false,
         };
-        anchor.quote += n.text || '';
+        if (anchor.slices.length && previous !== id) anchor.disconnected = true;
+        if (
+          anchor.hint !== (mark.attrs?.hint ?? undefined) ||
+          anchor.priority !== (mark.attrs?.priority ?? undefined) ||
+          anchor.sourceId !== mark.attrs?.sourceId
+        )
+          throw new Error('Les fragments d’un passage portent des métadonnées différentes.');
+        anchor.quote +=
+          n.type === 'inlineMath'
+            ? String(n.attrs?.latex || '')
+            : n.type === 'hardBreak'
+              ? '\n'
+              : n.text || '';
         anchor.slices.push(n);
         result.set(id, anchor);
+        previous = id;
       }
     n.content?.forEach(visit);
   };
@@ -269,7 +314,7 @@ export function copyWithNewAnchors(content: RichNode): RichNode {
       if (mark.type === 'memoryAnchor') {
         const sourceId = mark.attrs!.id;
         if (!identities.has(sourceId)) identities.set(sourceId, crypto.randomUUID());
-        mark.attrs = { id: identities.get(sourceId), sourceId };
+        mark.attrs = { ...mark.attrs, id: identities.get(sourceId), sourceId };
       }
     node.content?.forEach(visit);
   };

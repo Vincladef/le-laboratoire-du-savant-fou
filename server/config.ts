@@ -30,6 +30,9 @@ export function getConfig() {
     secret,
     localDir: path.resolve(process.env.LAB_LOCAL_DIR || '.local'),
     ...(neonAuthURL ? { neonAuthURL } : {}),
+    ...(neonAuthURL && process.env.OWNER_NEON_SUBJECT
+      ? { ownerNeonSubject: process.env.OWNER_NEON_SUBJECT }
+      : {}),
     google: Boolean(
       neonAuthURL || (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     ),

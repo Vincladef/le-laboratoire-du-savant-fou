@@ -7,6 +7,7 @@ import { assertDatabaseTarget, assertMigrationHistory } from './deployment-guard
 import * as schema from '../server/db/schema';
 import { verifyRemoteDeployment } from './remote-smoke';
 import { verifyManagedAuth } from './managed-auth-smoke';
+import { prepareLearning } from '../server/prepare-learning';
 
 async function prepare() {
   // Opt-in for one controlled deployment, never enabled by default or on previews.
@@ -62,6 +63,7 @@ async function prepare() {
     );
     const db = drizzle(client, { schema });
     await migrate(db, { migrationsFolder: 'migrations' });
+    const learning = await prepareLearning(db);
     const tables = await client.query(
       "select count(*)::int as count from pg_tables where schemaname = 'lab'",
     );
@@ -83,6 +85,7 @@ async function prepare() {
         tables: tables.rows[0].count,
         remote,
         managedAuth,
+        learning,
       }),
     );
   } finally {

@@ -1,13 +1,15 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
-import { and, eq, isNull, isNotNull, desc, ilike, or, sql, inArray, notInArray } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, desc, ilike, or, sql, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Database } from './db';
 import { createAuth } from './auth';
 import { managedAuth, resolveManagedIdentity } from './managed-auth';
 import type { AppConfig } from './config';
-import { documents, folders, versions, profiles, assets, memoryAnchors, user } from './db/schema';
+import { documents, folders, versions, profiles, assets, user } from './db/schema';
+import { syncAnchors } from './anchors';
+import { learningRoutes } from './learning';
 import {
   contentSchema,
   layoutSchema,
@@ -15,7 +17,6 @@ import {
   defaultLayout,
   plainText,
   assetIds,
-  extractAnchors,
   type RichNode,
 } from '../src/shared/document';
 import { createStorage } from './storage';
@@ -80,7 +81,7 @@ export function createApp(db: Database, config: AppConfig) {
       if (c.req.path === '/api/auth/get-session' && response.ok) {
         const data = await response.clone().json();
         if (data?.user) {
-          const id = await resolveManagedIdentity(db, data.user);
+          const id = await resolveManagedIdentity(db, data.user, config.ownerNeonSubject);
           // Stable local identifiers also preserve this account's unsynchronized browser drafts.
           return new Response(JSON.stringify({ ...data, user: { ...data.user, id } }), {
             status: response.status,
@@ -110,7 +111,12 @@ export function createApp(db: Database, config: AppConfig) {
       ? await managed.session(c)
       : await auth!.api.getSession({ headers: c.req.raw.headers });
     if (!session) return c.json({ error: 'Connectez-vous pour accéder à votre espace.' }, 401);
-    c.set('userId', managed ? await resolveManagedIdentity(db, session.user) : session.user.id);
+    c.set(
+      'userId',
+      managed
+        ? await resolveManagedIdentity(db, session.user, config.ownerNeonSubject)
+        : session.user.id,
+    );
     await next();
   });
   const owner = (id: string, userId: string) =>
@@ -151,52 +157,9 @@ export function createApp(db: Database, config: AppConfig) {
       layout: doc.layout,
       reason,
     });
-    const anchors = extractAnchors(doc.content as RichNode);
-    await tx
-      .update(memoryAnchors)
-      .set({ status: 'deleted', documentRevision: doc.revision, updatedAt: new Date() })
-      .where(
-        and(
-          eq(memoryAnchors.documentId, doc.id),
-          ...(anchors.length
-            ? [
-                notInArray(
-                  memoryAnchors.id,
-                  anchors.map((a) => a.id),
-                ),
-              ]
-            : []),
-        ),
-      );
-    for (const a of anchors) {
-      const [existing] = await tx.select().from(memoryAnchors).where(eq(memoryAnchors.id, a.id));
-      if (existing && (existing.documentId !== doc.id || existing.ownerId !== doc.ownerId))
-        failure(409, 'Identité de passage déjà utilisée ; copiez le passage via l’éditeur.');
-      await tx
-        .insert(memoryAnchors)
-        .values({
-          id: a.id,
-          sourceId: a.sourceId,
-          documentId: doc.id,
-          ownerId: doc.ownerId,
-          quote: a.quote,
-          originalSlice: a.slices,
-          documentRevision: doc.revision,
-        })
-        .onConflictDoUpdate({
-          target: memoryAnchors.id,
-          set: {
-            quote: a.quote,
-            status:
-              existing?.quote !== a.quote || existing?.status === 'needs_review'
-                ? 'needs_review'
-                : 'active',
-            documentRevision: doc.revision,
-            updatedAt: new Date(),
-          },
-        });
-    }
+    await syncAnchors(tx, doc);
   }
+  app.route('/api', learningRoutes(db));
   app.get('/api/profile', async (c) => {
     await db
       .insert(profiles)
@@ -206,7 +169,15 @@ export function createApp(db: Database, config: AppConfig) {
       .select()
       .from(profiles)
       .where(eq(profiles.userId, c.get('userId')));
-    return c.json({ ...profile, quotas: quota });
+    return c.json({
+      ...profile,
+      quotas: quota,
+      entitlements: {
+        tier: profile.role === 'owner' ? 'premium' : profile.role,
+        permanent: profile.role === 'owner',
+        billingExempt: profile.role === 'owner',
+      },
+    });
   });
   app.patch('/api/profile', async (c) => {
     const data = z

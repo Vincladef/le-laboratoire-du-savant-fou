@@ -1,5 +1,6 @@
 import { Extension, Mark, Node, mergeAttributes, type Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import CodeBlock from '@tiptap/extension-code-block';
 import { TextStyleKit } from '@tiptap/extension-text-style';
 import TextAlign from '@tiptap/extension-text-align';
 import Highlight from '@tiptap/extension-highlight';
@@ -21,7 +22,7 @@ export function reidentifyPastedSlice(slice: Slice): Slice {
         if (mark.type.name !== 'memoryAnchor') return mark;
         const source = mark.attrs.id;
         if (!ids.has(source)) ids.set(source, crypto.randomUUID());
-        return mark.type.create({ id: ids.get(source), sourceId: source });
+        return mark.type.create({ ...mark.attrs, id: ids.get(source), sourceId: source });
       });
       children.push(node.isText ? node.mark(marks) : node.copy(map(node.content)).mark(marks));
     });
@@ -37,6 +38,8 @@ export const MemoryAnchor = Mark.create({
     return {
       id: { default: null, parseHTML: (el) => el.getAttribute('data-memory-id') },
       sourceId: { default: null, parseHTML: (el) => el.getAttribute('data-memory-source') },
+      hint: { default: null, parseHTML: (el) => el.getAttribute('data-memory-hint') },
+      priority: { default: null, parseHTML: (el) => el.getAttribute('data-memory-priority') },
     };
   },
   parseHTML() {
@@ -48,6 +51,8 @@ export const MemoryAnchor = Mark.create({
       {
         'data-memory-id': HTMLAttributes.id,
         'data-memory-source': HTMLAttributes.sourceId,
+        'data-memory-hint': HTMLAttributes.hint,
+        'data-memory-priority': HTMLAttributes.priority,
         class: 'memory-anchor',
       },
       0,
@@ -247,7 +252,9 @@ export const editorExtensions = () => [
   StarterKit.configure({
     link: { openOnClick: false, defaultProtocol: 'https', protocols: ['https', 'http', 'mailto'] },
     trailingNode: false,
+    codeBlock: false,
   }),
+  CodeBlock.extend({ marks: 'memoryAnchor' }),
   TextStyleKit.configure({ lineHeight: false }),
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
   Highlight.configure({ multicolor: true }),
