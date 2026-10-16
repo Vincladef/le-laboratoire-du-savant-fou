@@ -1,3 +1,4 @@
+import { documentMenu, reviewMenu, navigation } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
@@ -67,10 +68,12 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await expect(page.locator('.save-state')).toHaveText('Enregistré');
   const toggle = page.getByRole('button', { name: 'Plan du document', exact: true });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await documentMenu(page);
   await expect(page.getByLabel('Zoom', { exact: true })).toHaveValue('fit');
+  await page.locator('.document-tools > summary').click();
   await expect
     .poll(async () => (await page.locator('.document-paper').boundingBox())?.width || 0)
-    .toBeGreaterThan(1300);
+    .toBeGreaterThan(850);
   await accessible(page);
   await page.screenshot({ path: info.outputPath('carnet-desktop.png'), fullPage: true });
   await toggle.click();
@@ -79,10 +82,13 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await page.getByRole('button', { name: 'Masquer le plan' }).click();
   await expect(toggle).toBeFocused();
+  await documentMenu(page);
   await page.getByLabel('Zoom', { exact: true }).selectOption('100');
   expect((await page.locator('.document-paper').boundingBox())!.width).toBeGreaterThan(790);
   expect((await page.locator('.document-paper').boundingBox())!.width).toBeLessThan(800);
+  await documentMenu(page);
   await page.getByLabel('Zoom', { exact: true }).selectOption('fit');
+  await page.locator('.document-tools > summary').click();
   for (const width of [768, 390]) {
     await page.setViewportSize({ width, height: 844 });
     await toggle.click();
@@ -91,7 +97,7 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(
       true,
     );
-    expect((await editor.boundingBox())!.width).toBeGreaterThan(width === 390 ? 300 : 500);
+    expect((await editor.boundingBox())!.width).toBeGreaterThan(width === 390 ? 300 : 350);
     await accessible(page);
   }
   await page.screenshot({ path: info.outputPath('carnet-mobile.png'), fullPage: true });

@@ -69,7 +69,7 @@ function PlanCards({ current, exempt = false }: { current?: Plan; exempt?: boole
           </ul>
           {id === 'free' ? (
             <Link className="button full" to="/library">
-              {current === 'free' ? 'Ma formule actuelle' : 'Ouvrir mon laboratoire'}
+              {current === 'free' ? 'Ma formule actuelle' : 'Ouvrir Bouche-trou'}
             </Link>
           ) : exempt ? (
             <span className="plan-current">Inclus avec votre accès propriétaire</span>
@@ -111,11 +111,11 @@ export function PricingPage() {
   return (
     <main className="account-page pricing-page">
       <Link className="back-link" to="/library">
-        <ArrowLeft size={16} /> Le laboratoire
+        <ArrowLeft size={16} /> Bouche-trou
       </Link>
       <header className="pricing-heading">
         <span className="eyebrow">UN ESPACE POUR VOS IDÉES</span>
-        <h1>Les formules du laboratoire</h1>
+        <h1>Les formules Bouche-trou</h1>
         <p>Écrivez librement. Faites durer vos découvertes.</p>
       </header>
       <PlanCards />
@@ -149,7 +149,7 @@ export function BillingPage({ userId }: { userId: string }) {
         <ArrowLeft size={16} /> Mes documents
       </Link>
       <header className="pricing-heading">
-        <span className="eyebrow">VOTRE LABORATOIRE</span>
+        <span className="eyebrow">VOTRE ESPACE BOUCHE-TROU</span>
         <h1>Mon abonnement</h1>
         <p>Un peu plus de place pour vos grandes idées.</p>
       </header>

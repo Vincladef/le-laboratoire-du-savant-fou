@@ -63,12 +63,17 @@ export function Toolbar({
   editor,
   onFind,
   onError,
+  memoryActions,
+  typography,
 }: {
   editor: Editor;
   onFind: () => void;
   onError: (message: string) => void;
+  memoryActions: ReactNode;
+  typography?: { fontFamily: string; fontSize: number };
 }) {
   useEditorState({ editor, selector: ({ editor }) => editor.state });
+  const [advanced, setAdvanced] = useState(false);
   const imageInput = useRef<HTMLInputElement>(null);
   const [modal, setModal] = useState<'link' | 'math' | 'image' | null>(null);
   const [value, setValue] = useState('');
@@ -89,240 +94,352 @@ export function Toolbar({
   };
   return (
     <>
-      <div className="editor-toolbar" role="toolbar" aria-label="Mise en forme">
-        <div className="toolbar-group">
-          <Tool
-            label="Annuler (Ctrl+Z)"
-            disabled={!editor.can().undo()}
-            onClick={() => editor.chain().focus().undo().run()}
-          >
-            <Undo2 />
-          </Tool>
-          <Tool
-            label="Rétablir (Ctrl+Maj+Z)"
-            disabled={!editor.can().redo()}
-            onClick={() => editor.chain().focus().redo().run()}
-          >
-            <Redo2 />
-          </Tool>
-        </div>
-        <div className="toolbar-group">
-          <select
-            aria-label="Style de paragraphe"
-            value={style}
-            onChange={(e) =>
-              e.target.value === 'paragraph'
-                ? editor.chain().focus().setParagraph().run()
-                : editor
-                    .chain()
-                    .focus()
-                    .setHeading({ level: Number(e.target.value[1]) as 1 | 2 | 3 })
-                    .run()
-            }
-          >
-            <option value="paragraph">Texte normal</option>
-            <option value="h1">Titre 1</option>
-            <option value="h2">Titre 2</option>
-            <option value="h3">Titre 3</option>
-          </select>
-          <select
-            aria-label="Police"
-            value={editor.getAttributes('textStyle').fontFamily || 'Arial'}
-            onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
-          >
-            {fonts.map((f) => (
-              <option key={f}>{f}</option>
-            ))}
-          </select>
-          <select
-            aria-label="Taille de police"
-            className="font-size"
-            value={editor.getAttributes('textStyle').fontSize || '11pt'}
-            onChange={(e) => editor.chain().focus().setFontSize(e.target.value).run()}
-          >
-            {[8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72].map((n) => (
-              <option key={n} value={`${n}pt`}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="toolbar-group">
-          <Tool
-            label="Gras (Ctrl+B)"
-            active={editor.isActive('bold')}
-            onClick={() => editor.chain().focus().toggleBold().run()}
-          >
-            <Bold />
-          </Tool>
-          <Tool
-            label="Italique (Ctrl+I)"
-            active={editor.isActive('italic')}
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-          >
-            <Italic />
-          </Tool>
-          <Tool
-            label="Souligné (Ctrl+U)"
-            active={editor.isActive('underline')}
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-          >
-            <Underline />
-          </Tool>
-          <Tool
-            label="Barré"
-            active={editor.isActive('strike')}
-            onClick={() => editor.chain().focus().toggleStrike().run()}
-          >
-            <Strikethrough />
-          </Tool>
-          <label className="color-tool" title="Couleur du texte">
-            <Type size={18} />
-            <input
-              type="color"
-              aria-label="Couleur du texte"
-              defaultValue="#202927"
-              onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
-            />
-          </label>
-          <label className="color-tool" title="Surlignage">
-            <Highlighter size={18} />
-            <input
-              type="color"
-              aria-label="Surlignage"
-              defaultValue="#ffe999"
-              onChange={(e) => editor.chain().focus().setHighlight({ color: e.target.value }).run()}
-            />
-          </label>
-          <Tool
-            label="Effacer la mise en forme"
-            onClick={() => {
-              let chain = editor.chain().focus();
-              for (const mark of [
-                'bold',
-                'italic',
-                'underline',
-                'strike',
-                'code',
-                'link',
-                'textStyle',
-                'highlight',
-              ])
-                chain = chain.unsetMark(mark);
-              chain.clearNodes().run();
-            }}
-          >
-            <Eraser />
-          </Tool>
-        </div>
-        <div className="toolbar-group">
-          {[
-            ['left', AlignLeft, 'Aligner à gauche'],
-            ['center', AlignCenter, 'Centrer'],
-            ['right', AlignRight, 'Aligner à droite'],
-            ['justify', AlignJustify, 'Justifier'],
-          ].map(([alignment, Icon, label]) => {
-            const Component = Icon as typeof AlignLeft;
-            return (
-              <Tool
-                key={String(alignment)}
-                label={String(label)}
-                active={editor.isActive({ textAlign: alignment })}
-                onClick={() => editor.chain().focus().setTextAlign(String(alignment)).run()}
-              >
-                <Component />
-              </Tool>
-            );
-          })}
-          <select
-            className="line-height"
-            aria-label="Interligne"
-            value={block.lineHeight || '1.5'}
-            onChange={(e) => setBlockStyle(editor, { lineHeight: e.target.value })}
-          >
-            {['1', '1.15', '1.5', '2', '2.5'].map((n) => (
-              <option key={n} value={n}>
-                ↕ {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="toolbar-group">
-          <Tool
-            label="Liste à puces"
-            active={editor.isActive('bulletList')}
-            onClick={() => editor.chain().focus().toggleBulletList().run()}
-          >
-            <List />
-          </Tool>
-          <Tool
-            label="Liste numérotée"
-            active={editor.isActive('orderedList')}
-            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          >
-            <ListOrdered />
-          </Tool>
-          <Tool
-            label="Cases à cocher"
-            active={editor.isActive('taskList')}
-            onClick={() => editor.chain().focus().toggleTaskList().run()}
-          >
-            <ListTodo />
-          </Tool>
-          <Tool
-            label="Diminuer le retrait"
-            onClick={() =>
-              editor.isActive('listItem')
-                ? editor.chain().focus().liftListItem('listItem').run()
-                : setBlockStyle(editor, { indent: Math.max(0, (block.indent || 0) - 1) })
-            }
-          >
-            <IndentDecrease />
-          </Tool>
-          <Tool
-            label="Augmenter le retrait"
-            onClick={() =>
-              editor.isActive('listItem')
-                ? editor.chain().focus().sinkListItem('listItem').run()
-                : setBlockStyle(editor, { indent: Math.min(8, (block.indent || 0) + 1) })
-            }
-          >
-            <IndentIncrease />
-          </Tool>
-        </div>
-        <div className="toolbar-group">
-          <Tool
-            label="Insérer un tableau"
-            onClick={() =>
-              editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
-            }
-          >
-            <Table2 />
-          </Tool>
-          <Tool label="Insérer une image" onClick={() => imageInput.current?.click()}>
-            <ImagePlus />
-          </Tool>
-          <Tool
-            label="Insérer ou modifier un lien"
-            active={editor.isActive('link')}
-            onClick={() => {
-              setValue(editor.getAttributes('link').href || 'https://');
-              setModal('link');
-            }}
-          >
-            <Link2 />
-          </Tool>
-          <Tool label="Insérer ou modifier une équation" onClick={openMath}>
-            <Sigma />
-          </Tool>
-          <Tool label="Saut de page (Ctrl+Entrée)" onClick={() => insertPageBreak(editor)}>
-            <ScissorsLineDashed />
-          </Tool>
-          <Tool label="Rechercher et remplacer (Ctrl+F)" onClick={onFind}>
-            <Search />
-          </Tool>
-        </div>
+      <div className="compact-toolbar" role="toolbar" aria-label="Outils d’écriture">
+        {!advanced && (
+          <>
+            <Tool
+              label="Annuler (Ctrl+Z)"
+              disabled={!editor.can().undo()}
+              onClick={() => editor.chain().focus().undo().run()}
+            >
+              <Undo2 />
+            </Tool>
+            <Tool
+              label="Rétablir (Ctrl+Maj+Z)"
+              disabled={!editor.can().redo()}
+              onClick={() => editor.chain().focus().redo().run()}
+            >
+              <Redo2 />
+            </Tool>
+            <select
+              aria-label="Style de paragraphe"
+              value={style}
+              onChange={(e) =>
+                e.target.value === 'paragraph'
+                  ? editor.chain().focus().setParagraph().run()
+                  : editor
+                      .chain()
+                      .focus()
+                      .setHeading({ level: Number(e.target.value[1]) as 1 | 2 | 3 })
+                      .run()
+              }
+            >
+              <option value="paragraph">Texte normal</option>
+              <option value="h1">Titre 1</option>
+              <option value="h2">Titre 2</option>
+              <option value="h3">Titre 3</option>
+            </select>
+            <Tool
+              label="Gras (Ctrl+B)"
+              active={editor.isActive('bold')}
+              onClick={() => editor.chain().focus().toggleBold().run()}
+            >
+              <Bold />
+            </Tool>
+            <Tool
+              label="Italique (Ctrl+I)"
+              active={editor.isActive('italic')}
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+            >
+              <Italic />
+            </Tool>
+            <Tool
+              label="Souligné (Ctrl+U)"
+              active={editor.isActive('underline')}
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+            >
+              <Underline />
+            </Tool>
+            <Tool
+              label="Liste à puces"
+              active={editor.isActive('bulletList')}
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+            >
+              <List />
+            </Tool>
+            <Tool
+              label="Surligner en jaune"
+              active={editor.isActive('highlight')}
+              onClick={() => editor.chain().focus().toggleHighlight({ color: '#f6df8d' }).run()}
+            >
+              <Highlighter />
+            </Tool>
+          </>
+        )}
+        {memoryActions}
+        {!advanced && (
+          <>
+            <Tool
+              label="Insérer ou modifier un lien"
+              active={editor.isActive('link')}
+              onClick={() => {
+                setValue(editor.getAttributes('link').href || 'https://');
+                setModal('link');
+              }}
+            >
+              <Link2 />
+            </Tool>
+            <Tool label="Insérer une image" onClick={() => imageInput.current?.click()}>
+              <ImagePlus />
+            </Tool>
+          </>
+        )}
+        <button
+          className="button subtle tools-toggle"
+          aria-expanded={advanced}
+          aria-controls="advanced-editor-tools"
+          onClick={() => setAdvanced(!advanced)}
+        >
+          {advanced ? 'Fermer les outils' : 'Outils'}
+        </button>
       </div>
+      {advanced && (
+        <div
+          id="advanced-editor-tools"
+          className="editor-toolbar advanced-toolbar"
+          role="toolbar"
+          aria-label="Mise en forme"
+        >
+          <div className="toolbar-group">
+            <Tool
+              label="Annuler (Ctrl+Z)"
+              disabled={!editor.can().undo()}
+              onClick={() => editor.chain().focus().undo().run()}
+            >
+              <Undo2 />
+            </Tool>
+            <Tool
+              label="Rétablir (Ctrl+Maj+Z)"
+              disabled={!editor.can().redo()}
+              onClick={() => editor.chain().focus().redo().run()}
+            >
+              <Redo2 />
+            </Tool>
+          </div>
+          <div className="toolbar-group">
+            <select
+              aria-label="Style de paragraphe"
+              value={style}
+              onChange={(e) =>
+                e.target.value === 'paragraph'
+                  ? editor.chain().focus().setParagraph().run()
+                  : editor
+                      .chain()
+                      .focus()
+                      .setHeading({ level: Number(e.target.value[1]) as 1 | 2 | 3 })
+                      .run()
+              }
+            >
+              <option value="paragraph">Texte normal</option>
+              <option value="h1">Titre 1</option>
+              <option value="h2">Titre 2</option>
+              <option value="h3">Titre 3</option>
+            </select>
+            <select
+              aria-label="Police"
+              value={
+                editor.getAttributes('textStyle').fontFamily || typography?.fontFamily || 'Arial'
+              }
+              onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
+            >
+              {fonts.map((f) => (
+                <option key={f}>{f}</option>
+              ))}
+            </select>
+            <select
+              aria-label="Taille de police"
+              className="font-size"
+              value={
+                editor.getAttributes('textStyle').fontSize || `${typography?.fontSize || 11}pt`
+              }
+              onChange={(e) => editor.chain().focus().setFontSize(e.target.value).run()}
+            >
+              {[8, 9, 10, 11, 12, 13, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72].map((n) => (
+                <option key={n} value={`${n}pt`}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="toolbar-group">
+            <Tool
+              label="Gras (Ctrl+B)"
+              active={editor.isActive('bold')}
+              onClick={() => editor.chain().focus().toggleBold().run()}
+            >
+              <Bold />
+            </Tool>
+            <Tool
+              label="Italique (Ctrl+I)"
+              active={editor.isActive('italic')}
+              onClick={() => editor.chain().focus().toggleItalic().run()}
+            >
+              <Italic />
+            </Tool>
+            <Tool
+              label="Souligné (Ctrl+U)"
+              active={editor.isActive('underline')}
+              onClick={() => editor.chain().focus().toggleUnderline().run()}
+            >
+              <Underline />
+            </Tool>
+            <Tool
+              label="Barré"
+              active={editor.isActive('strike')}
+              onClick={() => editor.chain().focus().toggleStrike().run()}
+            >
+              <Strikethrough />
+            </Tool>
+            <label className="color-tool" title="Couleur du texte">
+              <Type size={18} />
+              <input
+                type="color"
+                aria-label="Couleur du texte"
+                defaultValue="#202927"
+                onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+              />
+            </label>
+            <label className="color-tool" title="Surlignage">
+              <Highlighter size={18} />
+              <input
+                type="color"
+                aria-label="Surlignage"
+                defaultValue="#ffe999"
+                onChange={(e) =>
+                  editor.chain().focus().setHighlight({ color: e.target.value }).run()
+                }
+              />
+            </label>
+            <Tool
+              label="Effacer la mise en forme"
+              onClick={() => {
+                let chain = editor.chain().focus();
+                for (const mark of [
+                  'bold',
+                  'italic',
+                  'underline',
+                  'strike',
+                  'code',
+                  'link',
+                  'textStyle',
+                  'highlight',
+                ])
+                  chain = chain.unsetMark(mark);
+                chain.clearNodes().run();
+              }}
+            >
+              <Eraser />
+            </Tool>
+          </div>
+          <div className="toolbar-group">
+            {[
+              ['left', AlignLeft, 'Aligner à gauche'],
+              ['center', AlignCenter, 'Centrer'],
+              ['right', AlignRight, 'Aligner à droite'],
+              ['justify', AlignJustify, 'Justifier'],
+            ].map(([alignment, Icon, label]) => {
+              const Component = Icon as typeof AlignLeft;
+              return (
+                <Tool
+                  key={String(alignment)}
+                  label={String(label)}
+                  active={editor.isActive({ textAlign: alignment })}
+                  onClick={() => editor.chain().focus().setTextAlign(String(alignment)).run()}
+                >
+                  <Component />
+                </Tool>
+              );
+            })}
+            <select
+              className="line-height"
+              aria-label="Interligne"
+              value={block.lineHeight || '1.5'}
+              onChange={(e) => setBlockStyle(editor, { lineHeight: e.target.value })}
+            >
+              {['1', '1.15', '1.5', '1.75', '2', '2.5'].map((n) => (
+                <option key={n} value={n}>
+                  ↕ {n}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="toolbar-group">
+            <Tool
+              label="Liste à puces"
+              active={editor.isActive('bulletList')}
+              onClick={() => editor.chain().focus().toggleBulletList().run()}
+            >
+              <List />
+            </Tool>
+            <Tool
+              label="Liste numérotée"
+              active={editor.isActive('orderedList')}
+              onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            >
+              <ListOrdered />
+            </Tool>
+            <Tool
+              label="Cases à cocher"
+              active={editor.isActive('taskList')}
+              onClick={() => editor.chain().focus().toggleTaskList().run()}
+            >
+              <ListTodo />
+            </Tool>
+            <Tool
+              label="Diminuer le retrait"
+              onClick={() =>
+                editor.isActive('listItem')
+                  ? editor.chain().focus().liftListItem('listItem').run()
+                  : setBlockStyle(editor, { indent: Math.max(0, (block.indent || 0) - 1) })
+              }
+            >
+              <IndentDecrease />
+            </Tool>
+            <Tool
+              label="Augmenter le retrait"
+              onClick={() =>
+                editor.isActive('listItem')
+                  ? editor.chain().focus().sinkListItem('listItem').run()
+                  : setBlockStyle(editor, { indent: Math.min(8, (block.indent || 0) + 1) })
+              }
+            >
+              <IndentIncrease />
+            </Tool>
+          </div>
+          <div className="toolbar-group">
+            <Tool
+              label="Insérer un tableau"
+              onClick={() =>
+                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+              }
+            >
+              <Table2 />
+            </Tool>
+            <Tool label="Insérer une image" onClick={() => imageInput.current?.click()}>
+              <ImagePlus />
+            </Tool>
+            <Tool
+              label="Insérer ou modifier un lien"
+              active={editor.isActive('link')}
+              onClick={() => {
+                setValue(editor.getAttributes('link').href || 'https://');
+                setModal('link');
+              }}
+            >
+              <Link2 />
+            </Tool>
+            <Tool label="Insérer ou modifier une équation" onClick={openMath}>
+              <Sigma />
+            </Tool>
+            <Tool label="Saut de page (Ctrl+Entrée)" onClick={() => insertPageBreak(editor)}>
+              <ScissorsLineDashed />
+            </Tool>
+            <Tool label="Rechercher et remplacer (Ctrl+F)" onClick={onFind}>
+              <Search />
+            </Tool>
+          </div>
+        </div>
+      )}
       {editor.isActive('table') && (
         <div className="context-toolbar">
           <span>Tableau</span>

@@ -1,3 +1,4 @@
+import { documentMenu, reviewMenu, navigation } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
@@ -102,11 +103,13 @@ test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise 
   let passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages).toHaveLength(2);
   const before = JSON.stringify(passages.map((p: any) => p.card));
+  await reviewMenu(page);
   await page.getByRole('button', { name: 'Révision libre', exact: true }).click();
   await expect(page).toHaveURL(/\/study\/free\//);
   await page.getByLabel('Priorités à réviser').selectOption('high');
   await expect(page.getByRole('status')).toContainText('0 / 1');
   await expect.poll(() => page.locator('.study-hidden').count()).toBeGreaterThan(0);
+  await page.locator('.study-passages > summary').click();
   await page.getByRole('button', { name: 'Afficher l’indice du passage 1', exact: true }).click();
   await expect(page.locator('.hint')).toHaveText('Unité du vivant');
   await page.getByRole('button', { name: 'Révéler toutes les réponses' }).click();
@@ -120,11 +123,12 @@ test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise 
   expect(JSON.stringify(passages.map((p: any) => p.card))).toBe(before);
   await page.goto(`/document/${id}`);
   await expect(editor).toBeVisible();
-  await page.getByRole('button', { name: /Passages mémorisés/ }).click();
+  await page.getByRole('button', { name: /Passages/ }).click();
   await page.getByRole('button', { name: 'Modifier l’indice' }).first().click();
   await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Indice amélioré');
   await page.getByRole('button', { name: 'Enregistrer l’indice', exact: true }).click();
   await saved(page);
+  await reviewMenu(page);
   await page.getByRole('button', { name: 'Révision programmée', exact: true }).click();
   await expect(page).toHaveURL(/\/study\?document=/);
   await expect(page.getByRole('status')).toContainText('2 passage(s)');
@@ -172,7 +176,7 @@ test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise 
   await page.goto('/');
   await page.getByLabel('Adresse email').fill(email);
   await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Entrer dans mon laboratoire' }).click();
+  await page.getByRole('button', { name: 'Me connecter' }).click();
   await expect(page).toHaveURL(/\/library$/);
   await page.goto(sessionURL);
   await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();

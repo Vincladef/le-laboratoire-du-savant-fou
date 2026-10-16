@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { hashPassword } from 'better-auth/crypto';
 import type { PoolClient } from 'pg';
 import type { Database } from '../server/db';
@@ -292,6 +293,53 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     cookies.clear();
     for (const [k, v] of ownCookies) cookies.set(k, v);
     checks.push('neon-managed-learning-user-isolation');
+    const tabId = randomUUID();
+    const tabContent = {
+      type: 'doc',
+      content: [
+        {
+          type: 'documentTab',
+          attrs: { id: 'main', title: 'Principal', parentId: null },
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Texte historique conservé' }] },
+          ],
+        },
+        {
+          type: 'documentTab',
+          attrs: { id: tabId, title: 'Mesures', parentId: null },
+          content: [
+            { type: 'paragraph', content: [{ type: 'text', text: 'Texte indépendant dans Neon' }] },
+          ],
+        },
+      ],
+    };
+    const tabDocument = await (
+      await call(
+        '/documents',
+        'POST',
+        { title: 'Onglets temporaires de recette', content: tabContent },
+        201,
+      )
+    ).json();
+    await call(`/documents/${tabDocument.id}/position`, 'PUT', { cursor: 3, tabId });
+    await call(
+      `/documents/${tabDocument.id}/position`,
+      'PUT',
+      { cursor: 3, tabId: randomUUID() },
+      409,
+    );
+    const persistedTabs = await client.query(
+      'select content,view_state from lab.documents where id=$1 and owner_id=$2',
+      [tabDocument.id, legacyId],
+    );
+    if (!isDeepStrictEqual(persistedTabs.rows[0]?.content, tabContent))
+      throw new Error('Contenu des onglets absent de Neon');
+    if (
+      persistedTabs.rows[0]?.view_state?.tabId !== tabId ||
+      persistedTabs.rows[0]?.view_state?.cursors?.[tabId] !== 3
+    )
+      throw new Error('Reprise d’onglet non persistée dans Neon');
+    checks.push('neon-document-tabs-and-view-state-direct-sql');
     if (process.env.LAB_VERIFY_BROWSER === '1') {
       browser = await verifyHostedBrowser(config.baseURL, email, password, docId);
       const persisted = await client.query(

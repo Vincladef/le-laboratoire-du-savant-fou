@@ -28,8 +28,13 @@ import {
   plainText,
   validateDocument,
   copyWithNewAnchors,
+  extractAnchors,
 } from '../shared/document';
-import { Brand } from '../components/Brand';
+import { useWorkspace } from '../components/Workspace';
+import { DocumentTabs } from './DocumentTabs';
+import { readTabs, writeTabs, addTab, removeTab, type DocumentTab } from '../shared/tabs';
+import { Maximize2, MoreHorizontal } from 'lucide-react';
+import { flushSync } from 'react-dom';
 import { Modal } from '../components/Modal';
 import { Toolbar } from './Toolbar';
 import { editorExtensions, findMatches, searchKey } from './extensions';
@@ -78,6 +83,32 @@ function DocumentEditor({
 }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const shell = useWorkspace();
+  const [tabs, setTabs] = useState(() => readTabs(original.content));
+  const tabsRef = useRef(tabs);
+  const [activeId, setActiveId] = useState(
+    () =>
+      readTabs(original.content).find((t) => t.id === original.viewState?.tabId)?.id ||
+      readTabs(original.content)[0].id,
+  );
+  const activeRef = useRef(activeId);
+  const clipboard = useRef({
+    token: null as string | null,
+    ids: new Set<string>(),
+    isPresent: (ids: Set<string>) =>
+      extractAnchors(writeTabs(tabsRef.current)).some((a) => ids.has(a.id)),
+  });
+  activeRef.current = activeId;
+  const [restoreEpoch, setRestoreEpoch] = useState(0);
+  const [printing, setPrinting] = useState<RichNode | null>(null);
+  const cursors = useRef(original.viewState?.cursors || ({} as Record<string, number>));
+  function content(active?: RichNode) {
+    if (active)
+      tabsRef.current = tabsRef.current.map((t) =>
+        t.id === activeRef.current ? { ...t, content: active } : t,
+      );
+    return writeTabs(tabsRef.current);
+  }
   const [title, setTitle] = useState(original.title);
   const [layout, setLayout] = useState<PageLayout>(original.layout);
   const [outline, setOutline] = useState(() => {
@@ -100,7 +131,7 @@ function DocumentEditor({
   const fileRef = useRef<HTMLInputElement>(null);
   const save = useAutosave(original, ownerId);
   const live = useRef({ title, layout });
-  live.current = { title, layout };
+  live.current = { title: title.trim() || 'Document sans titre', layout };
   const positionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     try {
@@ -109,74 +140,110 @@ function DocumentEditor({
       /* Optional UI preference. */
     }
   }, [outline, ownerId]);
-  const editor = useEditor({
-    extensions: editorExtensions(),
-    content: original.content,
-    editorProps: {
-      attributes: {
-        'aria-label': 'Contenu du document',
-        role: 'textbox',
-        'aria-multiline': 'true',
-        spellcheck: 'true',
-      },
-      handlePaste: (view, event) => {
-        const files = [...(event.clipboardData?.files || [])].filter((f) =>
-          f.type.startsWith('image/'),
-        );
-        if (!files.length) return false;
-        event.preventDefault();
-        void (async () => {
-          try {
-            for (const file of files) {
-              const image = await uploadImage(file);
-              view.dispatch(
-                view.state.tr.replaceSelectionWith(
-                  view.state.schema.nodes.image.create({ src: image.src, alt: file.name }),
-                ),
-              );
+  const editor = useEditor(
+    {
+      extensions: editorExtensions(clipboard.current),
+      content: tabsRef.current.find((t) => t.id === activeId)!.content,
+      editorProps: {
+        attributes: {
+          'aria-label': 'Contenu du document',
+          role: 'textbox',
+          'aria-multiline': 'true',
+          spellcheck: 'true',
+        },
+        handlePaste: (view, event) => {
+          const files = [...(event.clipboardData?.files || [])].filter((f) =>
+            f.type.startsWith('image/'),
+          );
+          if (!files.length) return false;
+          event.preventDefault();
+          void (async () => {
+            try {
+              for (const file of files) {
+                const image = await uploadImage(file);
+                view.dispatch(
+                  view.state.tr.replaceSelectionWith(
+                    view.state.schema.nodes.image.create({ src: image.src, alt: file.name }),
+                  ),
+                );
+              }
+            } catch (e) {
+              setError((e as Error).message);
             }
-          } catch (e) {
-            setError((e as Error).message);
+          })();
+          return true;
+        },
+        handleKeyDown: (_view, event) => {
+          if ((event.ctrlKey || event.metaKey) && ['f', 'h'].includes(event.key.toLowerCase())) {
+            event.preventDefault();
+            setFind(true);
+            return true;
           }
-        })();
-        return true;
+          if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+            event.preventDefault();
+            void save.flush();
+            return true;
+          }
+          return false;
+        },
       },
-      handleKeyDown: (_view, event) => {
-        if ((event.ctrlKey || event.metaKey) && ['f', 'h'].includes(event.key.toLowerCase())) {
-          event.preventDefault();
-          setFind(true);
-          return true;
-        }
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-          event.preventDefault();
-          void save.flush();
-          return true;
-        }
-        return false;
+      onUpdate: ({ editor }) =>
+        save.change({ ...live.current, content: content(editor.getJSON() as RichNode) }),
+      onSelectionUpdate: ({ editor }) => {
+        cursors.current[activeId] = editor.state.selection.from;
+        if (positionTimer.current) clearTimeout(positionTimer.current);
+        positionTimer.current = setTimeout(() => {
+          void api(`/documents/${original.id}/position`, {
+            method: 'PUT',
+            body: json({ cursor: editor.state.selection.from, tabId: activeId }),
+          }).catch(() => {});
+        }, 1500);
       },
-    },
-    onUpdate: ({ editor }) =>
-      save.change({ ...live.current, content: editor.getJSON() as RichNode }),
-    onSelectionUpdate: ({ editor }) => {
-      if (positionTimer.current) clearTimeout(positionTimer.current);
-      positionTimer.current = setTimeout(() => {
+      onCreate: ({ editor }) => {
+        editor.commands.setTextSelection(
+          Math.min(
+            Math.max(cursors.current[activeId] || (activeId === 'main' ? original.cursor : 1), 1),
+            editor.state.doc.content.size,
+          ),
+        );
+        editor.commands.scrollIntoView();
         void api(`/documents/${original.id}/position`, {
           method: 'PUT',
-          body: json({ cursor: editor.state.selection.from }),
+          body: json({ cursor: cursors.current[activeId] || 1, tabId: activeId }),
         }).catch(() => {});
-      }, 1500);
+      },
     },
-    onCreate: ({ editor }) => {
-      editor.commands.setTextSelection(
-        Math.min(Math.max(original.cursor, 1), editor.state.doc.content.size),
-      );
-      editor.commands.scrollIntoView();
+    [activeId, restoreEpoch],
+  );
+  const guardRef = useRef(async () => true);
+  guardRef.current = async () => {
+    await save.flush();
+    if (
+      save.getLocal() &&
+      !window.confirm(
+        'Des modifications restent sur cet appareil. Quitter l’éditeur en conservant la copie de récupération ?',
+      )
+    )
+      return false;
+    void queryClient.invalidateQueries({ queryKey: ['documents', ownerId] });
+    return true;
+  };
+  useEffect(() => shell.registerGuard(() => guardRef.current()), [shell.registerGuard]);
+  useEffect(() => {
+    if (save.status === 'saved' && editor)
       void api(`/documents/${original.id}/position`, {
         method: 'PUT',
-        body: json({ cursor: original.cursor }),
+        body: json({ cursor: editor.state.selection.from, tabId: activeId }),
       }).catch(() => {});
-    },
-  });
+  }, [save.status, activeId, editor]);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !window.document.querySelector('dialog[open]'))
+        shell.setFocusMode(false);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [shell.setFocusMode]);
   useEffect(() => {
     const element = workspace.current;
     if (!element) return;
@@ -206,21 +273,36 @@ function DocumentEditor({
     live.current = { title: snapshot.title, layout: snapshot.layout };
     setTitle(snapshot.title);
     setLayout(snapshot.layout);
-    editor.commands.setContent(snapshot.content, { emitUpdate: false });
+    const restored = readTabs(snapshot.content);
+    tabsRef.current = restored;
+    setTabs(restored);
+    setActiveId(restored.some((t) => t.id === activeId) ? activeId : restored[0].id);
+    setRestoreEpoch((n) => n + 1);
     if (persist) save.change(snapshot);
   }
   async function leave() {
-    await save.flush();
-    if (
-      save.getLocal() &&
-      !window.confirm(
-        'Des modifications restent sur cet appareil. Quitter l’éditeur en conservant la copie de récupération ?',
-      )
-    )
-      return;
-    void queryClient.invalidateQueries({ queryKey: ['documents', ownerId] });
-    void queryClient.invalidateQueries({ queryKey: ['profile', ownerId] });
-    navigate('/library');
+    await shell.navigate('/library');
+  }
+  function updateTabs(next: DocumentTab[], selected = activeId) {
+    tabsRef.current = next;
+    setTabs(next);
+    setActiveId(next.some((t) => t.id === selected) ? selected : next[0].id);
+    save.change({ ...live.current, content: writeTabs(next) });
+  }
+  function switchTab(id: string) {
+    if (editor) content(editor.getJSON() as RichNode);
+    if (positionTimer.current) clearTimeout(positionTimer.current);
+    setActiveId(id);
+  }
+  function add(parentId: string | null, sourceId?: string) {
+    try {
+      if (editor) content(editor.getJSON() as RichNode);
+      const previous = new Set(tabsRef.current.map((t) => t.id)),
+        next = addTab(tabsRef.current, parentId, sourceId);
+      updateTabs(next, next.find((t) => !previous.has(t.id))!.id);
+    } catch (e) {
+      setError((e as Error).message);
+    }
   }
   if (!editor) return null;
   const stateLabel = {
@@ -234,574 +316,639 @@ function DocumentEditor({
   const exportJSON = () =>
     downloadBlob(
       new Blob(
-        [JSON.stringify({ schemaVersion: 1, title, content: editor.getJSON(), layout }, null, 2)],
+        [
+          JSON.stringify(
+            { schemaVersion: 1, title, content: content(editor.getJSON() as RichNode), layout },
+            null,
+            2,
+          ),
+        ],
         { type: 'application/json' },
       ),
-      `${title}.laboratoire.json`,
+      `${title}.bouche-trou.json`,
     );
   const size = layout.format === 'A4' ? [210, 297] : [215.9, 279.4];
   const pageWidth = size[layout.landscape ? 1 : 0];
   const paperZoom =
-    zoom === 'fit'
-      ? Math.max(0.4, Math.min(2, (workspaceWidth - 2) / ((pageWidth * 96) / 25.4)))
-      : zoom / 100;
+    zoom === 'fit' && workspaceWidth < 600
+      ? 1
+      : zoom === 'fit'
+        ? Math.max(
+            0.4,
+            Math.min(
+              900 / ((pageWidth * 96) / 25.4),
+              (workspaceWidth - 2) / ((pageWidth * 96) / 25.4),
+            ),
+          )
+        : zoom / 100;
   return (
-    <div className="editor-shell">
-      <header className="editor-header">
-        <button
-          className="icon-button"
-          aria-label="Revenir à la bibliothèque"
-          onClick={() => void leave()}
-        >
-          <ArrowLeft size={21} />
-        </button>
-        <Brand compact />
-        <button
-          ref={outlineToggle}
-          className="icon-button outline-toggle"
-          aria-label="Plan du document"
-          title={outline ? 'Masquer le plan du document' : 'Afficher le plan du document'}
-          aria-expanded={outline}
-          aria-controls="document-outline"
-          onClick={() => setOutline(!outline)}
-        >
-          <PanelLeft size={20} />
-        </button>
-        <div className="document-title-area">
-          <input
-            aria-label="Titre du document"
-            className="document-title"
-            maxLength={200}
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value);
-              live.current.title = e.target.value;
-              save.change({
-                title: e.target.value || 'Document sans titre',
-                content: editor.getJSON() as RichNode,
-                layout,
-              });
-            }}
-            onBlur={() => {
-              if (!title.trim()) setTitle('Document sans titre');
-            }}
-          />
-          <span className={`save-state ${save.status}`} role="status">
-            {['offline', 'error', 'conflict'].includes(save.status) ? (
-              <CloudOff size={13} />
-            ) : save.status === 'saved' ? (
-              <Check size={13} />
-            ) : (
-              <Cloud size={13} />
-            )}{' '}
-            {stateLabel}
-          </span>
-        </div>
-        <div className="editor-header-actions">
-          <button
-            className="button subtle"
-            aria-label="Historique"
-            onClick={() => setHistory(!history)}
-            aria-pressed={history}
-          >
-            <History size={17} />
-            <span>Historique</span>
-          </button>
-          <button
-            className="button primary"
-            aria-label="Exporter"
-            onClick={() => setModal('export')}
-          >
-            <FileDown size={17} />
-            <span>Exporter</span>
-          </button>
-        </div>
-      </header>
-      <div className="editor-menubar">
-        <button onClick={() => setModal('import')}>
-          <Upload size={14} /> Importer
-        </button>
-        <button onClick={() => setModal('page')}>
-          <Settings2 size={14} /> Mise en page
-        </button>
-        <button onClick={() => setModal('help')}>Aide et raccourcis</button>
-        <span className="menubar-spacer" />
-        <select
-          aria-label="Zoom"
-          value={zoom}
-          onChange={(e) => setZoom(e.target.value === 'fit' ? 'fit' : Number(e.target.value))}
-        >
-          <option value="fit">Largeur de page</option>
-          {[75, 90, 100, 110, 125].map((n) => (
-            <option key={n} value={n}>
-              {n}%
-            </option>
-          ))}
-        </select>
-      </div>
-      <Toolbar editor={editor} onFind={() => setFind(!find)} onError={setError} />
-      <MemoryTools
-        editor={editor}
-        documentId={original.id}
-        ownerId={ownerId}
-        status={save.status}
-        flush={save.flush}
-        hasLocal={() => Boolean(save.getLocal())}
-      />
-      {find && <FindBar editor={editor} onClose={() => setFind(false)} />}
-      {error || save.error ? (
-        <div className="editor-alert alert error" role="alert">
-          <span>{error || save.error}</span>
-          <button className="text-button" onClick={() => void save.flush()}>
-            Réessayer
-          </button>
-          <button className="text-button" onClick={exportJSON}>
-            Exporter la copie locale
-          </button>
-          <button
-            className="icon-button"
-            aria-label="Masquer le message"
-            onClick={() => setError('')}
-          >
-            <X size={15} />
-          </button>
-        </div>
-      ) : null}
-      {notice && (
-        <div className="editor-alert alert info" role="status">
-          <span>{notice}</span>
-          <button
-            className="icon-button"
-            aria-label="Masquer la notification"
-            onClick={() => setNotice('')}
-          >
-            <X size={15} />
-          </button>
-        </div>
-      )}
-      {save.recovery.map((draft) => (
-        <div className="editor-alert alert warning" key={draft.key}>
-          <span>
-            <strong>Une copie locale attend d’être récupérée.</strong>{' '}
-            {new Date(draft.updatedAt).toLocaleString('fr')} · {draft.title}
-          </span>
-          <button
-            className="button"
-            onClick={() => {
-              apply(draft, false);
-              void save.recover(draft);
-            }}
-          >
-            Récupérer
-          </button>
-          <button
-            className="text-button"
-            onClick={() =>
-              downloadBlob(
-                new Blob([JSON.stringify(draft)], { type: 'application/json' }),
-                'copie-locale.json',
-              )
-            }
-          >
-            Télécharger
-          </button>
-          <button
-            className="text-button"
-            onClick={() => {
-              if (window.confirm('Supprimer cette copie locale non synchronisée ?'))
-                void save.discardRecovery(draft);
-            }}
-          >
-            Ignorer
-          </button>
-        </div>
-      ))}
-      {save.conflict && (
-        <div className="conflict-panel" role="alert">
-          <div>
-            <strong>
-              Le document a été modifié ailleurs
-              {save.conflict.deletedAt ? ' et placé dans la corbeille' : ''}.
-            </strong>
-            <p>
-              Votre version reste visible ici et conservée sur cet appareil. Version distante :
-              révision {save.conflict.revision}, « {save.conflict.title} ».
-            </p>
-            <details>
-              <summary>Lire le texte de la version distante</summary>
-              <p>{plainText(save.conflict.content).slice(0, 3000)}</p>
-            </details>
-          </div>
-          <div className="conflict-actions">
+    <MemoryTools
+      key={activeId + restoreEpoch}
+      editor={editor}
+      documentId={original.id}
+      ownerId={ownerId}
+      status={save.status}
+      flush={save.flush}
+      hasLocal={() => Boolean(save.getLocal())}
+    >
+      {(memory) => (
+        <div className="editor-shell">
+          <header className="editor-header">
             <button
-              className="button primary"
-              onClick={() =>
-                action(async () => {
-                  const copy = await save.copyLocal();
-                  if (copy) {
-                    const remote = await save.acceptRemote();
-                    if (remote) apply(remote, false);
-                    navigate(`/document/${copy.id}`);
-                  }
-                })
-              }
+              className="icon-button"
+              aria-label="Revenir à la bibliothèque"
+              onClick={() => void leave()}
             >
-              Conserver ma version dans un nouveau document
+              <ArrowLeft size={21} />
             </button>
-            <button
-              className="button"
-              onClick={() => {
-                if (window.confirm('Abandonner la copie locale et charger la version distante ?'))
-                  void save.acceptRemote().then((remote) => {
-                    if (remote) apply(remote, false);
+            <div className="document-title-area">
+              <input
+                aria-label="Titre du document"
+                className="document-title"
+                maxLength={200}
+                value={title}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  live.current.title = e.target.value.trim() || 'Document sans titre';
+                  save.change({
+                    title: e.target.value || 'Document sans titre',
+                    content: content(editor.getJSON() as RichNode),
+                    layout,
                   });
-              }}
-            >
-              Garder la version distante
-            </button>
-            {!save.conflict.deletedAt && (
+                }}
+                onBlur={() => {
+                  if (!title.trim()) setTitle('Document sans titre');
+                }}
+              />
+              <span className={`save-state ${save.status}`} role="status">
+                {['offline', 'error', 'conflict'].includes(save.status) ? (
+                  <CloudOff size={13} />
+                ) : save.status === 'saved' ? (
+                  <Check size={13} />
+                ) : (
+                  <Cloud size={13} />
+                )}{' '}
+                {stateLabel}
+              </span>
+            </div>
+            <div className="editor-header-actions">
+              <button
+                className="button subtle concentration-toggle"
+                aria-label={shell.focusMode ? 'Quitter la concentration' : 'Concentration'}
+                aria-pressed={shell.focusMode}
+                onClick={() => shell.setFocusMode(!shell.focusMode)}
+              >
+                <Maximize2 size={16} />
+                <span>{shell.focusMode ? 'Quitter la concentration' : 'Concentration'}</span>
+              </button>
+              <details className="review-menu menu">
+                <summary className="button primary">
+                  <BookOpen size={17} /> Réviser
+                </summary>
+                <div className="menu-popover">{memory.reviews}</div>
+              </details>
+              <details className="document-tools menu">
+                <summary aria-label="Options du document" className="icon-button">
+                  <MoreHorizontal size={21} />
+                </summary>
+                <div className="menu-popover">
+                  <button onClick={() => setHistory(!history)}>
+                    <History size={16} /> Historique
+                  </button>
+                  <button onClick={() => setModal('export')}>
+                    <FileDown size={16} /> Exporter
+                  </button>
+                  <button onClick={() => setModal('import')}>
+                    <Upload size={16} /> Importer
+                  </button>
+                  <button onClick={() => setModal('page')}>
+                    <Settings2 size={16} /> Mise en page
+                  </button>
+                  <button onClick={() => setModal('help')}>Aide et raccourcis</button>
+                  <label className="zoom-control">
+                    Zoom
+                    <select
+                      aria-label="Zoom"
+                      value={zoom}
+                      onChange={(e) =>
+                        setZoom(e.target.value === 'fit' ? 'fit' : Number(e.target.value))
+                      }
+                    >
+                      <option value="fit">Largeur de page</option>
+                      {[75, 90, 100, 110, 125].map((n) => (
+                        <option key={n} value={n}>
+                          {n}%
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </details>
+            </div>
+          </header>
+          <Toolbar
+            typography={layout.typography}
+            editor={editor}
+            onFind={() => setFind(!find)}
+            onError={setError}
+            memoryActions={memory.actions}
+          />
+          {find && <FindBar editor={editor} onClose={() => setFind(false)} />}
+          {error || save.error ? (
+            <div className="editor-alert alert error" role="alert">
+              <span>{error || save.error}</span>
+              <button className="text-button" onClick={() => void save.flush()}>
+                Réessayer
+              </button>
+              <button className="text-button" onClick={exportJSON}>
+                Exporter la copie locale
+              </button>
+              <button
+                className="icon-button"
+                aria-label="Masquer le message"
+                onClick={() => setError('')}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          ) : null}
+          {notice && (
+            <div className="editor-alert alert info" role="status">
+              <span>{notice}</span>
+              <button
+                className="icon-button"
+                aria-label="Masquer la notification"
+                onClick={() => setNotice('')}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
+          {save.recovery.map((draft) => (
+            <div className="editor-alert alert warning" key={draft.key}>
+              <span>
+                <strong>Une copie locale attend d’être récupérée.</strong>{' '}
+                {new Date(draft.updatedAt).toLocaleString('fr')} · {draft.title}
+              </span>
+              <button
+                className="button"
+                onClick={() => {
+                  apply(draft, false);
+                  void save.recover(draft);
+                }}
+              >
+                Récupérer
+              </button>
+              <button
+                className="text-button"
+                onClick={() =>
+                  downloadBlob(
+                    new Blob([JSON.stringify(draft)], { type: 'application/json' }),
+                    'copie-locale.json',
+                  )
+                }
+              >
+                Télécharger
+              </button>
               <button
                 className="text-button"
                 onClick={() => {
-                  if (
-                    window.confirm(
-                      'Enregistrer votre version à la place de la version distante ? Celle-ci restera dans l’historique.',
-                    )
-                  )
-                    void save.replaceRemote();
+                  if (window.confirm('Supprimer cette copie locale non synchronisée ?'))
+                    void save.discardRecovery(draft);
                 }}
               >
-                Remplacer explicitement la version distante
+                Ignorer
               </button>
+            </div>
+          ))}
+          {save.conflict && (
+            <div className="conflict-panel" role="alert">
+              <div>
+                <strong>
+                  Le document a été modifié ailleurs
+                  {save.conflict.deletedAt ? ' et placé dans la corbeille' : ''}.
+                </strong>
+                <p>
+                  Votre version reste visible ici et conservée sur cet appareil. Version distante :
+                  révision {save.conflict.revision}, « {save.conflict.title} ».
+                </p>
+                <details>
+                  <summary>Lire le texte de la version distante</summary>
+                  <p>{plainText(save.conflict.content).slice(0, 3000)}</p>
+                </details>
+              </div>
+              <div className="conflict-actions">
+                <button
+                  className="button primary"
+                  onClick={() =>
+                    action(async () => {
+                      const copy = await save.copyLocal();
+                      if (copy) {
+                        const remote = await save.acceptRemote();
+                        if (remote) apply(remote, false);
+                        navigate(`/document/${copy.id}`);
+                      }
+                    })
+                  }
+                >
+                  Conserver ma version dans un nouveau document
+                </button>
+                <button
+                  className="button"
+                  onClick={() => {
+                    if (
+                      window.confirm('Abandonner la copie locale et charger la version distante ?')
+                    )
+                      void save.acceptRemote().then((remote) => {
+                        if (remote) apply(remote, false);
+                      });
+                  }}
+                >
+                  Garder la version distante
+                </button>
+                {!save.conflict.deletedAt && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          'Enregistrer votre version à la place de la version distante ? Celle-ci restera dans l’historique.',
+                        )
+                      )
+                        void save.replaceRemote();
+                    }}
+                  >
+                    Remplacer explicitement la version distante
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+          <div className="editor-workspace">
+            <div className="outline-dock">
+              <button
+                ref={outlineToggle}
+                className="outline-toggle button subtle"
+                aria-label="Plan du document"
+                aria-expanded={outline}
+                aria-controls="document-outline"
+                onClick={() => setOutline(!outline)}
+              >
+                <PanelLeft size={17} /> Plan
+              </button>
+              {outline && (
+                <DocumentTabs
+                  editor={editor}
+                  tabs={tabs}
+                  activeId={activeId}
+                  onSelect={switchTab}
+                  onAdd={(parent) => add(parent)}
+                  onRename={(id, title) => {
+                    content(editor.getJSON() as RichNode);
+                    updateTabs(tabsRef.current.map((t) => (t.id === id ? { ...t, title } : t)));
+                  }}
+                  onDuplicate={(id) =>
+                    add(tabsRef.current.find((t) => t.id === id)?.parentId || null, id)
+                  }
+                  onDelete={(id) => {
+                    if (
+                      !window.confirm(
+                        'Supprimer cet onglet et ses sous-onglets ? Leur contenu reste récupérable dans l’historique.',
+                      )
+                    )
+                      return;
+                    try {
+                      content(editor.getJSON() as RichNode);
+                      updateTabs(removeTab(tabsRef.current, id));
+                    } catch (e) {
+                      setError((e as Error).message);
+                    }
+                  }}
+                  onClose={() => {
+                    setOutline(false);
+                    outlineToggle.current?.focus();
+                  }}
+                />
+              )}
+            </div>
+            <main className="paper-workspace" ref={workspace} aria-label="Espace d’écriture">
+              <div
+                className="paper-ruler"
+                aria-hidden="true"
+                style={{ width: `${((pageWidth * 96) / 25.4) * paperZoom}px` }}
+              >
+                <span>0</span>
+                <span>2</span>
+                <span>4</span>
+                <span>6</span>
+                <span>8</span>
+                <span>10</span>
+                <span>12</span>
+                <span>14</span>
+                <span>16</span>
+              </div>
+              <div
+                className="document-paper"
+                style={
+                  {
+                    '--page-width':
+                      zoom === 'fit' && workspaceWidth < 600
+                        ? `${Math.max(280, workspaceWidth - 2)}px`
+                        : `${size[layout.landscape ? 1 : 0]}mm`,
+                    '--page-height':
+                      zoom === 'fit' ? '840px' : `${size[layout.landscape ? 0 : 1]}mm`,
+                    '--page-margin': `${layout.margin}mm`,
+                    '--document-font': layout.typography?.fontFamily || 'Arial',
+                    '--document-size': `${layout.typography?.fontSize || 11}pt`,
+                    zoom: paperZoom || 1,
+                  } as CSSProperties
+                }
+              >
+                <EditorContent editor={editor} />
+              </div>
+              <p className="paper-caption">
+                {layout.format} · Marges {layout.margin} mm · Écriture en continu, pages à
+                l’impression
+              </p>
+            </main>
+            {memory.panel && (
+              <aside className="passages-panel" aria-label="Mes passages">
+                <h2>Mes passages</h2>
+                {memory.panel}
+              </aside>
+            )}
+            {history && (
+              <VersionHistory
+                id={original.id}
+                revision={save.baseRevision.current}
+                onClose={() => setHistory(false)}
+                onRestore={(snapshot) =>
+                  void action(async () => {
+                    await save.flush();
+                    if (save.getLocal())
+                      throw new Error(
+                        'Synchronisez ou exportez vos modifications actuelles avant de restaurer une version.',
+                      );
+                    apply(snapshot);
+                    setNotice(
+                      'Version restaurée comme nouvelle modification. Les versions précédentes sont conservées.',
+                    );
+                  })
+                }
+              />
             )}
           </div>
-        </div>
-      )}
-      <div className="editor-workspace">
-        {outline && (
-          <DocumentOutline
-            editor={editor}
-            onClose={() => {
-              setOutline(false);
-              outlineToggle.current?.focus();
-            }}
-          />
-        )}
-        <main className="paper-workspace" ref={workspace} aria-label="Espace d’écriture">
-          <div
-            className="paper-ruler"
-            aria-hidden="true"
-            style={{ width: `${((pageWidth * 96) / 25.4) * paperZoom}px` }}
-          >
-            <span>0</span>
-            <span>2</span>
-            <span>4</span>
-            <span>6</span>
-            <span>8</span>
-            <span>10</span>
-            <span>12</span>
-            <span>14</span>
-            <span>16</span>
-          </div>
-          <div
-            className="document-paper"
-            style={
-              {
-                '--page-width': `${size[layout.landscape ? 1 : 0]}mm`,
-                '--page-height': `${size[layout.landscape ? 0 : 1]}mm`,
-                '--page-margin': `${layout.margin}mm`,
-                zoom: paperZoom || 1,
-              } as CSSProperties
-            }
-          >
-            <EditorContent editor={editor} />
-          </div>
-          <p className="paper-caption">
-            {layout.format} · Marges {layout.margin} mm · Écriture en continu, pages à l’impression
-          </p>
-        </main>
-        {history && (
-          <VersionHistory
-            id={original.id}
-            revision={save.baseRevision.current}
-            onClose={() => setHistory(false)}
-            onRestore={(snapshot) =>
+          <EditorFooter editor={editor} layout={layout} />
+          {printing && <PrintDocument content={printing} layout={layout} />}
+          <style>{`@media print { @page { size: ${layout.format} ${layout.landscape ? 'landscape' : 'portrait'}; margin: ${layout.margin}mm; } }`}</style>
+          {modal === 'page' && (
+            <Modal title="Mise en page" onClose={() => setModal(null)}>
+              <label>
+                Format
+                <select
+                  value={layout.format}
+                  onChange={(e) => {
+                    const value = { ...layout, format: e.target.value as PageLayout['format'] };
+                    setLayout(value);
+                    save.change({
+                      title,
+                      content: content(editor.getJSON() as RichNode),
+                      layout: value,
+                    });
+                  }}
+                >
+                  <option>A4</option>
+                  <option>Letter</option>
+                </select>
+              </label>
+              <label>
+                Marges : {layout.margin} mm
+                <input
+                  aria-label="Marges en millimètres"
+                  type="range"
+                  min={10}
+                  max={40}
+                  value={layout.margin}
+                  onChange={(e) => {
+                    const value = { ...layout, margin: Number(e.target.value) };
+                    setLayout(value);
+                    save.change({
+                      title,
+                      content: content(editor.getJSON() as RichNode),
+                      layout: value,
+                    });
+                  }}
+                />
+              </label>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={layout.landscape}
+                  onChange={(e) => {
+                    const value = { ...layout, landscape: e.target.checked };
+                    setLayout(value);
+                    save.change({
+                      title,
+                      content: content(editor.getJSON() as RichNode),
+                      layout: value,
+                    });
+                  }}
+                />{' '}
+                Orientation paysage
+              </label>
+              <p className="muted small">
+                Le document s’écrit en continu. Les sauts de page manuels et la pagination du
+                navigateur sont appliqués à l’impression. Il n’y a pas de pagination automatique
+                exacte à l’écran.
+              </p>
+              <div className="modal-actions">
+                <button className="button primary" onClick={() => setModal(null)}>
+                  Terminer
+                </button>
+              </div>
+            </Modal>
+          )}
+          {modal === 'export' && (
+            <Modal title="Exporter votre document" onClose={() => setModal(null)}>
+              <div className="export-choices">
+                <button
+                  className="button"
+                  disabled={busy}
+                  onClick={() =>
+                    action(async () => {
+                      const { makeDocx } = await import('./docx-export');
+                      downloadBlob(
+                        await makeDocx(title, content(editor.getJSON() as RichNode), layout),
+                        `${title}.docx`,
+                      );
+                      setNotice(
+                        'Document DOCX exporté. Vérifiez sa mise en page dans votre logiciel de destination.',
+                      );
+                      setModal(null);
+                    })
+                  }
+                >
+                  <FileDown size={20} /> Document Word (.docx)
+                </button>
+                <button
+                  className="button"
+                  onClick={() => {
+                    setModal(null);
+                    void (async () => {
+                      flushSync(() => setPrinting(content(editor.getJSON() as RichNode)));
+                      await window.document.fonts.ready;
+                      await Promise.all(
+                        [...window.document.querySelectorAll('.print-document img')].map((img) =>
+                          (img as HTMLImageElement).decode().catch(() => {}),
+                        ),
+                      );
+                      window.print();
+                      setPrinting(null);
+                    })();
+                  }}
+                >
+                  <Printer size={20} /> PDF / impression
+                </button>
+                <button className="button" onClick={exportJSON}>
+                  <Download size={20} /> Source JSON (images référencées)
+                </button>
+                <button
+                  className="button"
+                  onClick={() =>
+                    downloadBlob(
+                      new Blob([plainText(content(editor.getJSON() as RichNode))], {
+                        type: 'text/plain;charset=utf-8',
+                      }),
+                      `${title}.txt`,
+                    )
+                  }
+                >
+                  <BookOpen size={20} /> Texte brut (.txt)
+                </button>
+              </div>
+              <p className="muted small">
+                PDF : choisissez « Enregistrer au format PDF » dans la fenêtre d’impression du
+                navigateur et désactivez ses en-têtes/pieds de page si nécessaire.
+              </p>
+              <p className="alert info small">{DOCX_LIMITS}</p>
+              <p className="muted small">
+                Le JSON conserve toutes les métadonnées de l’éditeur, mais référence les images de
+                votre compte sans embarquer leurs fichiers.
+              </p>
+              {error && <p className="alert error">{error}</p>}
+            </Modal>
+          )}
+          {modal === 'import' && (
+            <Modal title="Importer un document" onClose={() => setModal(null)}>
+              <p>L’import crée un nouveau document dans votre bibliothèque.</p>
+              <p className="alert warning">{importLimits}</p>
+              <p className="muted small">
+                Formats : DOCX ou source JSON Bouche-trou (anciens fichiers du Laboratoire
+                compatibles). Taille DOCX maximale : 10 Mo.
+              </p>
+              <button
+                className="button primary"
+                disabled={busy}
+                onClick={() => fileRef.current?.click()}
+              >
+                <Upload size={18} />
+                {busy ? 'Import en cours…' : 'Choisir un fichier'}
+              </button>
+              {error && <p className="alert error">{error}</p>}
+            </Modal>
+          )}
+          <input
+            type="file"
+            ref={fileRef}
+            hidden
+            accept=".docx,.json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
               void action(async () => {
                 await save.flush();
                 if (save.getLocal())
                   throw new Error(
-                    'Synchronisez ou exportez vos modifications actuelles avant de restaurer une version.',
+                    'Synchronisez ou exportez d’abord les modifications de ce document.',
                   );
-                apply(snapshot);
-                setNotice(
-                  'Version restaurée comme nouvelle modification. Les versions précédentes sont conservées.',
-                );
-              })
-            }
-          />
-        )}
-      </div>
-      <EditorFooter editor={editor} layout={layout} />
-      <style>{`@media print { @page { size: ${layout.format} ${layout.landscape ? 'landscape' : 'portrait'}; margin: ${layout.margin}mm; } }`}</style>
-      {modal === 'page' && (
-        <Modal title="Mise en page" onClose={() => setModal(null)}>
-          <label>
-            Format
-            <select
-              value={layout.format}
-              onChange={(e) => {
-                const value = { ...layout, format: e.target.value as PageLayout['format'] };
-                setLayout(value);
-                save.change({ title, content: editor.getJSON() as RichNode, layout: value });
-              }}
-            >
-              <option>A4</option>
-              <option>Letter</option>
-            </select>
-          </label>
-          <label>
-            Marges : {layout.margin} mm
-            <input
-              aria-label="Marges en millimètres"
-              type="range"
-              min={10}
-              max={40}
-              value={layout.margin}
-              onChange={(e) => {
-                const value = { ...layout, margin: Number(e.target.value) };
-                setLayout(value);
-                save.change({ title, content: editor.getJSON() as RichNode, layout: value });
-              }}
-            />
-          </label>
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={layout.landscape}
-              onChange={(e) => {
-                const value = { ...layout, landscape: e.target.checked };
-                setLayout(value);
-                save.change({ title, content: editor.getJSON() as RichNode, layout: value });
-              }}
-            />{' '}
-            Orientation paysage
-          </label>
-          <p className="muted small">
-            Le document s’écrit en continu. Les sauts de page manuels et la pagination du navigateur
-            sont appliqués à l’impression. Il n’y a pas de pagination automatique exacte à l’écran.
-          </p>
-          <div className="modal-actions">
-            <button className="button primary" onClick={() => setModal(null)}>
-              Terminer
-            </button>
-          </div>
-        </Modal>
-      )}
-      {modal === 'export' && (
-        <Modal title="Exporter votre document" onClose={() => setModal(null)}>
-          <div className="export-choices">
-            <button
-              className="button"
-              disabled={busy}
-              onClick={() =>
-                action(async () => {
-                  const { makeDocx } = await import('./docx-export');
-                  downloadBlob(
-                    await makeDocx(title, editor.getJSON() as RichNode, layout),
-                    `${title}.docx`,
-                  );
-                  setNotice(
-                    'Document DOCX exporté. Vérifiez sa mise en page dans votre logiciel de destination.',
-                  );
-                  setModal(null);
-                })
-              }
-            >
-              <FileDown size={20} /> Document Word (.docx)
-            </button>
-            <button
-              className="button"
-              onClick={() => {
+                let content: RichNode;
+                let importedTitle = file.name.replace(/\.(docx|json)$/i, '').slice(0, 200);
+                let importedLayout = layout;
+                if (file.name.toLowerCase().endsWith('.docx')) {
+                  const { importDocx } = await import('./docx-import');
+                  const result = await importDocx(file);
+                  content = result.content;
+                  if (result.warnings.length)
+                    window.alert(
+                      `Import terminé avec avertissements :\n${result.warnings.join('\n')}`,
+                    );
+                } else {
+                  if (file.size > 2_500_000) throw new Error('Source JSON trop volumineuse.');
+                  const source = JSON.parse(await file.text());
+                  content = copyWithNewAnchors(validateDocument(source.content));
+                  importedTitle = source.title || importedTitle;
+                  if (source.layout) importedLayout = source.layout;
+                }
+                const imported = await api<DocumentRecord>('/documents', {
+                  method: 'POST',
+                  body: json({ title: importedTitle, content, layout: importedLayout }),
+                });
+                navigate(`/document/${imported.id}`);
                 setModal(null);
-                void (async () => {
-                  await window.document.fonts.ready;
-                  await Promise.all(
-                    [...window.document.querySelectorAll('.document-paper img')].map((img) =>
-                      (img as HTMLImageElement).decode().catch(() => {}),
-                    ),
-                  );
-                  window.print();
-                })();
-              }}
-            >
-              <Printer size={20} /> PDF / impression
-            </button>
-            <button className="button" onClick={exportJSON}>
-              <Download size={20} /> Source JSON (images référencées)
-            </button>
-            <button
-              className="button"
-              onClick={() =>
-                downloadBlob(
-                  new Blob([plainText(editor.getJSON() as RichNode)], {
-                    type: 'text/plain;charset=utf-8',
-                  }),
-                  `${title}.txt`,
-                )
-              }
-            >
-              <BookOpen size={20} /> Texte brut (.txt)
-            </button>
-          </div>
-          <p className="muted small">
-            PDF : choisissez « Enregistrer au format PDF » dans la fenêtre d’impression du
-            navigateur et désactivez ses en-têtes/pieds de page si nécessaire.
-          </p>
-          <p className="alert info small">{DOCX_LIMITS}</p>
-          <p className="muted small">
-            Le JSON conserve toutes les métadonnées de l’éditeur, mais référence les images de votre
-            compte sans embarquer leurs fichiers.
-          </p>
-          {error && <p className="alert error">{error}</p>}
-        </Modal>
+              });
+              e.target.value = '';
+            }}
+          />
+          {modal === 'help' && (
+            <Modal title="Écrire dans Bouche-trou" onClose={() => setModal(null)}>
+              <ul className="help-list">
+                <li>
+                  <kbd>Ctrl / ⌘ + B</kbd> Gras ; <kbd>I</kbd> italique ; <kbd>U</kbd> souligné
+                </li>
+                <li>
+                  <kbd>Ctrl / ⌘ + Z</kbd> Annuler ; <kbd>Maj + Z</kbd> rétablir
+                </li>
+                <li>
+                  <kbd>Ctrl / ⌘ + F</kbd> Rechercher et remplacer
+                </li>
+                <li>
+                  <kbd>Ctrl / ⌘ + S</kbd> Synchroniser maintenant
+                </li>
+                <li>
+                  <kbd>Ctrl / ⌘ + Entrée</kbd> Insérer un saut de page
+                </li>
+                <li>
+                  <kbd>Tab</kbd> Dans un tableau : cellule suivante
+                </li>
+              </ul>
+              <p className="muted small">
+                La sauvegarde s’effectue après une courte pause de frappe. En cas de coupure réseau,
+                vos modifications restent dans ce navigateur. Ne videz pas ses données avant la
+                synchronisation.
+              </p>
+              <p className="muted small">
+                Les changements simultanés sont signalés à la sauvegarde. Il n’y a pas encore
+                d’édition collaborative en temps réel.
+              </p>
+            </Modal>
+          )}
+        </div>
       )}
-      {modal === 'import' && (
-        <Modal title="Importer un document" onClose={() => setModal(null)}>
-          <p>L’import crée un nouveau document dans votre bibliothèque.</p>
-          <p className="alert warning">{importLimits}</p>
-          <p className="muted small">
-            Formats : DOCX ou source JSON du Laboratoire. Taille DOCX maximale : 10 Mo.
-          </p>
-          <button
-            className="button primary"
-            disabled={busy}
-            onClick={() => fileRef.current?.click()}
-          >
-            <Upload size={18} />
-            {busy ? 'Import en cours…' : 'Choisir un fichier'}
-          </button>
-          {error && <p className="alert error">{error}</p>}
-        </Modal>
-      )}
-      <input
-        type="file"
-        ref={fileRef}
-        hidden
-        accept=".docx,.json"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (!file) return;
-          void action(async () => {
-            await save.flush();
-            if (save.getLocal())
-              throw new Error('Synchronisez ou exportez d’abord les modifications de ce document.');
-            let content: RichNode;
-            let importedTitle = file.name.replace(/\.(docx|json)$/i, '').slice(0, 200);
-            let importedLayout = layout;
-            if (file.name.toLowerCase().endsWith('.docx')) {
-              const { importDocx } = await import('./docx-import');
-              const result = await importDocx(file);
-              content = result.content;
-              if (result.warnings.length)
-                window.alert(`Import terminé avec avertissements :\n${result.warnings.join('\n')}`);
-            } else {
-              if (file.size > 2_500_000) throw new Error('Source JSON trop volumineuse.');
-              const source = JSON.parse(await file.text());
-              content = copyWithNewAnchors(validateDocument(source.content));
-              importedTitle = source.title || importedTitle;
-              if (source.layout) importedLayout = source.layout;
-            }
-            const imported = await api<DocumentRecord>('/documents', {
-              method: 'POST',
-              body: json({ title: importedTitle, content, layout: importedLayout }),
-            });
-            navigate(`/document/${imported.id}`);
-            setModal(null);
-          });
-          e.target.value = '';
-        }}
-      />
-      {modal === 'help' && (
-        <Modal title="Écrire au Laboratoire" onClose={() => setModal(null)}>
-          <ul className="help-list">
-            <li>
-              <kbd>Ctrl / ⌘ + B</kbd> Gras ; <kbd>I</kbd> italique ; <kbd>U</kbd> souligné
-            </li>
-            <li>
-              <kbd>Ctrl / ⌘ + Z</kbd> Annuler ; <kbd>Maj + Z</kbd> rétablir
-            </li>
-            <li>
-              <kbd>Ctrl / ⌘ + F</kbd> Rechercher et remplacer
-            </li>
-            <li>
-              <kbd>Ctrl / ⌘ + S</kbd> Synchroniser maintenant
-            </li>
-            <li>
-              <kbd>Ctrl / ⌘ + Entrée</kbd> Insérer un saut de page
-            </li>
-            <li>
-              <kbd>Tab</kbd> Dans un tableau : cellule suivante
-            </li>
-          </ul>
-          <p className="muted small">
-            La sauvegarde s’effectue après une courte pause de frappe. En cas de coupure réseau, vos
-            modifications restent dans ce navigateur. Ne videz pas ses données avant la
-            synchronisation.
-          </p>
-          <p className="muted small">
-            Les changements simultanés sont signalés à la sauvegarde. Il n’y a pas encore d’édition
-            collaborative en temps réel.
-          </p>
-        </Modal>
-      )}
-    </div>
+    </MemoryTools>
   );
 }
-function DocumentOutline({ editor, onClose }: { editor: Editor; onClose: () => void }) {
-  const headings = useEditorState({
-    editor,
-    selector: ({ editor }) => {
-      const result: { text: string; level: number; pos: number }[] = [];
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === 'heading')
-          result.push({ text: node.textContent, level: node.attrs.level, pos });
-      });
-      return result;
-    },
-  });
+function PrintDocument({ content, layout }: { content: RichNode; layout: PageLayout }) {
+  const editor = useEditor({ extensions: editorExtensions(), content, editable: false });
   return (
-    <aside className="document-outline" id="document-outline" aria-label="Plan du document">
-      <div className="outline-heading">
-        <h2>Dans ce document</h2>
-        <button className="icon-button" aria-label="Masquer le plan" onClick={onClose}>
-          <X size={17} />
-        </button>
-      </div>
-      {headings.length ? (
-        headings.map((h) => (
-          <button
-            key={h.pos}
-            style={{ paddingLeft: 12 + (h.level - 1) * 12 }}
-            onClick={() =>
-              editor
-                .chain()
-                .focus()
-                .setTextSelection(h.pos + 1)
-                .scrollIntoView()
-                .run()
-            }
-          >
-            {h.text || 'Titre sans texte'}
-          </button>
-        ))
-      ) : (
-        <p>
-          Vos titres apparaîtront ici.
-          <br />
-          Utilisez les styles Titre 1, 2 et 3 pour structurer vos idées.
-        </p>
-      )}
-    </aside>
+    <div
+      className="print-document"
+      style={{
+        fontFamily: layout.typography?.fontFamily || 'Arial',
+        fontSize: `${layout.typography?.fontSize || 11}pt`,
+      }}
+    >
+      <EditorContent editor={editor} />
+    </div>
   );
 }
 function EditorFooter({ editor, layout }: { editor: Editor; layout: PageLayout }) {

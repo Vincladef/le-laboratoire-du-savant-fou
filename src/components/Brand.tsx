@@ -1,12 +1,19 @@
-import { FlaskConical } from 'lucide-react';
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
     <div className={`brand ${compact ? 'compact' : ''}`}>
-      <span className="brand-symbol">
-        <FlaskConical size={compact ? 21 : 27} />
+      <span className="brand-sticker" aria-hidden="true" />
+      <span className="brand-symbol" aria-hidden="true">
+        <span className="cloze-glyph">
+          <i />
+          <b />
+          <i />
+        </span>
       </span>
-      <span>
-        Le Laboratoire<small>DU SAVANT FOU</small>
+      <span className="brand-wordmark">
+        <b>
+          Bouche<span className="brand-gap">-trou</span>
+        </b>
+        <small>Apprendre en retrouvant</small>
       </span>
     </div>
   );

@@ -99,11 +99,9 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
         <div className="auth-story-body">
           <span className="eyebrow">L’ATELIER DE VOS CONNAISSANCES</span>
           <h1>
-            Les grandes idées
+            Des trous dans vos textes,
             <br />
-            commencent par
-            <br />
-            <em>une page blanche.</em>
+            <em>pas dans votre mémoire.</em>
           </h1>
           <p>
             Un espace à vous pour écrire, organiser
@@ -112,7 +110,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
           </p>
           <div className="story-paper">
             <div className="paper-number">CARNET N° 001</div>
-            <h3>Tout commence par une idée.</h3>
+            <h3>Apprendre en retrouvant.</h3>
             <div className="fake-line long" />
             <div className="fake-line" />
             <div className="fake-line short" />
@@ -132,16 +130,14 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
             </span>
           </div>
         </div>
-        <small className="story-footer">
-          LE LABORATOIRE DU SAVANT FOU · VOTRE ESPACE D’ÉCRITURE
-        </small>
+        <small className="story-footer">BOUCHE-TROU · APPRENDRE EN RETROUVANT</small>
       </section>
       <section className="auth-form-area">
         <div className="mobile-brand">
           <Brand />
         </div>
         <div className="auth-form-wrap">
-          <span className="eyebrow">BIENVENUE AU LABORATOIRE</span>
+          <span className="eyebrow">BIENVENUE CHEZ BOUCHE-TROU</span>
           <h2>
             {mode === 'signup'
               ? 'Ouvrez votre carnet.'
@@ -293,7 +289,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                       ? 'Confirmer mon adresse'
                       : mode === 'reset'
                         ? 'Changer le mot de passe'
-                        : 'Entrer dans mon laboratoire'}
+                        : 'Me connecter'}
               <ArrowRight size={18} />
             </button>
           </form>

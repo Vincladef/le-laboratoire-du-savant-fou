@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -16,6 +16,7 @@ export function MemoryTools({
   status,
   flush,
   hasLocal,
+  children,
 }: {
   editor: Editor;
   documentId: string;
@@ -23,6 +24,7 @@ export function MemoryTools({
   status: SaveState;
   flush: () => Promise<void>;
   hasLocal: () => boolean;
+  children: (parts: { actions: ReactNode; reviews: ReactNode; panel: ReactNode }) => ReactNode;
 }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false),
@@ -61,8 +63,9 @@ export function MemoryTools({
         open.current();
       }
     };
-    editor.view.dom.addEventListener('keydown', handler);
-    return () => editor.view.dom.removeEventListener('keydown', handler);
+    const dom = editor.view.dom;
+    dom.addEventListener('keydown', handler);
+    return () => dom.removeEventListener('keydown', handler);
   }, [editor]);
   async function saved() {
     await flush();
@@ -91,147 +94,167 @@ export function MemoryTools({
     await remote.refetch();
   }
   const present = new Set(live.anchors.map((a) => a.id));
+  const panel = expanded ? (
+    <div className="memory-list">
+      {!live.anchors.length && (
+        <p>
+          Sélectionnez du texte puis choisissez « Créer un texte à trous ». Raccourci : Ctrl/Cmd +
+          Maj + M.
+        </p>
+      )}
+      {live.anchors.map((a, index) => {
+        const p = remote.data?.find((p) => p.id === a.id);
+        return (
+          <article className="memory-row" key={a.id}>
+            <button
+              className="text-button passage-label"
+              onClick={() => selectPassage(editor, a.id)}
+            >
+              Passage {index + 1} : {a.quote.slice(0, 120)}
+            </button>
+            <label>
+              Priorité
+              <select
+                aria-label={`Priorité du passage ${index + 1}`}
+                value={a.priority ?? p?.priority ?? 'medium'}
+                onChange={(e) =>
+                  modifyPassage(editor, a.id, {
+                    hint: a.hint ?? p?.hint ?? '',
+                    priority: e.target.value as Priority,
+                  })
+                }
+              >
+                {Object.entries(priorityLabels).map(([key, label]) => (
+                  <option value={key} key={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="button subtle"
+              onClick={() => {
+                setHint(a.hint ?? p?.hint ?? '');
+                setPriority(a.priority ?? p?.priority ?? 'medium');
+                setModal({ id: a.id, doc: editor.state.doc });
+              }}
+            >
+              Modifier l’indice
+            </button>
+            <button
+              className="icon-button"
+              aria-label={`Supprimer l’annotation du passage ${index + 1}`}
+              onClick={() => modifyPassage(editor, a.id, null)}
+            >
+              <Trash2 size={16} />
+            </button>
+            {p?.status === 'needs_review' && (
+              <div className="passage-warning">
+                <p>
+                  La réponse a changé. Ce passage est suspendu du calendrier jusqu’à votre
+                  validation.
+                </p>
+                <button
+                  className="button subtle"
+                  disabled={busy}
+                  onClick={() => void run(() => confirm(p, false))}
+                >
+                  Valider et conserver le calendrier
+                </button>
+                <button
+                  className="button subtle"
+                  disabled={busy}
+                  onClick={() => void run(() => confirm(p, true))}
+                >
+                  Valider et recommencer l’apprentissage
+                </button>
+              </div>
+            )}
+          </article>
+        );
+      })}
+      {remote.data?.some((p) => p.status === 'deleted' && !present.has(p.id)) && (
+        <p className="muted">
+          Les passages supprimés sont exclus des révisions. Restaurer une version contenant leurs
+          annotations permet de les retrouver.
+        </p>
+      )}
+    </div>
+  ) : null;
   return (
-    <section className="memory-tools" aria-label="Textes à trous">
-      <div
-        className="memory-actions"
-        role="toolbar"
-        aria-label="Outils contextuels de mémorisation"
-      >
-        {!live.empty && (
-          <button
-            className="button primary"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => open.current()}
+    <>
+      {children({
+        actions: (
+          <div
+            className="memory-actions"
+            role="toolbar"
+            aria-label="Outils contextuels de mémorisation"
           >
-            <Plus size={16} />
-            Créer un texte à trous
-          </button>
-        )}
-        <button
-          className="button subtle"
-          aria-expanded={expanded}
-          onClick={() => setExpanded(!expanded)}
-        >
-          <Brain size={16} />
-          Passages mémorisés ({live.anchors.length})
-        </button>
-        <button
-          className="button subtle"
-          disabled={busy}
-          onClick={() =>
-            void run(async () => {
-              await saved();
-              navigate(`/study/free/${documentId}`);
-            })
-          }
-        >
-          <BookOpen size={16} />
-          Révision libre
-        </button>
-        <button
-          className="button subtle"
-          disabled={busy}
-          onClick={() =>
-            void run(async () => {
-              await saved();
-              navigate(`/study?document=${documentId}`);
-            })
-          }
-        >
-          Révision programmée
-        </button>
-      </div>
+            {
+              <button
+                className="button primary create-cloze"
+                aria-label="Créer un texte à trous"
+                title="Créer un texte à trous (Ctrl/Cmd+Maj+M)"
+                onMouseDown={(e) => e.preventDefault()}
+                disabled={live.empty}
+                onClick={() => open.current()}
+              >
+                <Plus size={16} />
+                <span>Texte à trous</span>
+              </button>
+            }
+            <button
+              className="button subtle"
+              aria-expanded={expanded}
+              onClick={() => setExpanded(!expanded)}
+            >
+              <Brain size={16} />
+              Passages ({live.anchors.length})
+            </button>
+          </div>
+        ),
+        reviews: (
+          <div className="memory-review-options">
+            {' '}
+            <button
+              className="button subtle"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await saved();
+                  navigate(`/study/free/${documentId}`);
+                })
+              }
+            >
+              <BookOpen size={16} />
+              Révision libre
+            </button>
+            <button
+              className="button subtle"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await saved();
+                  navigate(`/study?document=${documentId}`);
+                })
+              }
+            >
+              Révision programmée
+            </button>
+          </div>
+        ),
+        panel,
+      })}
       {error && (
         <p role="alert" className="alert error">
           {error}
         </p>
       )}
-      {expanded && (
-        <div className="memory-list">
-          {!live.anchors.length && (
-            <p>
-              Sélectionnez du texte puis choisissez « Créer un texte à trous ». Raccourci : Ctrl/Cmd
-              + Maj + M.
-            </p>
-          )}
-          {live.anchors.map((a, index) => {
-            const p = remote.data?.find((p) => p.id === a.id);
-            return (
-              <article className="memory-row" key={a.id}>
-                <button
-                  className="text-button passage-label"
-                  onClick={() => selectPassage(editor, a.id)}
-                >
-                  Passage {index + 1} : {a.quote.slice(0, 120)}
-                </button>
-                <label>
-                  Priorité
-                  <select
-                    aria-label={`Priorité du passage ${index + 1}`}
-                    value={a.priority ?? p?.priority ?? 'medium'}
-                    onChange={(e) =>
-                      modifyPassage(editor, a.id, {
-                        hint: a.hint ?? p?.hint ?? '',
-                        priority: e.target.value as Priority,
-                      })
-                    }
-                  >
-                    {Object.entries(priorityLabels).map(([key, label]) => (
-                      <option value={key} key={key}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="button subtle"
-                  onClick={() => {
-                    setHint(a.hint ?? p?.hint ?? '');
-                    setPriority(a.priority ?? p?.priority ?? 'medium');
-                    setModal({ id: a.id, doc: editor.state.doc });
-                  }}
-                >
-                  Modifier l’indice
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Supprimer l’annotation du passage ${index + 1}`}
-                  onClick={() => modifyPassage(editor, a.id, null)}
-                >
-                  <Trash2 size={16} />
-                </button>
-                {p?.status === 'needs_review' && (
-                  <div className="passage-warning">
-                    <p>
-                      La réponse a changé. Ce passage est suspendu du calendrier jusqu’à votre
-                      validation.
-                    </p>
-                    <button
-                      className="button subtle"
-                      disabled={busy}
-                      onClick={() => void run(() => confirm(p, false))}
-                    >
-                      Valider et conserver le calendrier
-                    </button>
-                    <button
-                      className="button subtle"
-                      disabled={busy}
-                      onClick={() => void run(() => confirm(p, true))}
-                    >
-                      Valider et recommencer l’apprentissage
-                    </button>
-                  </div>
-                )}
-              </article>
-            );
-          })}
-          {remote.data?.some((p) => p.status === 'deleted' && !present.has(p.id)) && (
-            <p className="muted">
-              Les passages supprimés sont exclus des révisions. Restaurer une version contenant
-              leurs annotations permet de les retrouver.
-            </p>
-          )}
+      {!live.empty && !modal && (
+        <div className="selection-float">
+          <button onMouseDown={(e) => e.preventDefault()} onClick={() => open.current()}>
+            <Plus size={16} /> Mémoriser ce passage
+          </button>
         </div>
       )}
       {modal && (
@@ -278,6 +301,6 @@ export function MemoryTools({
           </form>
         </Modal>
       )}
-    </section>
+    </>
   );
 }

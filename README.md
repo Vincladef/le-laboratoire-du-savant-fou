@@ -1,4 +1,6 @@
-# Le Laboratoire du Savant Fou
+# Bouche-trou
+
+Nouveau nom adopté à partir du modèle fourni par le titulaire, anciennement « Le Laboratoire du Savant Fou ». Le dépôt, l’URL, les comptes et les données restent les mêmes. Le bureau en papier froissé, les fiches Bristol et l’organisation de l’éditeur reprennent ce modèle ; ses simulations locales ne sont pas embarquées dans l’application. Voir [la refonte Bristol](docs/design-bristol.md).
 
 Application d’écriture, bibliothèque privée et mémorisation intégrée. React / Tiptap / PostgreSQL, API Netlify Functions, Neon Managed Better Auth, historique et récupération des sauvegardes. La mission 2 ajoute les textes à trous et FSRS 6.
 

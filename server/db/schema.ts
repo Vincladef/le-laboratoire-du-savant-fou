@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { PageLayout } from '../../src/shared/document';
 import {
   pgSchema,
   text,
@@ -151,12 +152,16 @@ export const documents = lab.table(
     content: jsonb('content').$type<Record<string, unknown>>().notNull(),
     plainText: text('plain_text').notNull().default(''),
     layout: jsonb('layout')
-      .$type<{ format: 'A4' | 'Letter'; margin: number; landscape: boolean }>()
+      .$type<PageLayout>()
       .notNull()
       .default({ format: 'A4', margin: 20, landscape: false }),
     schemaVersion: integer('schema_version').notNull().default(1),
     revision: integer('revision').notNull().default(1),
     cursor: integer('cursor').notNull().default(1),
+    viewState: jsonb('view_state')
+      .$type<{ tabId?: string; cursors?: Record<string, number> }>()
+      .notNull()
+      .default({}),
     lastOpenedAt: date('last_opened_at'),
     deletedAt: date('deleted_at'),
     createdAt: created(),
@@ -182,9 +187,7 @@ export const versions = lab.table(
     revision: integer('revision').notNull(),
     title: text('title').notNull(),
     content: jsonb('content').$type<Record<string, unknown>>().notNull(),
-    layout: jsonb('layout')
-      .$type<{ format: 'A4' | 'Letter'; margin: number; landscape: boolean }>()
-      .notNull(),
+    layout: jsonb('layout').$type<PageLayout>().notNull(),
     reason: text('reason').notNull().default('autosave'),
     createdAt: created(),
   },
@@ -243,6 +246,7 @@ export const memoryAnchors = lab.table(
     }).onDelete('cascade'),
     unique('anchors_id_owner').on(t.id, t.ownerId),
     index('anchors_owner_status_idx').on(t.ownerId, t.status),
+    index('anchors_document_owner_status_idx').on(t.documentId, t.ownerId, t.status),
     check('anchor_status', sql`${t.status} IN ('active','deleted','needs_review')`),
     check('anchor_priority', sql`${t.priority} IN ('high','medium','low')`),
   ],

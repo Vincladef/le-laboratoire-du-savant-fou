@@ -402,6 +402,9 @@ export function createApp(
           deletedAt: documents.deletedAt,
           lastOpenedAt: documents.lastOpenedAt,
           excerpt: sql<string>`left(${documents.plainText}, 180)`,
+          // Explicit outer qualification: Drizzle unqualifies projection columns in a
+          // single-table select, which would otherwise bind "id" to the inner anchor.
+          passageCount: sql<number>`(select count(*)::integer from lab.memory_anchors a where a.document_id = "lab"."documents"."id" and a.owner_id = "lab"."documents"."owner_id" and a.status <> 'deleted')`,
         })
         .from(documents)
         .where(and(...conditions))
@@ -487,15 +490,38 @@ export function createApp(
       : c.json(result.current);
   });
   app.put('/api/documents/:id/position', async (c) => {
-    const { cursor } = z
-      .object({ cursor: z.number().int().min(0).max(2_000_000) })
+    const { cursor, tabId } = z
+      .object({
+        cursor: z.number().int().min(0).max(2_000_000),
+        tabId: z.union([z.literal('main'), z.string().uuid()]).optional(),
+      })
       .parse(await c.req.json());
     await ownedDocument(c.req.param('id'), c.get('userId'));
     await db.transaction(async (tx) => {
       await lockProfile(tx, c.get('userId'));
+      const [doc] = await tx
+        .select()
+        .from(documents)
+        .where(owner(c.req.param('id'), c.get('userId')))
+        .for('update');
+      if (!doc) failure(404, 'Document introuvable.');
+      const tabIds =
+        (doc.content as RichNode).content?.[0]?.type === 'documentTab'
+          ? (doc.content.content as any[]).map((t) => t.attrs.id)
+          : ['main'];
+      if (tabId && !tabIds.includes(tabId))
+        failure(409, 'Cet onglet n’est pas encore synchronisé ou a été supprimé.');
+      const cursors = Object.fromEntries(
+        Object.entries(doc.viewState.cursors || {}).filter(([key]) => tabIds.includes(key)),
+      );
+      if (tabId) cursors[tabId] = cursor;
       await tx
         .update(documents)
-        .set({ cursor, lastOpenedAt: new Date() })
+        .set({
+          cursor,
+          lastOpenedAt: new Date(),
+          ...(tabId ? { viewState: { tabId, cursors } } : {}),
+        })
         .where(owner(c.req.param('id'), c.get('userId')));
       await tx
         .update(profiles)

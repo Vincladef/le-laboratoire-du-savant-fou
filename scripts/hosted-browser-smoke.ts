@@ -1,3 +1,4 @@
+import { documentMenu, reviewMenu, navigation } from '../tests/e2e/navigation';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium, expect } from '@playwright/test';
@@ -29,7 +30,7 @@ export async function verifyHostedBrowser(
     await expect(page.getByRole('button', { name: 'Continuer avec Google' })).toBeVisible();
     await page.getByLabel('Adresse email').fill(email);
     await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Entrer dans mon laboratoire' }).click();
+    await page.getByRole('button', { name: 'Me connecter' }).click();
     await expect(page).toHaveURL(/\/library$/, { timeout: 30000 });
     checks.push('hosted-browser-neon-login');
     await page.goto(`${origin}/document/${documentId}`);
@@ -40,12 +41,12 @@ export async function verifyHostedBrowser(
     ).toHaveAttribute('aria-expanded', 'false');
     const paper = page.locator('.document-paper');
     const paperBounds = await paper.boundingBox();
-    if (!paperBounds || paperBounds.width < 1250)
+    if (!paperBounds || paperBounds.width < 850)
       throw new Error('Page trop étroite sur ordinateur');
     await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
     await page.getByRole('button', { name: 'Masquer le plan', exact: true }).click();
-    checks.push('hosted-browser-wide-paper-and-outline-toggle');
+    checks.push('hosted-browser-stationery-and-outline-toggle');
     await expect(editor.locator('strong')).toContainText('Une réponse');
     await expect(editor.locator('em')).toContainText('formatée');
     await editor.focus();
@@ -77,6 +78,7 @@ export async function verifyHostedBrowser(
     ).json();
     if (anchors.length !== 3) throw new Error('Annotation navigateur non persistée');
     checks.push('hosted-browser-create-rich-passage');
+    await reviewMenu(page);
     await page.getByRole('button', { name: 'Révision libre', exact: true }).click();
     await expect(page).toHaveURL(/\/study\/free\//);
     await expect.poll(() => page.locator('.study-hidden').count()).toBeGreaterThan(0);
@@ -99,12 +101,32 @@ export async function verifyHostedBrowser(
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2))
       throw new Error('Débordement mobile');
     checks.push('hosted-browser-scheduled-fsrs-resume-mobile');
+    await page.goto(`${origin}/document/${documentId}`);
+    const plan = page.getByRole('button', { name: 'Plan du document', exact: true });
+    if ((await plan.getAttribute('aria-expanded')) === 'false') await plan.click();
+    await page.getByRole('button', { name: 'Ajouter un onglet', exact: true }).click();
+    await editor.fill('Onglet publié et conservé dans Neon.');
+    await expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 30000 });
+    const tabRecord = await (
+      await page.request.get(`${origin}/api/documents/${documentId}`)
+    ).json();
+    if (
+      tabRecord.content.content.length !== 2 ||
+      tabRecord.content.content[0].type !== 'documentTab'
+    )
+      throw new Error('Onglets non enregistrés via le navigateur');
+    await page.reload();
+    await expect(editor).toContainText('Onglet publié et conservé dans Neon.');
+    checks.push('hosted-browser-document-tabs-persistence');
     await page.goto(`${origin}/library`);
+    await navigation(page);
     await page.getByRole('button', { name: 'Déconnexion', exact: true }).click();
     await page.getByLabel('Adresse email').fill(email);
     await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Entrer dans mon laboratoire' }).click();
+    await page.getByRole('button', { name: 'Me connecter' }).click();
     await expect(page).toHaveURL(/\/library$/);
+    await page.goto(`${origin}/document/${documentId}`);
+    await expect(editor).toContainText('Onglet publié et conservé dans Neon.');
     await page.goto(sessionURL);
     await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
     checks.push('hosted-browser-relogin-persistence');

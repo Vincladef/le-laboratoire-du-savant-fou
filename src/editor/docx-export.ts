@@ -109,7 +109,12 @@ export async function makeDocx(
     for (let index = 0; index < nodes.length; index++) {
       const node = nodes[index];
       const a = node.attrs || {};
-      if (['paragraph', 'heading', 'codeBlock', 'blockMath'].includes(node.type)) {
+      if (node.type === 'documentTab') {
+        result.push(
+          new Paragraph({ text: a.title || 'Onglet', heading: HeadingLevel.HEADING_1 }),
+          ...(await blocks(node.content)),
+        );
+      } else if (['paragraph', 'heading', 'codeBlock', 'blockMath'].includes(node.type)) {
         const children =
           node.type === 'blockMath'
             ? [new TextRun({ text: `\\[${a.latex}\\]`, font: 'Cambria Math' })]
@@ -252,11 +257,17 @@ export async function makeDocx(
   return Packer.toBlob(
     new Document({
       title,
-      creator: 'Le Laboratoire du Savant Fou',
+      creator: 'Bouche-trou',
       numbering: { config: numbering },
       styles: {
         default: {
-          document: { run: { font: 'Arial', size: 22 }, paragraph: { spacing: { line: 360 } } },
+          document: {
+            run: {
+              font: layout.typography?.fontFamily || 'Arial',
+              size: (layout.typography?.fontSize || 11) * 2,
+            },
+            paragraph: { spacing: { line: 360 } },
+          },
         },
       },
       sections: [

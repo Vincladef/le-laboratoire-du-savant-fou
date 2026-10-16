@@ -8,7 +8,7 @@ import { createMailer } from './mail';
 export function createAuth(db: Database, config: AppConfig) {
   const mail = createMailer(config);
   return betterAuth({
-    appName: 'Le Laboratoire du Savant Fou',
+    appName: 'Bouche-trou',
     baseURL: config.baseURL,
     basePath: '/api/auth',
     secret: config.secret,

@@ -6,6 +6,7 @@ import { Library } from './library/Library';
 import { BillingPage, PricingPage } from './billing/BillingPage';
 import { LegalPage } from './billing/LegalPage';
 import { AdminPage } from './billing/AdminPage';
+import { Workspace } from './components/Workspace';
 const EditorPage = lazy(() =>
   import('./editor/EditorPage').then((module) => ({ default: module.EditorPage })),
 );
@@ -22,7 +23,7 @@ export function App() {
   useEffect(() => {
     if (!isPending) setBooted(true);
   }, [isPending]);
-  if (isPending && !booted) return <div className="app-loading">Ouverture du laboratoire…</div>;
+  if (isPending && !booted) return <div className="app-loading">Ouverture de Bouche-trou…</div>;
   const user = data?.user;
   return (
     <>
@@ -30,36 +31,114 @@ export function App() {
         <Routes>
           <Route path="/" element={user ? <Navigate to="/library" replace /> : <AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/legal/:page" element={<LegalPage />} />
+          <Route
+            path="/pricing"
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <PricingPage />
+                </Workspace>
+              ) : (
+                <PricingPage />
+              )
+            }
+          />
+          <Route
+            path="/legal/:page"
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <LegalPage />
+                </Workspace>
+              ) : (
+                <LegalPage />
+              )
+            }
+          />
           <Route
             path="/billing"
-            element={user ? <BillingPage userId={user.id} /> : <AuthPage returnTo="/billing" />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <BillingPage userId={user.id} />
+                </Workspace>
+              ) : (
+                <AuthPage returnTo="/billing" />
+              )
+            }
           />
           <Route
             path="/admin"
-            element={user ? <AdminPage userId={user.id} /> : <AuthPage returnTo="/admin" />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <AdminPage userId={user.id} />
+                </Workspace>
+              ) : (
+                <AuthPage returnTo="/admin" />
+              )
+            }
           />
           <Route
             path="/library"
-            element={user ? <Library user={user} /> : <Navigate to="/" replace />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <Library user={user} />
+                </Workspace>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
           />
           <Route
             path="/document/:id"
-            element={user ? <EditorPage user={user} /> : <Navigate to="/" replace />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <EditorPage user={user} />
+                </Workspace>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
           <Route
             path="/study"
-            element={user ? <StudyPage user={user} /> : <Navigate to="/" replace />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <StudyPage user={user} />
+                </Workspace>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
           />
           <Route
             path="/study/free/:id"
-            element={user ? <FreeStudyPage user={user} /> : <Navigate to="/" replace />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <FreeStudyPage user={user} />
+                </Workspace>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
           />
           <Route
             path="/study/session/:id"
-            element={user ? <ScheduledStudyPage user={user} /> : <Navigate to="/" replace />}
+            element={
+              user ? (
+                <Workspace user={user}>
+                  <ScheduledStudyPage user={user} />
+                </Workspace>
+              ) : (
+                <Navigate to="/" replace />
+              )
+            }
           />
         </Routes>
       </Suspense>

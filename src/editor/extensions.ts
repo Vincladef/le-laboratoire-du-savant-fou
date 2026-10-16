@@ -30,8 +30,14 @@ export function reidentifyPastedSlice(slice: Slice): Slice {
   }
   return new Slice(map(slice.content), slice.openStart, slice.openEnd);
 }
-export const MemoryAnchor = Mark.create({
+export type MemoryClipboard = {
+  token: string | null;
+  ids: Set<string>;
+  isPresent?: (ids: Set<string>) => boolean;
+};
+export const MemoryAnchor = Mark.create<{ clipboard?: MemoryClipboard }>({
   name: 'memoryAnchor',
+  addOptions: () => ({ clipboard: undefined }),
   inclusive: false,
   spanning: true,
   addAttributes() {
@@ -59,8 +65,7 @@ export const MemoryAnchor = Mark.create({
     ];
   },
   addProseMirrorPlugins() {
-    let cutToken: string | null = null;
-    let cutIds = new Set<string>();
+    const clipboard = this.options.clipboard || { token: null, ids: new Set<string>() };
     let preserveCut = false;
     let preserveDrag = false;
     return [
@@ -77,26 +82,28 @@ export const MemoryAnchor = Mark.create({
               });
               if (!ids.size) return false;
               const serialized = view.serializeForClipboard(slice);
-              cutToken = crypto.randomUUID();
-              cutIds = ids;
+              clipboard.token = crypto.randomUUID();
+              clipboard.ids = ids;
               event.clipboardData.clearData();
               event.clipboardData.setData('text/html', serialized.dom.innerHTML);
               event.clipboardData.setData('text/plain', serialized.text);
-              event.clipboardData.setData('application/x-laboratoire-cut', cutToken);
+              event.clipboardData.setData('application/x-laboratoire-cut', clipboard.token);
               view.dispatch(view.state.tr.deleteSelection().scrollIntoView());
               event.preventDefault();
               return true;
             },
             paste(view, event) {
               preserveCut = Boolean(
-                cutToken &&
-                event.clipboardData?.getData('application/x-laboratoire-cut') === cutToken,
+                clipboard.token &&
+                event.clipboardData?.getData('application/x-laboratoire-cut') === clipboard.token,
               );
+              if (preserveCut && clipboard.isPresent?.(clipboard.ids)) preserveCut = false;
               if (preserveCut)
                 view.state.doc.descendants((node) => {
                   if (
                     node.marks.some(
-                      (mark) => mark.type.name === 'memoryAnchor' && cutIds.has(mark.attrs.id),
+                      (mark) =>
+                        mark.type.name === 'memoryAnchor' && clipboard.ids.has(mark.attrs.id),
                     )
                   )
                     preserveCut = false;
@@ -113,7 +120,7 @@ export const MemoryAnchor = Mark.create({
             if (preserveCut || preserveDrag) {
               preserveCut = false;
               preserveDrag = false;
-              cutToken = null;
+              clipboard.token = null;
               return slice;
             }
             return reidentifyPastedSlice(slice);
@@ -146,6 +153,24 @@ export const PageBreak = Node.create({
     return { 'Mod-Enter': () => insertPageBreak(this.editor) };
   },
 });
+export const DocumentTabNode = Node.create({
+  name: 'documentTab',
+  content: 'block+',
+  isolating: true,
+  addAttributes: () => ({
+    id: { default: null },
+    title: { default: 'Onglet' },
+    parentId: { default: null },
+  }),
+  parseHTML: () => [{ tag: 'section[data-document-tab]' }],
+  renderHTML: ({ node }) => [
+    'section',
+    { 'data-document-tab': node.attrs.id, class: 'document-tab-section' },
+    ['h2', { class: 'document-tab-label', contenteditable: 'false' }, node.attrs.title],
+    ['div', {}, 0],
+  ],
+});
+const TabDocument = Node.create({ name: 'doc', topNode: true, content: 'block+ | documentTab+' });
 export function insertPageBreak(editor: Editor) {
   return editor
     .chain()
@@ -248,12 +273,15 @@ export function setBlockStyle(editor: Editor, attrs: { indent?: number; lineHeig
   editor.view.dispatch(tr);
   editor.commands.focus();
 }
-export const editorExtensions = () => [
+export const editorExtensions = (clipboard?: MemoryClipboard) => [
   StarterKit.configure({
+    document: false,
     link: { openOnClick: false, defaultProtocol: 'https', protocols: ['https', 'http', 'mailto'] },
     trailingNode: false,
     codeBlock: false,
   }),
+  TabDocument,
+  DocumentTabNode,
   CodeBlock.extend({ marks: 'memoryAnchor' }),
   TextStyleKit.configure({ lineHeight: false }),
   TextAlign.configure({ types: ['heading', 'paragraph'] }),
@@ -265,6 +293,6 @@ export const editorExtensions = () => [
   Mathematics.configure({ katexOptions: { throwOnError: false, trust: false, strict: 'warn' } }),
   BlockLayout,
   PageBreak,
-  MemoryAnchor,
+  MemoryAnchor.configure({ clipboard }),
   SearchHighlight,
 ];

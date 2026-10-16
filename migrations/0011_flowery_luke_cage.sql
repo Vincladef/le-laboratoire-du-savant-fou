@@ -1,0 +1,1 @@
+CREATE INDEX "anchors_document_owner_status_idx" ON "lab"."memory_anchors" USING btree ("document_id","owner_id","status");

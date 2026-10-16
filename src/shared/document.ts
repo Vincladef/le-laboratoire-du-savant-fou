@@ -7,14 +7,35 @@ export type RichNode = {
   marks?: { type: string; attrs?: Record<string, any> }[];
   content?: RichNode[];
 };
-export const emptyDocument: RichNode = { type: 'doc', content: [{ type: 'paragraph' }] };
+export const emptyDocument: RichNode = {
+  type: 'doc',
+  content: [{ type: 'paragraph', attrs: { lineHeight: '1.75' } }],
+};
 export const layoutSchema = z.object({
   format: z.enum(['A4', 'Letter']),
   margin: z.number().min(10).max(40),
   landscape: z.boolean(),
+  typography: z
+    .object({
+      fontFamily: z.enum([
+        'Arial',
+        'Georgia',
+        'Times New Roman',
+        'Verdana',
+        'Courier New',
+        'Trebuchet MS',
+      ]),
+      fontSize: z.number().int().min(8).max(72),
+    })
+    .optional(),
 });
 export type PageLayout = z.infer<typeof layoutSchema>;
-export const defaultLayout: PageLayout = { format: 'A4', margin: 20, landscape: false };
+export const defaultLayout: PageLayout = {
+  format: 'A4',
+  margin: 20,
+  landscape: false,
+  typography: { fontFamily: 'Georgia', fontSize: 13 },
+};
 export const fonts = [
   'Arial',
   'Georgia',
@@ -25,6 +46,7 @@ export const fonts = [
 ];
 const nodes = new Set([
   'doc',
+  'documentTab',
   'paragraph',
   'heading',
   'text',
@@ -79,7 +101,7 @@ export function validateDocument(value: unknown): RichNode {
     const a = node.attrs || {};
     if (a.textAlign && !['left', 'center', 'right', 'justify'].includes(a.textAlign))
       throw new Error('Alignement invalide.');
-    if (a.lineHeight && !['1', '1.15', '1.5', '2', '2.5'].includes(String(a.lineHeight)))
+    if (a.lineHeight && !['1', '1.15', '1.5', '1.75', '2', '2.5'].includes(String(a.lineHeight)))
       throw new Error('Interligne invalide.');
     if (a.indent !== undefined && (!Number.isInteger(a.indent) || a.indent < 0 || a.indent > 8))
       throw new Error('Retrait invalide.');
@@ -156,27 +178,31 @@ export function validateDocument(value: unknown): RichNode {
       'pageBreak',
     ]);
     const allowed =
-      node.type === 'doc' || ['blockquote', 'tableCell', 'tableHeader'].includes(node.type)
-        ? blocks
-        : ['paragraph', 'heading'].includes(node.type)
-          ? inline
-          : node.type === 'codeBlock'
-            ? new Set(['text'])
-            : node.type === 'table'
-              ? new Set(['tableRow'])
-              : node.type === 'tableRow'
-                ? new Set(['tableCell', 'tableHeader'])
-                : ['bulletList', 'orderedList'].includes(node.type)
-                  ? new Set(['listItem'])
-                  : node.type === 'taskList'
-                    ? new Set(['taskItem'])
-                    : ['listItem', 'taskItem'].includes(node.type)
-                      ? blocks
-                      : new Set<string>();
+      node.type === 'doc' && children[0]?.type === 'documentTab'
+        ? new Set(['documentTab'])
+        : node.type === 'doc' ||
+            ['documentTab', 'blockquote', 'tableCell', 'tableHeader'].includes(node.type)
+          ? blocks
+          : ['paragraph', 'heading'].includes(node.type)
+            ? inline
+            : node.type === 'codeBlock'
+              ? new Set(['text'])
+              : node.type === 'table'
+                ? new Set(['tableRow'])
+                : node.type === 'tableRow'
+                  ? new Set(['tableCell', 'tableHeader'])
+                  : ['bulletList', 'orderedList'].includes(node.type)
+                    ? new Set(['listItem'])
+                    : node.type === 'taskList'
+                      ? new Set(['taskItem'])
+                      : ['listItem', 'taskItem'].includes(node.type)
+                        ? blocks
+                        : new Set<string>();
     if (children.some((child) => !allowed.has(child.type)))
       throw new Error('Hiérarchie documentaire invalide.');
     if (
       [
+        'documentTab',
         'table',
         'tableRow',
         'tableCell',
@@ -211,6 +237,31 @@ export function validateDocument(value: unknown): RichNode {
   if ((value as any)?.type !== 'doc' || !(value as any)?.content?.length)
     throw new Error('Document vide ou invalide.');
   visit(value, 0);
+  const tabs = (value as RichNode).content?.filter((n) => n.type === 'documentTab') || [];
+  if (tabs.length) {
+    if (tabs.length > 100) throw new Error('Trop d’onglets.');
+    const ids = new Set(tabs.map((t) => t.attrs?.id));
+    if (ids.size !== tabs.length) throw new Error('Identités d’onglets dupliquées.');
+    for (const tab of tabs) {
+      const { id, title, parentId } = tab.attrs || {};
+      if (
+        !(id === 'main' || validId(id)) ||
+        typeof title !== 'string' ||
+        !title.trim() ||
+        title.length > 100 ||
+        (parentId != null && !ids.has(parentId))
+      )
+        throw new Error('Onglet invalide.');
+      const seen = new Set([id]);
+      let parent = parentId,
+        depth = 0;
+      while (parent) {
+        if (seen.has(parent) || ++depth > 2) throw new Error('Hiérarchie d’onglets invalide.');
+        seen.add(parent);
+        parent = tabs.find((t) => t.attrs?.id === parent)?.attrs?.parentId;
+      }
+    }
+  }
   extractAnchors(value as RichNode);
   return value as RichNode;
 }
@@ -229,7 +280,9 @@ export function plainText(node: RichNode): string {
   return (node.content || [])
     .map(plainText)
     .join(
-      ['doc', 'bulletList', 'orderedList', 'taskList', 'table', 'tableRow'].includes(node.type)
+      ['doc', 'documentTab', 'bulletList', 'orderedList', 'taskList', 'table', 'tableRow'].includes(
+        node.type,
+      )
         ? '\n'
         : '',
     );
@@ -303,6 +356,7 @@ export type DocumentRecord = {
   layout: PageLayout;
   revision: number;
   cursor: number;
+  viewState?: { tabId?: string; cursors?: Record<string, number> };
   createdAt: string;
   updatedAt: string;
   deletedAt: string | null;
@@ -323,5 +377,7 @@ export function copyWithNewAnchors(content: RichNode): RichNode {
   visit(copy);
   return copy;
 }
-export type DocumentSummary = Omit<DocumentRecord, 'content' | 'layout' | 'ownerId' | 'cursor'>;
+export type DocumentSummary = Omit<DocumentRecord, 'content' | 'layout' | 'ownerId' | 'cursor'> & {
+  passageCount?: number;
+};
 export type FolderRecord = { id: string; name: string; parentId: string | null; updatedAt: string };

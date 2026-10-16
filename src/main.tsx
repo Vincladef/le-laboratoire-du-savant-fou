@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
 import { RecoveryBoundary } from './components/RecoveryBoundary';
 import './styles.css';
+import './stationery.css';
 import 'katex/dist/katex.min.css';
 const client = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },

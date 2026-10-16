@@ -71,6 +71,20 @@
       "when": 1792091430575,
       "tag": "0009_lucky_stephen_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792164199518,
+      "tag": "0010_heavy_jasper_sitwell",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792165754586,
+      "tag": "0011_flowery_luke_cage",
+      "breakpoints": true
     }
   ]
 }

@@ -1,3 +1,4 @@
+import { documentMenu, reviewMenu, navigation } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
@@ -16,7 +17,7 @@ test('explique l’indisponibilité des emails tout en conservant la connexion',
   await expect(page.getByRole('status')).toContainText(
     'L’envoi des emails est en cours de configuration',
   );
-  await expect(page.getByRole('button', { name: 'Entrer dans mon laboratoire' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Me connecter' })).toBeEnabled();
   await page.getByRole('button', { name: 'Créer mon espace' }).click();
   await expect(page.getByRole('button', { name: 'Créer mon compte' })).toBeDisabled();
 });
@@ -63,7 +64,9 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await page.getByRole('button', { name: 'Nouveau dossier', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Nom', { exact: true }).fill('Carnets de physique');
   await page.getByRole('dialog').getByRole('button', { name: 'Enregistrer', exact: true }).click();
-  await expect(page.locator('.folder-card')).toContainText('Carnets de physique');
+  await expect(
+    page.getByRole('button', { name: 'Carnets de physique', exact: true }),
+  ).toBeVisible();
   await newDocument(page);
   await page.getByLabel('Titre du document').fill('Les expériences de Camille');
   const editor = page.getByRole('textbox', { name: 'Contenu du document' });
@@ -71,6 +74,7 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await editor.press('ControlOrMeta+a');
   await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
   await expect(editor.locator('strong')).toHaveText('Première observation scientifique.');
+  await page.getByRole('button', { name: 'Outils', exact: true }).click();
   await page.getByLabel('Police', { exact: true }).selectOption('Georgia');
   await page.getByLabel('Taille de police', { exact: true }).selectOption('14pt');
   await page.getByLabel('Interligne', { exact: true }).selectOption('2');
@@ -126,6 +130,7 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await page.getByRole('button', { name: 'Saut de page (Ctrl+Entrée)', exact: true }).click();
   await page.keyboard.type('Deuxième page.');
   await saved(page);
+  await documentMenu(page);
   await page.getByRole('button', { name: 'Historique', exact: true }).click();
   await expect(page.locator('.version-item')).not.toHaveCount(0);
   await page.getByRole('button', { name: 'Fermer l’historique' }).click();
@@ -140,6 +145,7 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   const parsedPDF = await PDFDocument.load(pdf);
   expect(parsedPDF.getPageCount()).toBeGreaterThanOrEqual(2);
   expect(parsedPDF.getPage(0).getWidth()).toBeCloseTo(595, -1);
+  await documentMenu(page);
   await page.getByRole('button', { name: 'Exporter', exact: true }).click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Document Word (.docx)', exact: true }).click();
@@ -147,14 +153,15 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await download.saveAs(testInfo.outputPath('document.docx'));
   expect(download.suggestedFilename()).toBe('Les expériences de Camille.docx');
   const url = page.url();
-  await page.getByRole('button', { name: 'Revenir à la bibliothèque' }).click();
+  await page.getByRole('button', { name: 'Revenir à la bibliothèque', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Les expériences de Camille' }).first(),
   ).toBeVisible();
+  await navigation(page);
   await page.getByRole('button', { name: 'Déconnexion', exact: true }).click();
   await page.getByLabel('Adresse email').fill(email);
   await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Entrer dans mon laboratoire' }).click();
+  await page.getByRole('button', { name: 'Me connecter' }).click();
   await expect(page).toHaveURL(/\/library$/);
   await page.goto(url);
   await expect(editor).toContainText('Première observation scientifique.');
@@ -232,6 +239,7 @@ test('import DOCX réel, listes, liens, copier-coller enrichi et vue mobile', as
     },
     defaultLayout,
   );
+  await documentMenu(page);
   await page.getByRole('button', { name: 'Importer', exact: true }).click();
   await page.locator('input[accept=".docx,.json"]').setInputFiles({
     name: 'Import scientifique.docx',
@@ -245,6 +253,7 @@ test('import DOCX réel, listes, liens, copier-coller enrichi et vue mobile', as
   await editor.press('ControlOrMeta+End');
   await editor.press('Enter');
   await editor.press('Enter');
+  await page.getByRole('button', { name: 'Outils', exact: true }).click();
   await page.getByRole('button', { name: 'Cases à cocher', exact: true }).click();
   await page.keyboard.type('Vérifier les résultats');
   await expect(editor.locator('input[type=checkbox]')).toBeVisible();

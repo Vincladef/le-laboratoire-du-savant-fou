@@ -41,7 +41,7 @@ function maskExtension(reveal: (id: string) => void) {
                       const button = document.createElement('button');
                       button.type = 'button';
                       button.className = 'study-reveal';
-                      button.textContent = '[ Révéler ]';
+                      button.textContent = '········';
                       button.setAttribute('aria-label', `Révéler le passage ${index}`);
                       button.addEventListener('click', () => reveal(id));
                       return button;
@@ -79,7 +79,13 @@ export function StudyDocument({
     if (editor) editor.view.dispatch(editor.state.tr.setMeta(maskKey, new Set(hidden)));
   }, [editor, hidden.join(',')]);
   return (
-    <div className="study-paper document-page" style={{ padding: `${doc.layout.margin}mm` }}>
+    <div
+      className="study-paper document-page"
+      style={{
+        fontFamily: doc.layout.typography?.fontFamily || 'Arial',
+        fontSize: `${doc.layout.typography?.fontSize || 11}pt`,
+      }}
+    >
       <EditorContent editor={editor} />
     </div>
   );

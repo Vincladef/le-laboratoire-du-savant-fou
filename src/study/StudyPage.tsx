@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
-import { ArrowLeft, BookOpen, RotateCcw } from 'lucide-react';
-import { Brand } from '../components/Brand';
+import { ArrowLeft, BookOpen, RotateCcw, MoreHorizontal } from 'lucide-react';
+
 import { api, ApiError, json } from '../lib/api';
 import {
   priorityLabels,
@@ -44,7 +44,6 @@ function Header({ title, back = '/library' }: { title: string; back?: string }) 
       <Link className="icon-button" aria-label="Revenir à la bibliothèque" to={back}>
         <ArrowLeft size={21} />
       </Link>
-      <Brand compact />
       <h1>{title}</h1>
     </header>
   );
@@ -141,48 +140,55 @@ export function StudyPage({ user }: Props) {
   }
   return (
     <main className="study-shell">
-      <Header title="Vos révisions" />
+      <Header title="Réviser" />
+      <p className="study-intro">Retrouver vos idées, au bon moment.</p>
       <div className="study-settings">
         <section className="study-card">
           <span className="eyebrow">RÉVISION PROGRAMMÉE</span>
-          <h2>Reprendre au bon moment.</h2>
+          <h2>On s’y remet ?</h2>
           <p>
             Chaque passage suit son propre calendrier. Choisissez ce que vous souhaitez réviser
             aujourd’hui.
           </p>
-          <label>
-            Périmètre
-            <select
-              aria-label="Périmètre de révision"
-              value={scope}
-              onChange={(e) => setScope(e.target.value)}
-            >
-              <option value="all">Tous mes documents</option>
-              <option value="documents">Choisir des documents</option>
-              <option value="folders">Choisir des dossiers et leurs sous-dossiers</option>
-            </select>
-          </label>
-          {scope !== 'all' && (
-            <fieldset className="study-scope">
-              <legend>{scope === 'documents' ? 'Documents' : 'Dossiers'}</legend>
-              {(scope === 'documents' ? docs.data : folders.data)?.map((item) => (
-                <label key={item.id}>
-                  <input
-                    type="checkbox"
-                    checked={(scope === 'documents' ? documentIds : folderIds).includes(item.id)}
-                    onChange={(e) => {
-                      const setter = scope === 'documents' ? setDocuments : setFolders;
-                      setter((ids) =>
-                        e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id),
-                      );
-                    }}
-                  />
-                  {'title' in item ? item.title : item.name}
-                </label>
-              ))}
-            </fieldset>
-          )}
-          <LevelPicker value={level} onChange={setLevel} />
+          <details
+            className="study-filter-options"
+            open={params.has('document') || params.has('folder')}
+          >
+            <summary>Choisir les documents et les priorités</summary>
+            <label>
+              Périmètre
+              <select
+                aria-label="Périmètre de révision"
+                value={scope}
+                onChange={(e) => setScope(e.target.value)}
+              >
+                <option value="all">Tous mes documents</option>
+                <option value="documents">Choisir des documents</option>
+                <option value="folders">Choisir des dossiers et leurs sous-dossiers</option>
+              </select>
+            </label>
+            {scope !== 'all' && (
+              <fieldset className="study-scope">
+                <legend>{scope === 'documents' ? 'Documents' : 'Dossiers'}</legend>
+                {(scope === 'documents' ? docs.data : folders.data)?.map((item) => (
+                  <label key={item.id}>
+                    <input
+                      type="checkbox"
+                      checked={(scope === 'documents' ? documentIds : folderIds).includes(item.id)}
+                      onChange={(e) => {
+                        const setter = scope === 'documents' ? setDocuments : setFolders;
+                        setter((ids) =>
+                          e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id),
+                        );
+                      }}
+                    />
+                    {'title' in item ? item.title : item.name}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <LevelPicker value={level} onChange={setLevel} />
+          </details>
           {(error || due.error || docs.error || folders.error || sessions.error) && (
             <p role="alert" className="alert error">
               {error ||
@@ -301,38 +307,42 @@ export function FreeStudyPage({ user }: Props) {
       </main>
     );
   return (
-    <main className="study-shell">
-      <Header title={`Révision libre · ${doc.data.title}`} back={`/document/${id}`} />
-      <div className="study-controls">
-        <LevelPicker
-          value={level}
-          onChange={(v) => {
-            setLevel(v);
-            setRevealed(new Set());
-            setHints(new Set());
-          }}
-        />
-        <p role="status">
-          {selected.length - hidden.length} / {selected.length} réponses révélées · calendrier
-          inchangé
-        </p>
-        <button
-          className="button primary"
-          onClick={() => setRevealed(new Set(selected.map((p) => p.id)))}
-        >
-          Révéler toutes les réponses
-        </button>
-        <button
-          className="button subtle"
-          onClick={() => {
-            setRevealed(new Set());
-            setHints(new Set());
-          }}
-        >
-          <RotateCcw size={16} />
-          Recommencer
-        </button>
-        <small>Espace : révéler le passage suivant · R : recommencer</small>
+    <main className="study-shell study-session">
+      <div className="study-session-toolbar">
+        <Header title={doc.data.title} back={`/document/${id}`} />
+        <span className="session-mode">Libre · calendrier inchangé</span>
+        <div className="study-controls">
+          <LevelPicker
+            value={level}
+            onChange={(v) => {
+              setLevel(v);
+              setRevealed(new Set());
+              setHints(new Set());
+            }}
+          />
+          <p role="status">
+            {selected.length - hidden.length} / {selected.length} réponses révélées
+          </p>
+          <button
+            className="button primary"
+            onClick={() => setRevealed(new Set(selected.map((p) => p.id)))}
+          >
+            Révéler toutes les réponses
+          </button>
+          <button
+            className="button subtle"
+            onClick={() => {
+              setRevealed(new Set());
+              setHints(new Set());
+            }}
+          >
+            <RotateCcw size={16} />
+            Recommencer
+          </button>
+          <small className="session-keyboard-help">
+            Espace : révéler le passage suivant · R : recommencer
+          </small>
+        </div>
       </div>
       {passages.data?.some((p) => p.status === 'needs_review') && (
         <p className="alert info">
@@ -346,7 +356,8 @@ export function FreeStudyPage({ user }: Props) {
         </p>
       )}
       <div className="study-workspace">
-        <aside className="study-passages" aria-label="Passages de la révision">
+        <details className="study-passages" aria-label="Passages de la révision">
+          <summary>Indices et passages</summary>
           {selected.map((p, i) => (
             <article key={p.id}>
               <strong>Passage {i + 1}</strong>
@@ -371,7 +382,7 @@ export function FreeStudyPage({ user }: Props) {
               </button>
             </article>
           ))}
-        </aside>
+        </details>
         <StudyDocument key={doc.data.id} document={doc.data} hidden={hidden} onReveal={reveal} />
       </div>
     </main>
@@ -507,8 +518,61 @@ export function ScheduledStudyPage({ user }: Props) {
   });
   const current = session?.current;
   return (
-    <main className="study-shell">
-      <Header title="Révision programmée" back="/study" />
+    <main className="study-shell study-session">
+      <div className="study-session-toolbar">
+        <Header title={current?.document.title || 'Révision programmée'} back="/study" />
+        <span className="session-mode">Programmée · FSRS</span>
+        {session && (
+          <div className="session-progress">
+            <p role="status">
+              {session.completed} / {session.total} passages révisés
+              {session.skipped ? ` · ${session.skipped} devenus inéligibles` : ''}
+            </p>
+            <progress
+              aria-label="Progression de la séance"
+              value={session.completed}
+              max={Math.max(1, session.total)}
+            />
+          </div>
+        )}
+        {current && (
+          <>
+            <small className="session-priority">
+              Priorité {priorityLabels[current.anchor.priority].toLowerCase()}
+            </small>
+            {current.anchor.hint && (
+              <button
+                className="button subtle"
+                aria-expanded={showHint}
+                onClick={() => setShowHint(!showHint)}
+              >
+                Afficher l’indice
+              </button>
+            )}
+            {!current.revealed && (
+              <button
+                className="button primary"
+                disabled={busy || hasPending}
+                onClick={() => void reveal()}
+              >
+                Révéler la réponse
+              </button>
+            )}
+          </>
+        )}
+        <details className="menu session-options">
+          <summary aria-label="Options de la révision" className="icon-button">
+            <MoreHorizontal size={20} />
+          </summary>
+          <div className="menu-popover">
+            <Link to="/study">Interrompre et reprendre plus tard</Link>
+            {current && (
+              <Link to={`/document/${current.document.id}`}>Ouvrir ce document dans l’éditeur</Link>
+            )}
+            <small>Espace : révéler · 1 à 4 : évaluer après révélation</small>
+          </div>
+        </details>
+      </div>
       {error && (
         <div className="alert error" role="alert">
           <p>{error}</p>
@@ -560,18 +624,8 @@ export function ScheduledStudyPage({ user }: Props) {
           )}
         </div>
       )}
+
       {!session && !error && <p className="app-loading">Reprise de votre séance…</p>}
-      {session && (
-        <div className="study-controls">
-          <p role="status">
-            {session.completed} / {session.total} passages révisés
-            {session.skipped ? ` · ${session.skipped} devenus inéligibles` : ''}
-          </p>
-          <Link className="text-button" to="/study">
-            Interrompre et reprendre plus tard
-          </Link>
-        </div>
-      )}
       {session && !current && (
         <section className="study-card study-finished">
           <h2>Séance terminée.</h2>
@@ -583,26 +637,12 @@ export function ScheduledStudyPage({ user }: Props) {
       )}
       {current && (
         <>
-          <div className="study-controls">
-            <h2>{current.document.title}</h2>
-            <small>Priorité {priorityLabels[current.anchor.priority].toLowerCase()}</small>
-            {current.anchor.hint && (
-              <>
-                <button className="button subtle" onClick={() => setShowHint(!showHint)}>
-                  Afficher l’indice
-                </button>
-                {showHint && <p className="hint">{current.anchor.hint}</p>}
-              </>
-            )}
-            {!current.revealed ? (
-              <button
-                className="button primary"
-                disabled={busy || hasPending}
-                onClick={() => void reveal()}
-              >
-                Révéler la réponse
-              </button>
-            ) : (
+          {showHint && current.anchor.hint && (
+            <p className="hint session-hint">{current.anchor.hint}</p>
+          )}
+          {current.revealed && (
+            <section className="review-grade">
+              <h2>Comment s’est passé ce rappel ?</h2>
               <div className="rating-buttons" aria-label="Évaluer ma mémorisation">
                 {Object.entries(ratingLabels).map(([rating, label]) => (
                   <button
@@ -618,10 +658,8 @@ export function ScheduledStudyPage({ user }: Props) {
                   </button>
                 ))}
               </div>
-            )}
-            <small>Espace : révéler · 1 à 4 : évaluer après révélation</small>
-            <Link to={`/document/${current.document.id}`}>Ouvrir ce document dans l’éditeur</Link>
-          </div>
+            </section>
+          )}
           <StudyDocument
             key={`${current.itemId}/${current.document.revision}`}
             document={current.document}

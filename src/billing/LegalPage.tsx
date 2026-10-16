@@ -58,7 +58,7 @@ export function LegalPage() {
   };
   return (
     <main className="account-page legal-page">
-      <Link to="/">← Le laboratoire</Link>
+      <Link to="/">← Bouche-trou</Link>
       <h1>{titles[page || ''] || 'Informations légales'}</h1>
       {query.error && <p role="alert">{query.error.message}</p>}
       {!query.data?.configured && (
@@ -172,11 +172,11 @@ export function LegalPage() {
           </p>
           <h2>Service, formules et commande</h2>
           <p>
-            Le Laboratoire du Savant Fou permet de rédiger des documents, d’annoter des textes à
-            trous et de réviser avec FSRS. La <Link to="/pricing">page des formules</Link> décrit
-            les plafonds applicables. Le moteur d’édition n’est pas une garantie de fidélité
-            parfaite à Google Docs ou Word : pagination visuelle, impression PDF et conversions DOCX
-            ont les limites documentées dans l’application et le dépôt.
+            Bouche-trou permet de rédiger des documents, d’annoter des textes à trous et de réviser
+            avec FSRS. La <Link to="/pricing">page des formules</Link> décrit les plafonds
+            applicables. Le moteur d’édition n’est pas une garantie de fidélité parfaite à Google
+            Docs ou Word : pagination visuelle, impression PDF et conversions DOCX ont les limites
+            documentées dans l’application et le dépôt.
           </p>
           <p>
             Gratuit : 0 €. Pro : 9 € par mois TTC. Premium : 19 € par mois TTC, sous réserve de la
@@ -242,8 +242,8 @@ export function LegalPage() {
           <h2>Modèle à compléter</h2>
           <blockquote>
             À l’attention de {field('publisher')}, {field('withdrawalAddress')} :<br />
-            Je vous notifie ma rétractation du contrat portant sur l’abonnement au Laboratoire du
-            Savant Fou, conclu le [date].
+            Je vous notifie ma rétractation du contrat portant sur l’abonnement à Bouche-trou,
+            conclu le [date].
             <br />
             Nom et prénom : […]
             <br />

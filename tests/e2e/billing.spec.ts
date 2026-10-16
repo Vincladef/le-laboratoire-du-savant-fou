@@ -1,10 +1,11 @@
+import { documentMenu, reviewMenu, navigation } from './navigation';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
 test('liens Stripe directs, conditions discrètes et droits privés non falsifiables', async ({
   page,
 }) => {
   await page.goto('/pricing');
-  await expect(page.getByRole('heading', { name: 'Les formules du laboratoire' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Les formules Bouche-trou' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Premium', exact: true })).toBeVisible();
   await expect(

@@ -1,0 +1,1 @@
+ALTER TABLE "lab"."documents" ADD COLUMN "view_state" jsonb DEFAULT '{}'::jsonb NOT NULL;

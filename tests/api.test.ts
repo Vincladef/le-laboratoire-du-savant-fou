@@ -342,6 +342,67 @@ describe('Fichiers privés et redémarrage', () => {
   });
 });
 describe('Configuration de production', () => {
+  it('persiste l’onglet et le curseur côté serveur, refuse un onglet inconnu et les accès étrangers', async () => {
+    const tabId = crypto.randomUUID();
+    const created = await alice.request('/documents', 'POST', {
+      title: 'Onglets privés',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'documentTab',
+            attrs: { id: 'main', title: 'Principal', parentId: null },
+            content: [
+              {
+                type: 'paragraph',
+                content: [
+                  {
+                    type: 'text',
+                    text: 'Alpha',
+                    marks: [
+                      {
+                        type: 'memoryAnchor',
+                        attrs: { id: crypto.randomUUID(), priority: 'high', hint: 'Indice' },
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'documentTab',
+            attrs: { id: tabId, title: 'Deuxième', parentId: null },
+            content: content('B').content,
+          },
+        ],
+      },
+      layout: defaultLayout,
+    });
+    expect(created.status).toBe(201);
+    const doc = await created.json();
+    const listed = await (await alice.request('/documents')).json();
+    expect(listed.find((row: any) => row.id === doc.id).passageCount).toBe(1);
+    expect(
+      (await alice.request(`/documents/${doc.id}/position`, 'PUT', { cursor: 2, tabId })).status,
+    ).toBe(200);
+    expect((await (await alice.request(`/documents/${doc.id}`)).json()).viewState).toEqual({
+      tabId,
+      cursors: { [tabId]: 2 },
+    });
+    expect(
+      (
+        await alice.request(`/documents/${doc.id}/position`, 'PUT', {
+          cursor: 2,
+          tabId: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (await bob.request(`/documents/${doc.id}/position`, 'PUT', { cursor: 1, tabId })).status,
+    ).toBe(404);
+    expect((await bob.request(`/documents/${doc.id}`)).status).toBe(404);
+  });
   it('refuse le mode local et toute absence de secrets en production', () => {
     const old = { NODE_ENV: process.env.NODE_ENV, LAB_LOCAL: process.env.LAB_LOCAL };
     process.env.NODE_ENV = 'production';
