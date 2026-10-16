@@ -13,8 +13,11 @@ async function signIn(page: Page, email: string, password: string) {
       ),
       page.getByRole('button', { name: 'Me connecter', exact: true }).click(),
     ]);
+    // Playwright joins Set-Cookie entries with newlines in allHeaders(). Never
+    // reconstruct a Headers object from it; only Retry-After is needed here.
+    const retryAfter = await response.headerValue('retry-after');
     const delay = authRetryDelay(
-      { status: response.status(), headers: new Headers(await response.allHeaders()) },
+      { status: response.status(), headers: { get: () => retryAfter } },
       attempt,
     );
     if (delay === null) {

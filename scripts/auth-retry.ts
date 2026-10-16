@@ -1,6 +1,6 @@
 /** Test harness only: wait for the provider's window, never change auth limits or client IPs. */
 export function authRetryDelay(
-  response: Pick<Response, 'status' | 'headers'>,
+  response: { status: number; headers: Pick<Headers, 'get'> },
   attempt: number,
   now = Date.now(),
 ): number | null {

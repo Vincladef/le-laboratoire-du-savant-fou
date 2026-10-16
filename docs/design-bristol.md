@@ -15,7 +15,7 @@ Les documents existants conservent leur typographie de base historique et leurs 
 
 ## Vérifications locales
 
-À ce stade : TypeScript, 85 tests Vitest (10 fichiers), compilation Vite et empaquetage Functions v2 réussis ; 13 parcours Playwright/Chromium réussis. Recette : inscription/confirmation locale, connexion, bibliothèque, édition riche, tableaux, images, mathématiques, DOCX, PDF, historique, récupération, conflits, annotations, FSRS, reprise mobile, onglets et export complet. Vérifications axe-core WCAG A/AA sur les écrans sélectionnés sans violation dans cette campagne ; ce n’est pas une certification complète d’accessibilité.
+À ce stade : TypeScript, 88 tests Vitest (11 fichiers), compilation Vite et empaquetage Functions v2 réussis ; 13 parcours Playwright/Chromium réussis. Recette : inscription/confirmation locale, connexion, bibliothèque, édition riche, tableaux, images, mathématiques, DOCX, PDF, historique, récupération, conflits, annotations, FSRS, reprise mobile, onglets et export complet. Vérifications axe-core WCAG A/AA sur les écrans sélectionnés sans violation dans cette campagne ; ce n’est pas une certification complète d’accessibilité.
 
 Les premiers essais ont révélé des règles CSS historiques concurrentes, un contraste insuffisant et un nettoyage de raccourci visant une ancienne vue Tiptap. Corrigés et rejoués. Les sélecteurs des tests ont été adaptés aux menus réels ; les assertions de persistance, d’isolation, de contenu et de droits restent actives.
 
@@ -23,4 +23,12 @@ Le scénario d’onglets a été étendu : suppression d’un parent avec son so
 
 Le premier build development (`6ad24a601e95678f67cb390b`) a atteint une limite de connexion Neon lors des contrôles synthétiques et n’a pas été publié. La recette attend désormais `Retry-After` avant un nouvel essai, avec un maximum de deux attentes et sans modification des limites, faux changement d’adresse IP ou suppression des compteurs. La production n’a pas été modifiée par cet essai.
 
-Publication development puis production et contrôle de persistance Neon : à compléter après les déploiements vérifiés. Aucun achat Stripe ni changement d’abonnement n’est déclenché par cette refonte. Le raccordement du paiement automatique et les autres limites historiques décrites dans [la recette mission 4](validation-mission-4.md) ne deviennent pas opérationnels par un changement graphique.
+## Publication development
+
+Le commit applicatif `082e7ee177b8ae56f6f128526ffeaeeb9701ed1b`, puis le complément de recette `72ecbb4462b1d0720b114bccb699d7e86fadbae7`, ont été poussés et relus sur GitHub. Le déploiement development **`6ad24bef9f64a53846847ac1`** est `ready` : **16 contrôles Auth/Neon réussis**, **12 migrations reconnues**, **19 tables**. Les deux migrations additives ont été appliquées avant la limite de connexion du premier essai, puis reconnues sans réapplication à la relance.
+
+L’inventaire de développement avant/après est identique : 4 identités Neon Auth conservées, aucun utilisateur applicatif ni document de recette restant. Lecture SQL directe de la persistance FSRS, des contenus d’onglets et de leur position de reprise. Les accès anonymes/étrangers, la révocation de session et les conflits restent contrôlés. La réception d’un email dans une boîte personnelle et le consentement Google personnel ne sont pas attestés par ces fixtures.
+
+La recette HTTPS `6ad24c51e7106d7050bcf207` a révélé un défaut du lecteur d’en-têtes du harnais de tests : `allHeaders()` de Playwright regroupe plusieurs `Set-Cookie` avec des sauts de ligne, ce qui ne peut pas être passé à un nouveau `Headers`. La recette lit désormais uniquement `Retry-After`, sans copier les cookies. Les diagnostics de transport sont filtrés pour ne jamais publier les en-têtes de session. Cette correction ne modifie ni les cookies de l’application ni ses contrôles d’authentification. La recette HTTPS est relancée ; la production attend sa validation.
+
+Aucun achat Stripe ni changement d’abonnement n’est déclenché par cette refonte. Le raccordement du paiement automatique et les autres limites historiques décrites dans [la recette mission 4](validation-mission-4.md) ne deviennent pas opérationnels par un changement graphique.

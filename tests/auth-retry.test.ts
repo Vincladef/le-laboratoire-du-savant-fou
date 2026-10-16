@@ -9,6 +9,25 @@ describe('La recette respecte les limites du fournisseur sans les contourner', (
     for (const status of [200, 400, 401, 403, 409, 500])
       expect(authRetryDelay(response(status), 0)).toBeNull();
   });
+  it('ne lit aucun cookie ou autre en-tête pour décider de l’attente', () => {
+    const read: string[] = [];
+    expect(
+      authRetryDelay(
+        {
+          status: 429,
+          headers: {
+            get: (name) => {
+              read.push(name);
+              if (name !== 'retry-after') throw new Error('Unexpected header');
+              return '5';
+            },
+          },
+        },
+        0,
+      ),
+    ).toBe(5000);
+    expect(read).toEqual(['retry-after']);
+  });
   it('respecte Retry-After en secondes ou sous forme de date', () => {
     expect(authRetryDelay(response(429, '12'), 0)).toBe(12000);
     expect(

@@ -11,6 +11,7 @@ import { prepareLearning } from '../server/prepare-learning';
 import { surveyProduction } from './production-survey';
 import { cleanupFailedFixtures } from './cleanup-failed-fixtures';
 import { inspectStripeLinks } from './inspect-stripe-links';
+import { safeDiagnostic } from './safe-diagnostic';
 
 let stage = 'target-validation';
 async function prepare() {
@@ -111,8 +112,8 @@ async function prepare() {
 prepare().catch(async (error) => {
   // Drivers may include connection details in errors. Do not log the raw exception.
   console.error('DEPLOY_PREPARE_FAILED', error?.code || error?.name || 'Error');
-  if (error instanceof Error && !('code' in error))
-    console.error(error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[redacted]'));
+  const diagnostic = safeDiagnostic(error);
+  if (diagnostic.message) console.error(diagnostic.message);
   process.exitCode = 1;
   await mkdir('.netlify', { recursive: true });
   await writeFile(
@@ -123,9 +124,7 @@ prepare().catch(async (error) => {
       code: error?.code || error?.cause?.code || error?.name || 'Error',
       constraint: error?.constraint || error?.cause?.constraint,
       table: error?.table || error?.cause?.table,
-      ...(error instanceof Error && !('code' in error) && !('cause' in error)
-        ? { message: error.message.replace(/postgres(?:ql)?:\/\/\S+/g, '[redacted]').slice(0, 500) }
-        : {}),
+      diagnostic,
     }),
   );
 });
