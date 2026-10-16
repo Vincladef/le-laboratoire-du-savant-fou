@@ -465,6 +465,14 @@ export function createApp(
       if (!current) failure(404, 'Document introuvable.');
       if (current.revision !== data.revision || current.deletedAt)
         return { conflict: true, current } as const;
+      // An already-open pre-tabs editor may silently strip unknown ProseMirror
+      // nodes. Only a tab-aware client can intentionally restore a flat version.
+      if (
+        (current.content as RichNode).content?.[0]?.type === 'documentTab' &&
+        data.content.content?.[0]?.type !== 'documentTab' &&
+        c.req.header('X-Bouche-Document-Version') !== '2'
+      )
+        return { conflict: true, current, upgrade: true } as const;
       const [doc] = await tx
         .update(documents)
         .set({
@@ -482,7 +490,10 @@ export function createApp(
     return result.conflict
       ? c.json(
           {
-            error: 'Une autre version existe. Vos modifications locales sont conservées.',
+            error:
+              'upgrade' in result
+                ? 'Ce document utilise des onglets. Actualisez l’application ; la version distante et votre copie locale sont conservées.'
+                : 'Une autre version existe. Vos modifications locales sont conservées.',
             current: result.current,
           },
           409,

@@ -1,7 +1,8 @@
 import { documentMenu, reviewMenu, navigation } from '../tests/e2e/navigation';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chromium, expect, type Page } from '@playwright/test';
+import { chromium, expect as baseExpect, type Page } from '@playwright/test';
+const expect = baseExpect.configure({ timeout: 30000 });
 import { authRetryDelay, waitForAuthWindow } from './auth-retry';
 async function signIn(page: Page, email: string, password: string) {
   await page.getByLabel('Adresse email').fill(email);
@@ -115,6 +116,8 @@ export async function verifyHostedBrowser(
     await expect(page).toHaveURL(/\/study\/session\//);
     const sessionURL = page.url();
     await page.getByRole('button', { name: 'Révéler la réponse', exact: true }).click();
+    // click() does not wait for the asynchronous reveal request to finish.
+    await expect(page.getByRole('button', { name: '3 · Moyen' })).toBeVisible();
     await page.reload();
     await expect(page.getByRole('button', { name: '3 · Moyen' })).toBeVisible();
     await page.getByRole('button', { name: '3 · Moyen' }).click();

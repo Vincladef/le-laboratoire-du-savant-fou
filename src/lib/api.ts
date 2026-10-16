@@ -11,6 +11,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     credentials: 'same-origin',
     ...options,
     headers: {
+      'X-Bouche-Document-Version': '2',
       ...(options.body && !(options.body instanceof FormData)
         ? { 'Content-Type': 'application/json' }
         : {}),

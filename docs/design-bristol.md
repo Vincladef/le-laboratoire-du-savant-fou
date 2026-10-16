@@ -15,7 +15,7 @@ Les documents existants conservent leur typographie de base historique et leurs 
 
 ## Vérifications locales
 
-À ce stade : TypeScript, 88 tests Vitest (11 fichiers), compilation Vite et empaquetage Functions v2 réussis ; 13 parcours Playwright/Chromium réussis. Recette : inscription/confirmation locale, connexion, bibliothèque, édition riche, tableaux, images, mathématiques, DOCX, PDF, historique, récupération, conflits, annotations, FSRS, reprise mobile, onglets et export complet. Vérifications axe-core WCAG A/AA sur les écrans sélectionnés sans violation dans cette campagne ; ce n’est pas une certification complète d’accessibilité.
+À ce stade : TypeScript, 89 tests Vitest (11 fichiers), compilation Vite et empaquetage Functions v2 réussis ; 13 parcours Playwright/Chromium réussis. Recette : inscription/confirmation locale, connexion, bibliothèque, édition riche, tableaux, images, mathématiques, DOCX, PDF, historique, récupération, conflits, annotations, FSRS, reprise mobile, onglets et export complet. Vérifications axe-core WCAG A/AA sur les écrans sélectionnés sans violation dans cette campagne ; ce n’est pas une certification complète d’accessibilité.
 
 Les premiers essais ont révélé des règles CSS historiques concurrentes, un contraste insuffisant et un nettoyage de raccourci visant une ancienne vue Tiptap. Corrigés et rejoués. Les sélecteurs des tests ont été adaptés aux menus réels ; les assertions de persistance, d’isolation, de contenu et de droits restent actives.
 
@@ -32,3 +32,5 @@ L’inventaire de développement avant/après est identique : 4 identités Neon 
 La recette HTTPS `6ad24c51e7106d7050bcf207` a révélé un défaut du lecteur d’en-têtes du harnais de tests : `allHeaders()` de Playwright regroupe plusieurs `Set-Cookie` avec des sauts de ligne, ce qui ne peut pas être passé à un nouveau `Headers`. La recette lit désormais uniquement `Retry-After`, sans copier les cookies. Les diagnostics de transport sont filtrés pour ne jamais publier les en-têtes de session. Cette correction ne modifie ni les cookies de l’application ni ses contrôles d’authentification. La recette HTTPS est relancée ; la production attend sa validation.
 
 Aucun achat Stripe ni changement d’abonnement n’est déclenché par cette refonte. Le raccordement du paiement automatique et les autres limites historiques décrites dans [la recette mission 4](validation-mission-4.md) ne deviennent pas opérationnels par un changement graphique.
+
+La sauvegarde refuse aussi qu’un ancien client dépourvu de support des onglets remplace silencieusement un document à onglets par un document plat. La nouvelle interface annonce sa version documentaire côté requête ; elle peut restaurer volontairement une version historique plate, sans contourner les contrôles de propriétaire et de révision. Un test vérifie le refus ancien client, la préservation du contenu, l’isolation et la restauration explicite.

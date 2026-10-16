@@ -17,7 +17,13 @@ class Client {
     public email: string,
     public ip: string,
   ) {}
-  async request(path: string, method = 'GET', body?: unknown, originOverride = origin) {
+  async request(
+    path: string,
+    method = 'GET',
+    body?: unknown,
+    originOverride = origin,
+    extraHeaders: Record<string, string> = {},
+  ) {
     const response = await runtime.app.fetch(
       new Request(path.startsWith('http') ? path : `${origin}/api${path}`, {
         method,
@@ -26,6 +32,7 @@ class Client {
           'Content-Type': 'application/json',
           Cookie: [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; '),
           'x-forwarded-for': this.ip,
+          ...extraHeaders,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       }),
@@ -402,6 +409,46 @@ describe('Configuration de production', () => {
       (await bob.request(`/documents/${doc.id}/position`, 'PUT', { cursor: 1, tabId })).status,
     ).toBe(404);
     expect((await bob.request(`/documents/${doc.id}`)).status).toBe(404);
+  });
+  it('empêche un ancien client d’effacer les onglets et autorise la restauration explicite depuis le nouveau client', async () => {
+    const created = await alice.request('/documents', 'POST', {
+      title: 'Compatibilité à préserver',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'documentTab',
+            attrs: { id: 'main', title: 'Onglet conservé', parentId: null },
+            content: content('Contenu privé à préserver.').content,
+          },
+        ],
+      },
+      layout: defaultLayout,
+    });
+    expect(created.status).toBe(201);
+    const doc = await created.json();
+    const replacement = {
+      revision: doc.revision,
+      title: doc.title,
+      layout: doc.layout,
+      content: content('Ancienne vue sans onglets.'),
+    };
+    expect((await alice.request(`/documents/${doc.id}`, 'PUT', replacement)).status).toBe(409);
+    expect((await (await alice.request(`/documents/${doc.id}`)).json()).content).toEqual(
+      doc.content,
+    );
+    expect(
+      (
+        await bob.request(`/documents/${doc.id}`, 'PUT', replacement, origin, {
+          'X-Bouche-Document-Version': '2',
+        })
+      ).status,
+    ).toBe(404);
+    const restored = await alice.request(`/documents/${doc.id}`, 'PUT', replacement, origin, {
+      'X-Bouche-Document-Version': '2',
+    });
+    expect(restored.status).toBe(200);
+    expect((await restored.json()).content).toEqual(replacement.content);
   });
   it('refuse le mode local et toute absence de secrets en production', () => {
     const old = { NODE_ENV: process.env.NODE_ENV, LAB_LOCAL: process.env.LAB_LOCAL };
