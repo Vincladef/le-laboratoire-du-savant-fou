@@ -15,10 +15,12 @@ Les documents existants conservent leur typographie de base historique et leurs 
 
 ## Vérifications locales
 
-À ce stade : TypeScript, 82 tests Vitest (9 fichiers), compilation Vite et empaquetage Functions v2 réussis ; 13 parcours Playwright/Chromium réussis. Recette : inscription/confirmation locale, connexion, bibliothèque, édition riche, tableaux, images, mathématiques, DOCX, PDF, historique, récupération, conflits, annotations, FSRS, reprise mobile, onglets et export complet. Vérifications axe-core WCAG A/AA sur les écrans sélectionnés sans violation dans cette campagne ; ce n’est pas une certification complète d’accessibilité.
+À ce stade : TypeScript, 85 tests Vitest (10 fichiers), compilation Vite et empaquetage Functions v2 réussis ; 13 parcours Playwright/Chromium réussis. Recette : inscription/confirmation locale, connexion, bibliothèque, édition riche, tableaux, images, mathématiques, DOCX, PDF, historique, récupération, conflits, annotations, FSRS, reprise mobile, onglets et export complet. Vérifications axe-core WCAG A/AA sur les écrans sélectionnés sans violation dans cette campagne ; ce n’est pas une certification complète d’accessibilité.
 
 Les premiers essais ont révélé des règles CSS historiques concurrentes, un contraste insuffisant et un nettoyage de raccourci visant une ancienne vue Tiptap. Corrigés et rejoués. Les sélecteurs des tests ont été adaptés aux menus réels ; les assertions de persistance, d’isolation, de contenu et de droits restent actives.
 
 Le scénario d’onglets a été étendu : suppression d’un parent avec son sous-onglet, restauration complète de la version précédente, couper-coller conservant l’identité entre onglets, second collage renouvelant l’identité, et mode concentration. La migration `0011` ajoute uniquement l’index documentaire utilisé pour le comptage des trous.
+
+Le premier build development (`6ad24a601e95678f67cb390b`) a atteint une limite de connexion Neon lors des contrôles synthétiques et n’a pas été publié. La recette attend désormais `Retry-After` avant un nouvel essai, avec un maximum de deux attentes et sans modification des limites, faux changement d’adresse IP ou suppression des compteurs. La production n’a pas été modifiée par cet essai.
 
 Publication development puis production et contrôle de persistance Neon : à compléter après les déploiements vérifiés. Aucun achat Stripe ni changement d’abonnement n’est déclenché par cette refonte. Le raccordement du paiement automatique et les autres limites historiques décrites dans [la recette mission 4](validation-mission-4.md) ne deviennent pas opérationnels par un changement graphique.

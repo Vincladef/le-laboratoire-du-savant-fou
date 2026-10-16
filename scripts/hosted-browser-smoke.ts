@@ -1,7 +1,31 @@
 import { documentMenu, reviewMenu, navigation } from '../tests/e2e/navigation';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chromium, expect } from '@playwright/test';
+import { chromium, expect, type Page } from '@playwright/test';
+import { authRetryDelay, waitForAuthWindow } from './auth-retry';
+async function signIn(page: Page, email: string, password: string) {
+  await page.getByLabel('Adresse email').fill(email);
+  await page.getByLabel('Mot de passe', { exact: true }).fill(password);
+  for (let attempt = 0; ; attempt++) {
+    const [response] = await Promise.all([
+      page.waitForResponse(
+        (r) => r.url().endsWith('/api/auth/sign-in/email') && r.request().method() === 'POST',
+      ),
+      page.getByRole('button', { name: 'Me connecter', exact: true }).click(),
+    ]);
+    const delay = authRetryDelay(
+      { status: response.status(), headers: new Headers(await response.allHeaders()) },
+      attempt,
+    );
+    if (delay === null) {
+      if (response.status() !== 200)
+        throw new Error('Connexion navigateur refusée HTTP ' + response.status());
+      break;
+    }
+    console.log('HOSTED_AUTH_LIMIT_WAIT', JSON.stringify({ delayMs: delay, attempt: attempt + 1 }));
+    await waitForAuthWindow(delay);
+  }
+}
 export async function verifyHostedBrowser(
   origin: string,
   email: string,
@@ -28,9 +52,7 @@ export async function verifyHostedBrowser(
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(origin, { timeout: 45000 });
     await expect(page.getByRole('button', { name: 'Continuer avec Google' })).toBeVisible();
-    await page.getByLabel('Adresse email').fill(email);
-    await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Me connecter' }).click();
+    await signIn(page, email, password);
     await expect(page).toHaveURL(/\/library$/, { timeout: 30000 });
     checks.push('hosted-browser-neon-login');
     await page.goto(`${origin}/document/${documentId}`);
@@ -115,15 +137,24 @@ export async function verifyHostedBrowser(
       tabRecord.content.content[0].type !== 'documentTab'
     )
       throw new Error('Onglets non enregistrés via le navigateur');
+    await expect
+      .poll(
+        async () => {
+          const stored = await (
+            await page.request.get(`${origin}/api/documents/${documentId}`)
+          ).json();
+          return stored.viewState?.tabId;
+        },
+        { timeout: 30000 },
+      )
+      .toBe(tabRecord.content.content[1].attrs.id);
     await page.reload();
     await expect(editor).toContainText('Onglet publié et conservé dans Neon.');
     checks.push('hosted-browser-document-tabs-persistence');
     await page.goto(`${origin}/library`);
     await navigation(page);
     await page.getByRole('button', { name: 'Déconnexion', exact: true }).click();
-    await page.getByLabel('Adresse email').fill(email);
-    await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-    await page.getByRole('button', { name: 'Me connecter' }).click();
+    await signIn(page, email, password);
     await expect(page).toHaveURL(/\/library$/);
     await page.goto(`${origin}/document/${documentId}`);
     await expect(editor).toContainText('Onglet publié et conservé dans Neon.');

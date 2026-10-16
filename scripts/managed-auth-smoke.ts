@@ -7,6 +7,7 @@ import { createApp } from '../server/app';
 import { getConfig } from '../server/config';
 import { verifyHostedBrowser } from './hosted-browser-smoke';
 import { verifyManagedSignup } from './managed-signup-smoke';
+import { authRetryDelay, waitForAuthWindow } from './auth-retry';
 
 /** Development-first checks; production additionally requires an explicit deployment gate. */
 export async function verifyManagedAuth(client: PoolClient, db: Database) {
@@ -91,19 +92,30 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     const { app } = createApp(db, config);
     const cookies = new Map<string, string>();
     async function call(path: string, method = 'GET', body?: unknown, expected = 200) {
-      const request = new Request(`${config.baseURL}/api${path}`, {
-        method,
-        headers: {
-          Origin: config.baseURL,
-          'Content-Type': 'application/json',
-          Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join('; '),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
-      const r =
-        process.env.LAB_VERIFY_PUBLISHED === '1'
-          ? await fetch(request, { redirect: 'manual', signal: AbortSignal.timeout(30000) })
-          : await app.fetch(request);
+      let r: Response;
+      for (let attempt = 0; ; attempt++) {
+        const request = new Request(`${config.baseURL}/api${path}`, {
+          method,
+          headers: {
+            Origin: config.baseURL,
+            'Content-Type': 'application/json',
+            Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join('; '),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+        r =
+          process.env.LAB_VERIFY_PUBLISHED === '1'
+            ? await fetch(request, { redirect: 'manual', signal: AbortSignal.timeout(30000) })
+            : await app.fetch(request);
+        const delay = path.startsWith('/auth/') ? authRetryDelay(r, attempt) : null;
+        if (delay === null) break;
+        await r.body?.cancel();
+        console.log(
+          'MANAGED_AUTH_LIMIT_WAIT',
+          JSON.stringify({ path, delayMs: delay, attempt: attempt + 1 }),
+        );
+        await waitForAuthWindow(delay);
+      }
       for (const cookie of r.headers.getSetCookie()) {
         const pair = cookie.split(';')[0],
           i = pair.indexOf('=');
