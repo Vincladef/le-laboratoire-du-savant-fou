@@ -54,7 +54,7 @@ test('contraste et accessibilité des formulaires, des formules et du dialogue l
     await page.locator('body').evaluate((el) => getComputedStyle(el).backgroundImage),
   ).toContain('desk-paper');
   await expect(page.locator('.auth-story')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-  await expect(page.locator('.auth-form-area')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(page.locator('.auth-form-area')).toHaveCSS('background-color', 'rgb(252, 250, 244)');
   await expect(page.locator('.brand-wordmark small')).toHaveCount(0);
   await expect(page.getByText('L’ATELIER DE VOS CONNAISSANCES', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Un espace à vous pour écrire/)).toHaveCount(0);

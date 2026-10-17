@@ -2,7 +2,7 @@
 
 ## Périmètre
 
-- Connexion : les deux panneaux deviennent transparents sur le fond commun. Le fichier `src/assets/desk-paper.png` reste strictement inchangé (SHA-256 `7d8879a6cd386c5c44f3c728184eb30541828576714bc7a7efec9ccb80823af2`). Aucune texture approchante ni nouvelle illustration.
+- Connexion : papier froissé conservé à gauche ; à droite, fond uni blanc cassé d’origine (`#fcfaf4`) rétabli à la demande suivante. Le fichier `src/assets/desk-paper.png` reste strictement inchangé (SHA-256 `7d8879a6cd386c5c44f3c728184eb30541828576714bc7a7efec9ccb80823af2`). Aucune texture approchante ni nouvelle illustration.
 - Révision : cases à cocher multisélections dans les menus Priorité et Difficulté, initialement toutes sélectionnées, y compris Non évaluée. Union à l’intérieur d’une catégorie, intersection entre catégories. Aucune sélection dans une catégorie = aucun trou masqué. Les passages exclus restent lisibles dans leur contexte.
 - Seule la révélation individuelle demeure, au clic ou au clavier. Les boutons globaux Masquer / Tout révéler sont supprimés. Les indices et l’évaluation facultative ne changent pas.
 - Plan : ouvert par défaut au-dessus de 760 px, fermé sur téléphone. Préférences manuelles séparées et persistantes pour chaque catégorie d’écran ; les anciennes valeurs enregistrées automatiquement sont remplacées par ces nouveaux défauts.
