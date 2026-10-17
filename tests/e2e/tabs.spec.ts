@@ -37,7 +37,10 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
   await expect(page.locator('.save-state')).toHaveText('Enregistré');
   const url = page.url(),
     id = url.split('/').pop()!;
-  await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Plan du document', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   await page.getByRole('button', { name: 'Ajouter un onglet', exact: true }).click();
   await expect(editor).not.toContainText('Premier contenu');
   await editor.fill('Deuxième contenu indépendant.');
@@ -187,7 +190,8 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
   ).toBeVisible();
   await expect(page.locator('.workspace-global-header')).not.toBeVisible();
   await page.keyboard.press('Escape');
-  await expect(page.locator('.workspace-global-header')).toBeVisible();
+  await expect(page.locator('.workspace-global-header')).toHaveCount(0);
+  await expect(page.locator('.editor-header')).toBeVisible();
   await page.getByRole('button', { name: 'Revenir à la bibliothèque', exact: true }).click();
   await page.getByLabel('Options de Carnet à onglets', { exact: true }).click();
   await page.getByRole('button', { name: 'Dupliquer', exact: true }).click();

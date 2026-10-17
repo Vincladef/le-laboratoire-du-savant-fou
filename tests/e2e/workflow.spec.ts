@@ -74,7 +74,7 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await editor.press('ControlOrMeta+a');
   await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
   await expect(editor.locator('strong')).toHaveText('Première observation scientifique.');
-  await page.getByRole('button', { name: 'Outils', exact: true }).click();
+  await expect(page.getByLabel('Police', { exact: true })).toBeVisible();
   await page.getByLabel('Police', { exact: true }).selectOption('Georgia');
   await page.getByLabel('Taille de police', { exact: true }).selectOption('14pt');
   await page.getByLabel('Interligne', { exact: true }).selectOption('2');
@@ -253,7 +253,7 @@ test('import DOCX réel, listes, liens, copier-coller enrichi et vue mobile', as
   await editor.press('ControlOrMeta+End');
   await editor.press('Enter');
   await editor.press('Enter');
-  await page.getByRole('button', { name: 'Outils', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Cases à cocher', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Cases à cocher', exact: true }).click();
   await page.keyboard.type('Vérifier les résultats');
   await expect(editor.locator('input[type=checkbox]')).toBeVisible();

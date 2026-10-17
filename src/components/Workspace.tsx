@@ -34,6 +34,7 @@ const Context = createContext<{
   registerGuard: (guard: Guard) => () => void;
   focusMode: boolean;
   setFocusMode: (value: boolean) => void;
+  openNavigation: () => void;
 } | null>(null);
 export function useWorkspace() {
   const value = useContext(Context);
@@ -208,7 +209,15 @@ export function Workspace({ user, children }: { user: User; children: ReactNode 
     </>
   );
   return (
-    <Context.Provider value={{ navigate: go, registerGuard, focusMode, setFocusMode }}>
+    <Context.Provider
+      value={{
+        navigate: go,
+        registerGuard,
+        focusMode,
+        setFocusMode,
+        openNavigation: () => setMobileOpen(true),
+      }}
+    >
       <div
         className={`workspace-frame ${expanded ? 'menu-expanded' : ''} ${focusMode ? 'focus-mode' : ''}`}
       >
@@ -219,35 +228,37 @@ export function Workspace({ user, children }: { user: User; children: ReactNode 
           {controls(expanded)}
         </aside>
         <div className="workspace-application">
-          <header className="workspace-global-header">
-            <button
-              className="mobile-nav-trigger"
-              aria-label="Ouvrir le menu"
-              aria-expanded={mobileOpen}
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu size={21} />
-            </button>
-            <button
-              className="brand-link"
-              aria-label="Bouche-trou · Revenir à la bibliothèque"
-              onClick={() => void go('/library')}
-            >
-              <Brand />
-            </button>
-            <span className="workspace-header-spacer" />
-            <span className="workspace-private">
-              <LockKeyhole size={13} /> Espace privé
-            </span>
-            <button
-              className="workspace-avatar"
-              aria-label="Mon compte"
-              title="Mon compte"
-              onClick={() => setProfile(true)}
-            >
-              {user.name.slice(0, 1).toUpperCase()}
-            </button>
-          </header>
+          {!location.pathname.startsWith('/document/') && (
+            <header className="workspace-global-header">
+              <button
+                className="mobile-nav-trigger"
+                aria-label="Ouvrir le menu"
+                aria-expanded={mobileOpen}
+                onClick={() => setMobileOpen(true)}
+              >
+                <Menu size={21} />
+              </button>
+              <button
+                className="brand-link"
+                aria-label="Bouche-trou · Revenir à la bibliothèque"
+                onClick={() => void go('/library')}
+              >
+                <Brand />
+              </button>
+              <span className="workspace-header-spacer" />
+              <span className="workspace-private">
+                <LockKeyhole size={13} /> Espace privé
+              </span>
+              <button
+                className="workspace-avatar"
+                aria-label="Mon compte"
+                title="Mon compte"
+                onClick={() => setProfile(true)}
+              >
+                {user.name.slice(0, 1).toUpperCase()}
+              </button>
+            </header>
+          )}
           {error && (
             <p className="alert error" role="alert">
               {error}

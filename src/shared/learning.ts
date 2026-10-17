@@ -16,7 +16,7 @@ export const difficultyLabels: Record<Difficulty, string> = {
   hard: 'Difficile',
   unrated: 'Non évaluée',
 };
-export type ReviewFilters = { priority: Priority | 'all'; difficulty: Difficulty | 'all' };
+export type ReviewFilters = { priority: Priority[]; difficulty: Difficulty[] };
 export type MemoryPassage = {
   id: string;
   documentId: string;
@@ -33,7 +33,7 @@ export type MemoryPassage = {
 export function matchesPassage(passage: MemoryPassage, filters: ReviewFilters) {
   return (
     passage.status === 'active' &&
-    (filters.priority === 'all' || passage.priority === filters.priority) &&
-    (filters.difficulty === 'all' || passage.difficulty === filters.difficulty)
+    filters.priority.includes(passage.priority) &&
+    filters.difficulty.includes(passage.difficulty)
   );
 }

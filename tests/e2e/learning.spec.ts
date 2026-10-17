@@ -1,4 +1,4 @@
-import { navigation } from './navigation';
+import { navigation, filterReview, revealIndividually } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
@@ -130,12 +130,15 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
   await expect(page).toHaveURL(`/study/${id}`);
   await expect(page.locator('.review-reveal')).toHaveCount(3);
-  await expect(page.getByLabel('Filtrer par priorité')).toHaveValue('all');
-  await expect(page.getByLabel('Filtrer par difficulté')).toHaveValue('all');
+  await expect(page.getByLabel('Filtrer par priorité')).toContainText('Toutes');
+  await expect(page.getByLabel('Filtrer par difficulté')).toContainText('Toutes');
+  await expect(page.locator('.review-filter input:checked')).toHaveCount(7);
+  await expect(page.getByRole('button', { name: 'Tout révéler', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Masquer', exact: true })).toHaveCount(0);
   const paper = page.getByRole('document', { name: 'Document de révision' });
   const bounds = await paper.boundingBox();
   expect(bounds!.y).toBeLessThan(330);
-  await page.getByLabel('Filtrer par priorité').selectOption('high');
+  await filterReview(page, 'priority', 'high');
   await expect(page.locator('.review-reveal')).toHaveCount(1);
   await expect(paper).toContainText('Les mitochondries produisent');
   await expect(paper).toContainText('Le ribosome fabrique');
@@ -156,8 +159,8 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
   await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
-  await page.getByLabel('Filtrer par priorité').selectOption('all');
-  await page.getByRole('button', { name: 'Tout révéler', exact: true }).click();
+  await filterReview(page, 'priority', 'all');
+  await revealIndividually(page);
   for (const [number, difficulty] of [
     [2, 'medium'],
     [3, 'easy'],
@@ -169,16 +172,26 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
     await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
   }
   for (const difficulty of ['easy', 'medium', 'hard']) {
-    await page.getByLabel('Filtrer par difficulté').selectOption(difficulty);
+    await filterReview(page, 'difficulty', difficulty);
     await expect(page.locator('.review-reveal')).toHaveCount(1);
   }
-  await page.getByLabel('Filtrer par difficulté').selectOption('unrated');
+  await filterReview(page, 'difficulty', ['easy', 'hard']);
+  await expect(page.locator('.review-reveal')).toHaveCount(2);
+  await filterReview(page, 'priority', ['high', 'low']);
+  await expect(page.locator('.review-reveal')).toHaveCount(2);
+  await filterReview(page, 'priority', ['high', 'medium']);
+  await expect(page.locator('.review-reveal')).toHaveCount(1);
+  await expect(paper).toContainText('Le ribosome fabrique les protéines.');
+  await filterReview(page, 'difficulty', []);
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
+  await filterReview(page, 'priority', 'all');
+  await filterReview(page, 'difficulty', 'unrated');
   await expect(page.locator('.review-reveal')).toHaveCount(0);
   await expect(paper).toContainText('La cellule contient un noyau.');
-  await page.getByLabel('Filtrer par difficulté').selectOption('hard');
-  await page.getByLabel('Filtrer par priorité').selectOption('medium');
+  await filterReview(page, 'difficulty', 'hard');
+  await filterReview(page, 'priority', 'medium');
   await expect(page.locator('.review-reveal')).toHaveCount(0);
-  await page.getByLabel('Filtrer par priorité').selectOption('high');
+  await filterReview(page, 'priority', 'high');
   await expect(page.locator('.review-reveal')).toHaveCount(1);
   await page.getByRole('heading', { name: 'Réviser', exact: true }).click();
   await page.keyboard.press('Space');
@@ -194,7 +207,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
-  await page.getByLabel('Filtrer par priorité').selectOption('all');
+  await filterReview(page, 'priority', 'all');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
   await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
   await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
@@ -208,12 +221,12 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
     difficultyRevision: 2,
     priority: 'high',
   });
-  await page.getByLabel('Filtrer par priorité').selectOption('all');
-  await page.getByLabel('Filtrer par difficulté').selectOption('all');
+  await filterReview(page, 'priority', 'all');
+  await filterReview(page, 'difficulty', 'all');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(page.locator('.review-reveal')).toHaveCount(3);
-  await page.getByRole('button', { name: 'Tout révéler', exact: true }).click();
+  await revealIndividually(page);
   await page.getByLabel('Évaluer la difficulté du passage 2', { exact: true }).click();
   await page.context().setOffline(true);
   await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('hard');
@@ -260,8 +273,8 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   });
   await expect(editor.locator('strong')).toHaveText('cellule');
   await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
-  await page.getByLabel('Filtrer par priorité').selectOption('medium');
-  await page.getByLabel('Filtrer par difficulté').selectOption('hard');
+  await filterReview(page, 'priority', 'medium');
+  await filterReview(page, 'difficulty', 'hard');
   await expect(page.locator('.review-reveal')).toHaveCount(2);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: info.outputPath('revision-simple-desktop.png'), fullPage: true });

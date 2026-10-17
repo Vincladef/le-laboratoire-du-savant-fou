@@ -168,21 +168,30 @@ describe('Révision unique, annotations et difficulté persistante', () => {
   });
   it('combine les filtres exacts, indépendants, avec toutes les valeurs par défaut', () => {
     const base = { status: 'active', priority: 'medium', difficulty: 'unrated' } as MemoryPassage;
-    expect(matchesPassage(base, { priority: 'all', difficulty: 'all' })).toBe(true);
-    expect(matchesPassage(base, { priority: 'high', difficulty: 'all' })).toBe(false);
-    expect(matchesPassage(base, { priority: 'medium', difficulty: 'unrated' })).toBe(true);
-    expect(matchesPassage(base, { priority: 'medium', difficulty: 'easy' })).toBe(false);
+    const all = {
+      priority: ['high', 'medium', 'low'],
+      difficulty: ['easy', 'medium', 'hard', 'unrated'],
+    } as const;
+    const filters = { priority: [...all.priority], difficulty: [...all.difficulty] };
+    expect(matchesPassage(base, filters)).toBe(true);
+    expect(matchesPassage(base, { ...filters, priority: ['high'] })).toBe(false);
+    expect(matchesPassage(base, { priority: ['medium'], difficulty: ['unrated'] })).toBe(true);
+    expect(matchesPassage(base, { priority: ['medium'], difficulty: ['easy'] })).toBe(false);
+    expect(
+      matchesPassage(base, { priority: ['high', 'medium'], difficulty: ['easy', 'unrated'] }),
+    ).toBe(true);
+    expect(matchesPassage(base, { priority: [], difficulty: [...all.difficulty] })).toBe(false);
+    expect(matchesPassage(base, { priority: [...all.priority], difficulty: [] })).toBe(false);
     for (const priority of ['high', 'medium', 'low'] as const)
       for (const difficulty of ['easy', 'medium', 'hard', 'unrated'] as const)
-        expect(matchesPassage({ ...base, priority, difficulty }, { priority, difficulty })).toBe(
-          true,
-        );
-    expect(
-      matchesPassage({ ...base, status: 'needs_review' }, { priority: 'all', difficulty: 'all' }),
-    ).toBe(false);
-    expect(
-      matchesPassage({ ...base, status: 'deleted' }, { priority: 'all', difficulty: 'all' }),
-    ).toBe(false);
+        expect(
+          matchesPassage(
+            { ...base, priority, difficulty },
+            { priority: [priority], difficulty: [difficulty] },
+          ),
+        ).toBe(true);
+    expect(matchesPassage({ ...base, status: 'needs_review' }, filters)).toBe(false);
+    expect(matchesPassage({ ...base, status: 'deleted' }, filters)).toBe(false);
   });
   it('enregistre une difficulté sans changer le texte, ses styles ou la révision documentaire', async () => {
     const id = crypto.randomUUID(),

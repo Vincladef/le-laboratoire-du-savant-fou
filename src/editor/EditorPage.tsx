@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { EditorContent, useEditor, useEditorState, type Editor } from '@tiptap/react';
 import {
   ArrowLeft,
+  Menu,
   Check,
   Cloud,
   CloudOff,
@@ -112,10 +113,14 @@ function DocumentEditor({
   const [title, setTitle] = useState(original.title);
   const [layout, setLayout] = useState<PageLayout>(original.layout);
   const [outline, setOutline] = useState(() => {
+    const mobile = window.matchMedia('(max-width: 760px)').matches;
     try {
-      return localStorage.getItem(`lab-outline-${ownerId}`) === 'true';
+      const stored = localStorage.getItem(
+        `lab-outline-v2-${ownerId}-${mobile ? 'mobile' : 'desktop'}`,
+      );
+      return stored === null ? !mobile : stored === 'true';
     } catch {
-      return false;
+      return !mobile;
     }
   });
   const outlineToggle = useRef<HTMLButtonElement>(null);
@@ -134,12 +139,20 @@ function DocumentEditor({
   live.current = { title: title.trim() || 'Document sans titre', layout };
   const positionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    try {
-      localStorage.setItem(`lab-outline-${ownerId}`, String(outline));
-    } catch {
-      /* Optional UI preference. */
-    }
-  }, [outline, ownerId]);
+    const media = window.matchMedia('(max-width: 760px)');
+    const resize = () => {
+      try {
+        const stored = localStorage.getItem(
+          `lab-outline-v2-${ownerId}-${media.matches ? 'mobile' : 'desktop'}`,
+        );
+        setOutline(stored === null ? !media.matches : stored === 'true');
+      } catch {
+        setOutline(!media.matches);
+      }
+    };
+    media.addEventListener('change', resize);
+    return () => media.removeEventListener('change', resize);
+  }, [ownerId]);
   const editor = useEditor(
     {
       extensions: editorExtensions(clipboard.current),
@@ -348,6 +361,13 @@ function DocumentEditor({
       {(memory) => (
         <div className="editor-shell">
           <header className="editor-header">
+            <button
+              className="mobile-nav-trigger"
+              aria-label="Ouvrir le menu"
+              onClick={shell.openNavigation}
+            >
+              <Menu size={21} />
+            </button>
             <button
               className="icon-button"
               aria-label="Revenir à la bibliothèque"
@@ -581,7 +601,17 @@ function DocumentEditor({
                 aria-label="Plan du document"
                 aria-expanded={outline}
                 aria-controls="document-outline"
-                onClick={() => setOutline(!outline)}
+                onClick={() => {
+                  setOutline(!outline);
+                  try {
+                    localStorage.setItem(
+                      `lab-outline-v2-${ownerId}-${window.matchMedia('(max-width: 760px)').matches ? 'mobile' : 'desktop'}`,
+                      String(!outline),
+                    );
+                  } catch {
+                    /* Optional preference. */
+                  }
+                }}
               >
                 <PanelLeft size={17} /> Plan
               </button>

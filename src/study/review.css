@@ -60,16 +60,59 @@
 .review-folder-picker select {
   max-width: 140px;
 }
-.review-reveal-actions {
-  display: flex;
-  gap: 5px;
-  margin-left: auto;
+.review-filter {
+  min-width: 130px;
 }
-.review-reveal-actions .button {
-  min-height: 36px;
+.review-filter > summary {
+  color: #30495c;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  list-style: none;
+  cursor: pointer;
+  padding: 5px 9px;
+  border: 1px solid #d8cebb;
+  border-radius: 6px;
+  background: #fffdf8;
+  font-size: 11px;
+}
+.review-filter > summary::-webkit-details-marker {
+  display: none;
+}
+.review-filter > summary strong {
+  display: block;
   font-size: 12px;
-  white-space: nowrap;
-  padding: 8px 10px;
+  margin-top: 3px;
+}
+.review-filter-options {
+  position: absolute;
+  z-index: 50;
+  margin: 5px 0 0;
+  min-width: 180px;
+  padding: 8px;
+  border: 1px solid #d8cebb;
+  border-radius: 7px;
+  background: #fffdf7;
+  box-shadow: 0 5px 15px #30495c20;
+}
+.review-filter-options legend {
+  font-size: 11px;
+  padding: 0 4px;
+  background: #fffdf7;
+}
+.review-filter-options label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 6px;
+  cursor: pointer;
+}
+.review-filter-options input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: #4c7790;
 }
 .review-context {
   display: flex;
@@ -313,12 +356,11 @@
   .review-toolbar:has(.review-folder-picker) .review-document-picker {
     grid-column: auto;
   }
-  .review-reveal-actions {
-    grid-column: 1 / -1;
-    margin: 0;
+  .review-filter {
+    min-width: 0;
   }
-  .review-reveal-actions .primary {
-    flex: 1;
+  .review-filter-options {
+    min-width: 160px;
   }
   .review-context {
     min-height: 30px;

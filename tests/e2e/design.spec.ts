@@ -1,4 +1,4 @@
-import { documentMenu, navigation } from './navigation';
+import { documentMenu, navigation, revealIndividually } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
@@ -17,11 +17,16 @@ async function register(page: Page) {
   await expect
     .poll(async () => {
       const entries = await Promise.all(
-        (await readdir(`${process.env.LAB_E2E_DIR}/mail`).catch(() => [])).map(async (f) =>
-          JSON.parse(await readFile(`${process.env.LAB_E2E_DIR}/mail/${f}`, 'utf8')),
-        ),
+        (await readdir(`${process.env.LAB_E2E_DIR}/mail`).catch(() => [])).map(async (f) => {
+          try {
+            return JSON.parse(await readFile(`${process.env.LAB_E2E_DIR}/mail/${f}`, 'utf8'));
+          } catch (error) {
+            if (error instanceof SyntaxError) return null;
+            throw error;
+          }
+        }),
       );
-      mail = entries.find((m) => m.to === email);
+      mail = entries.find((m) => m?.to === email);
       return Boolean(mail);
     })
     .toBe(true);
@@ -45,6 +50,11 @@ test('contraste et accessibilité des formulaires, des formules et du dialogue l
 }, info) => {
   await page.goto('/');
   await expect(page.getByLabel('Adresse email')).toBeVisible();
+  expect(
+    await page.locator('body').evaluate((el) => getComputedStyle(el).backgroundImage),
+  ).toContain('desk-paper');
+  await expect(page.locator('.auth-story')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(page.locator('.auth-form-area')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
   await expect(page.locator('.brand-wordmark small')).toHaveCount(0);
   await expect(page.getByText('L’ATELIER DE VOS CONNAISSANCES', { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Un espace à vous pour écrire/)).toHaveCount(0);
@@ -105,7 +115,11 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   const toggle = page.getByRole('button', { name: 'Plan du document', exact: true });
   await expect(toggle).toHaveText('Plan');
   await expect(page.locator('.editor-header-actions .outline-toggle')).toHaveCount(0);
-  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.workspace-global-header')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Mon compte', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Outils', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Police', { exact: true })).toBeVisible();
   await documentMenu(page);
   await expect(page.getByLabel('Zoom', { exact: true })).toHaveValue('fit');
   await page.locator('.document-tools > summary').click();
@@ -114,7 +128,6 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
     .toBeGreaterThan(1000);
   await accessible(page);
   await page.screenshot({ path: info.outputPath('carnet-desktop.png'), fullPage: true });
-  await toggle.click();
   await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
   await expect(
     page
@@ -127,6 +140,8 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await expect(page.getByRole('button', { name: 'Masquer le plan' })).toHaveCount(0);
   await toggle.click();
   await expect(toggle).toBeFocused();
+  await page.reload();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await documentMenu(page);
   await page.getByLabel('Zoom', { exact: true }).selectOption('100');
   expect((await page.locator('.document-paper').boundingBox())!.width).toBeGreaterThan(790);
@@ -136,6 +151,7 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await page.locator('.document-tools > summary').click();
   for (const width of [768, 390]) {
     await page.setViewportSize({ width, height: 844 });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await toggle.click();
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
     await toggle.click();
@@ -153,6 +169,73 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await expect(page.locator('.save-state')).toHaveText('Enregistré');
   await page.reload();
   await expect(editor).toContainText('Ajout mobile.');
+});
+test('barre mobile persistante au milieu et à la fin, saisie en petite hauteur et navigation générale', async ({
+  page,
+}, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await register(page);
+  const created = await page.request.post('/api/documents', {
+    headers: { Origin: 'http://localhost:5174' },
+    data: {
+      title: 'Écriture mobile longue',
+      layout: defaultLayout,
+      content: {
+        type: 'doc',
+        content: Array.from({ length: 100 }, (_, i) => ({
+          type: 'paragraph',
+          content: [
+            {
+              type: 'text',
+              text: `Paragraphe ${i + 1}. Un document assez long pour éprouver le défilement et continuer à écrire librement.`,
+            },
+          ],
+        })),
+      },
+    },
+  });
+  expect(created.status()).toBe(201);
+  await page.goto(`/document/${(await created.json()).id}`);
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  const plan = page.getByRole('button', { name: 'Plan du document', exact: true });
+  await expect(plan).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.locator('.workspace-global-header')).toHaveCount(0);
+  const tools = page.locator('.writing-tools');
+  for (const position of [2000, 5000]) {
+    await page.evaluate((y) => window.scrollTo(0, y), position);
+    await expect.poll(async () => Math.round((await tools.boundingBox())!.y)).toBe(0);
+    await expect(page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true })).toBeVisible();
+  }
+  await page.screenshot({ path: info.outputPath('outils-milieu-mobile.png') });
+  await page.setViewportSize({ width: 390, height: 420 });
+  await editor.locator('p').last().click();
+  await editor.press('ControlOrMeta+End');
+  await page.keyboard.type(' Ajout avec une hauteur réduite.');
+  await expect(editor.locator('p').last()).toContainText('Ajout avec une hauteur réduite.');
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const range = getSelection()?.getRangeAt(0),
+          tools = document.querySelector('.writing-tools')!.getBoundingClientRect();
+        if (!range) return false;
+        const caret = range.getBoundingClientRect();
+        return caret.top >= tools.bottom - 2 && caret.bottom <= innerHeight + 2;
+      }),
+    )
+    .toBe(true);
+  await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
+  await page.keyboard.type(' Encore du texte.');
+  await expect(editor.locator('p').last().locator('strong')).toContainText('Encore du texte.');
+  await page.screenshot({ path: info.outputPath('outils-fin-petite-hauteur.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Ouvrir le menu', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: 'Navigation principale' })
+    .getByRole('button', { name: 'Réglages', exact: true })
+    .click();
+  await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.save-state')).toHaveText('Enregistré');
 });
 test('grand document : 1 000 paragraphes, 100 annotations, édition et persistance', async ({
   page,
@@ -277,15 +360,17 @@ test('accessibilité de la bibliothèque, du document à réviser et des command
   ).toBeVisible();
   await accessible(page);
   await page.goto(`/study/${id}`);
-  await expect(page.getByRole('button', { name: 'Tout révéler' })).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Révéler le passage 1', exact: true }),
+  ).toBeVisible();
   await accessible(page);
-  await page.getByRole('button', { name: 'Tout révéler' }).click();
+  await revealIndividually(page);
   await accessible(page);
   await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await accessible(page);
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Masquer', exact: true }).click();
+  await page.reload();
   await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).click();
   await accessible(page);
 });

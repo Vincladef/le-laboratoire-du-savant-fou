@@ -1,4 +1,4 @@
-import { navigation } from '../tests/e2e/navigation';
+import { navigation, filterReview, revealIndividually } from '../tests/e2e/navigation';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium, expect as baseExpect, type Page } from '@playwright/test';
@@ -66,14 +66,16 @@ export async function verifyHostedBrowser(
     await page.goto(`${origin}/document/${documentId}`);
     const editor = page.getByRole('textbox', { name: 'Contenu du document' });
     await expect(editor).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('.workspace-global-header')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Outils', exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Police', { exact: true })).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Plan du document', exact: true }),
-    ).toHaveAttribute('aria-expanded', 'false');
+    ).toHaveAttribute('aria-expanded', 'true');
     const paper = page.locator('.document-paper');
     const paperBounds = await paper.boundingBox();
     if (!paperBounds || paperBounds.width < 1000)
       throw new Error('Page trop étroite sur ordinateur');
-    await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Plan du document', exact: true })).toHaveText(
       'Plan',
@@ -134,32 +136,39 @@ export async function verifyHostedBrowser(
     await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
     await expect(page).toHaveURL(`${origin}/study/${documentId}`);
     await expect(page.locator('.review-reveal')).toHaveCount(3);
-    await expect(page.getByLabel('Filtrer par priorité')).toHaveValue('all');
-    await expect(page.getByLabel('Filtrer par difficulté')).toHaveValue('all');
-    await page.getByLabel('Filtrer par priorité').selectOption('high');
+    await expect(page.getByLabel('Filtrer par priorité')).toContainText('Toutes');
+    await expect(page.getByLabel('Filtrer par difficulté')).toContainText('Toutes');
+    await expect(page.locator('.review-filter input:checked')).toHaveCount(7);
+    await expect(page.getByRole('button', { name: 'Tout révéler', exact: true })).toHaveCount(0);
+    await filterReview(page, 'priority', 'high');
     await expect(page.locator('.review-reveal')).toHaveCount(1);
     await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
     await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
     await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
     await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
     checks.push('hosted-browser-single-review-and-optional-difficulty');
-    await page.getByLabel('Filtrer par priorité').selectOption('all');
-    await page.getByLabel('Filtrer par difficulté').selectOption('easy');
+    await filterReview(page, 'priority', 'all');
+    await filterReview(page, 'difficulty', ['easy', 'hard']);
+    await filterReview(page, 'priority', ['high', 'medium']);
+    await expect(page.locator('.review-reveal')).toHaveCount(2);
+    await filterReview(page, 'priority', 'all');
+    await filterReview(page, 'difficulty', 'easy');
     await expect(page.locator('.review-reveal')).toHaveCount(1);
-    await page.getByLabel('Filtrer par priorité').selectOption('low');
+    await filterReview(page, 'priority', 'low');
     await expect(page.locator('.review-reveal')).toHaveCount(0);
-    await page.getByLabel('Filtrer par priorité').selectOption('all');
-    await page.getByLabel('Filtrer par difficulté').selectOption('all');
+    await filterReview(page, 'priority', 'all');
+    await filterReview(page, 'difficulty', 'all');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.reload();
     await expect(page.locator('.review-reveal')).toHaveCount(3);
-    await page.getByRole('button', { name: 'Tout révéler', exact: true }).click();
+    await revealIndividually(page);
     await expect(page.locator('.review-reveal')).toHaveCount(0);
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2))
       throw new Error('Débordement mobile');
     checks.push('hosted-browser-combined-filters-and-mobile-reading');
     await page.goto(`${origin}/document/${documentId}`);
     const plan = page.getByRole('button', { name: 'Plan du document', exact: true });
+    await expect(plan).toHaveAttribute('aria-expanded', 'false');
     if ((await plan.getAttribute('aria-expanded')) === 'false') await plan.click();
     await page.getByRole('button', { name: 'Ajouter un onglet', exact: true }).click();
     await editor.fill('Onglet publié et conservé dans Neon.');
@@ -216,6 +225,61 @@ export async function verifyHostedBrowser(
     );
     await page.keyboard.press('Escape');
     checks.push('hosted-browser-simplified-profile-and-managed-neon-update');
+    const source = await (await page.request.get(`${origin}/api/documents/${documentId}`)).json();
+    const longResponse = await page.request.post(`${origin}/api/documents`, {
+      headers: { Origin: origin },
+      data: {
+        title: 'Contrôle défilement mobile',
+        layout: source.layout,
+        content: {
+          type: 'doc',
+          content: Array.from({ length: 100 }, (_, index) => ({
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: `Paragraphe ${index + 1}. Lecture et édition sur un document long, avec les commandes toujours accessibles.`,
+              },
+            ],
+          })),
+        },
+      },
+    });
+    if (longResponse.status() !== 201) throw new Error('Document mobile de contrôle non créé');
+    await page.goto(`${origin}/document/${(await longResponse.json()).id}`);
+    await expect(editor).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 2000));
+    await expect
+      .poll(async () => Math.round((await page.locator('.writing-tools').boundingBox())!.y))
+      .toBe(0);
+    await page.setViewportSize({ width: 390, height: 420 });
+    await editor.locator('p').last().click();
+    await editor.press('ControlOrMeta+End');
+    await page.keyboard.type(' Saisie de contrôle en fin de document.');
+    await expect(editor.locator('p').last()).toContainText(
+      'Saisie de contrôle en fin de document.',
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const range = getSelection()?.getRangeAt(0);
+          if (!range) return false;
+          const caret = range.getBoundingClientRect(),
+            tools = document.querySelector('.writing-tools')!.getBoundingClientRect();
+          return caret.top >= tools.bottom - 2 && caret.bottom <= innerHeight + 2;
+        }),
+      )
+      .toBe(true);
+    await expect(page.locator('.save-state')).toHaveText('Enregistré');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: 'Ouvrir le menu', exact: true }).click();
+    await page
+      .getByRole('dialog', { name: 'Navigation principale' })
+      .getByRole('button', { name: 'Réglages', exact: true })
+      .click();
+    await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    checks.push('hosted-browser-sticky-mobile-toolbar-and-navigation');
     if (process.env.LAB_VERIFY_BILLING === '1') {
       await page.goto(`${origin}/billing`);
       await expect(

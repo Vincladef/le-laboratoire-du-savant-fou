@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Eye, EyeOff, Pencil } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Pencil } from 'lucide-react';
 import { api, ApiError, json } from '../lib/api';
 import {
   priorityLabels,
@@ -18,6 +18,53 @@ import './review.css';
 type Props = { user: { id: string } };
 type ReviewDocument = { document: DocumentRecord; passages: MemoryPassage[] };
 type Pending = { id: string; difficulty: Difficulty; difficultyRevision: number };
+function ReviewFilter<T extends string>({
+  title,
+  labels,
+  values,
+  onChange,
+}: {
+  title: string;
+  labels: Record<T, string>;
+  values: T[];
+  onChange: (values: T[]) => void;
+}) {
+  const entries = Object.entries(labels) as [T, string][];
+  return (
+    <details className="menu review-filter">
+      <summary aria-label={`Filtrer par ${title.toLowerCase()}`}>
+        <span>
+          {title}
+          <strong>
+            {values.length === entries.length
+              ? 'Toutes'
+              : values.length === 1
+                ? labels[values[0]]
+                : values.length
+                  ? `${values.length} sur ${entries.length}`
+                  : 'Aucune'}
+          </strong>
+        </span>
+        <ChevronDown size={14} />
+      </summary>
+      <fieldset className="review-filter-options">
+        <legend>{title}</legend>
+        {entries.map(([value, label]) => (
+          <label key={value}>
+            <input
+              type="checkbox"
+              checked={values.includes(value)}
+              onChange={(e) =>
+                onChange(e.target.checked ? [...values, value] : values.filter((v) => v !== value))
+              }
+            />
+            {label}
+          </label>
+        ))}
+      </fieldset>
+    </details>
+  );
+}
 export function LegacyStudyRedirect() {
   const { id } = useParams();
   return <Navigate to={id ? `/study/${id}` : '/study'} replace />;
@@ -28,7 +75,10 @@ export function StudyPage({ user }: Props) {
     navigate = useNavigate(),
     client = useQueryClient();
   const [folderId, setFolderId] = useState('');
-  const [filters, setFilters] = useState<ReviewFilters>({ priority: 'all', difficulty: 'all' });
+  const [filters, setFilters] = useState<ReviewFilters>({
+    priority: ['high', 'medium', 'low'],
+    difficulty: ['easy', 'medium', 'hard', 'unrated'],
+  });
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [error, setError] = useState(''),
     [message, setMessage] = useState('');
@@ -188,59 +238,18 @@ export function StudyPage({ user }: Props) {
             </select>
           </label>
         )}
-        <label>
-          Priorité
-          <select
-            aria-label="Filtrer par priorité"
-            value={filters.priority}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, priority: e.target.value as ReviewFilters['priority'] }))
-            }
-          >
-            <option value="all">Toutes</option>
-            {Object.entries(priorityLabels).map(([v, label]) => (
-              <option value={v} key={v}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Difficulté
-          <select
-            aria-label="Filtrer par difficulté"
-            value={filters.difficulty}
-            onChange={(e) =>
-              setFilters((f) => ({
-                ...f,
-                difficulty: e.target.value as ReviewFilters['difficulty'],
-              }))
-            }
-          >
-            <option value="all">Toutes</option>
-            {Object.entries(difficultyLabels).map(([v, label]) => (
-              <option value={v} key={v}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="review-reveal-actions">
-          <button
-            className="button primary"
-            disabled={!hidden.length}
-            onClick={() => setRevealed(new Set(selected.map((p) => p.id)))}
-          >
-            <Eye size={16} /> Tout révéler
-          </button>
-          <button
-            className="button subtle"
-            disabled={!revealed.size}
-            onClick={() => setRevealed(new Set())}
-          >
-            <EyeOff size={16} /> Masquer
-          </button>
-        </div>
+        <ReviewFilter
+          title="Priorité"
+          labels={priorityLabels}
+          values={filters.priority}
+          onChange={(priority) => setFilters((f) => ({ ...f, priority }))}
+        />
+        <ReviewFilter
+          title="Difficulté"
+          labels={difficultyLabels}
+          values={filters.difficulty}
+          onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
+        />
       </div>
       {(error || query.error || docs.error || folders.error) && (
         <div className="alert error" role="alert">
