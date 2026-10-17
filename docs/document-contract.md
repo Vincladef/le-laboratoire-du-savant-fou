@@ -1,5 +1,7 @@
 # Contrat documentaire des passages mémorisés
 
+La marque peut aussi porter `initialDifficulty` (`unrated`, `easy`, `medium`, `hard`), facultatif pour les anciens documents. Ce champ initialise uniquement une nouvelle annotation dans la transaction de sauvegarde. Il n’est pas la difficulté courante : celle-ci reste dans Neon, avec son contrôle de concurrence, et n’est jamais remplacée par ce champ lors d’une sauvegarde ou restauration. L’import JSON conserve ce choix initial, pas les évaluations serveur ultérieures.
+
 La mission 2 exploite le point d’extension préparé dans la mission 1, une marque ProseMirror :
 
 ```json

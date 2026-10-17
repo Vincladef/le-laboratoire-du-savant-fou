@@ -101,7 +101,7 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await page.locator('.document-tools > summary').click();
   await expect
     .poll(async () => (await page.locator('.document-paper').boundingBox())?.width || 0)
-    .toBeGreaterThan(850);
+    .toBeGreaterThan(1000);
   await accessible(page);
   await page.screenshot({ path: info.outputPath('carnet-desktop.png'), fullPage: true });
   await toggle.click();
@@ -114,7 +114,8 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   ).toBeVisible();
   await page.reload();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-  await page.getByRole('button', { name: 'Masquer le plan' }).click();
+  await expect(page.getByRole('button', { name: 'Masquer le plan' })).toHaveCount(0);
+  await toggle.click();
   await expect(toggle).toBeFocused();
   await documentMenu(page);
   await page.getByLabel('Zoom', { exact: true }).selectOption('100');
@@ -127,7 +128,7 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
     await page.setViewportSize({ width, height: 844 });
     await toggle.click();
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
-    await page.getByRole('button', { name: 'Masquer le plan' }).click();
+    await toggle.click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(
       true,
     );

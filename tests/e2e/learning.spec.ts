@@ -92,7 +92,17 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await selectText(page, 'La cellule contient un noyau.');
   await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).click();
   await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Unité du vivant');
-  await page.getByRole('dialog').getByRole('combobox').selectOption('high');
+  await page
+    .getByRole('dialog')
+    .getByRole('combobox', { name: 'Priorité', exact: true })
+    .selectOption('high');
+  await expect(
+    page.getByRole('dialog').getByRole('combobox', { name: 'Difficulté', exact: true }),
+  ).toHaveValue('unrated');
+  await page
+    .getByRole('dialog')
+    .getByRole('combobox', { name: 'Difficulté', exact: true })
+    .selectOption('hard');
   await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
   await expect(editor.locator('strong')).toHaveText('cellule');
   for (const [text, priority] of [
@@ -101,8 +111,16 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   ]) {
     await selectText(page, text);
     await editor.press('ControlOrMeta+Shift+m');
-    await expect(page.getByRole('dialog').getByRole('combobox')).toHaveValue('medium');
-    await page.getByRole('dialog').getByRole('combobox').selectOption(priority);
+    await expect(
+      page.getByRole('dialog').getByRole('combobox', { name: 'Priorité', exact: true }),
+    ).toHaveValue('medium');
+    await expect(
+      page.getByRole('dialog').getByRole('combobox', { name: 'Difficulté', exact: true }),
+    ).toHaveValue('unrated');
+    await page
+      .getByRole('dialog')
+      .getByRole('combobox', { name: 'Priorité', exact: true })
+      .selectOption(priority);
     await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   }
@@ -133,7 +151,8 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(paper.locator('strong')).toHaveText('cellule');
   // Revealing is entirely optional and never writes an evaluation.
   let passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
-  expect(passages.every((p: any) => p.difficulty === 'unrated')).toBe(true);
+  expect(passages.map((p: any) => p.difficulty)).toEqual(['hard', 'unrated', 'unrated']);
+  expect(passages.every((p: any) => p.difficultyRevision === 0)).toBe(true);
   await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
   await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');

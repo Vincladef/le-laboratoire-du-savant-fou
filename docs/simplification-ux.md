@@ -10,6 +10,8 @@ Mission demandée le 17 octobre 2026 : identité Bristol conservée, commandes p
 - Indices au niveau du passage ; évaluation facultative après révélation et modification possible dans les outils de l’éditeur.
 - Barre compacte et commandes de révélation visibles. Après retour utilisateur, le plan de l’éditeur reprend son organisation précédente : bouton « Plan » au-dessus du carnet à gauche et titres sous l’onglet actif, sans bouton « Navigation » dans l’en-tête.
 - Le plan peut être masqué sans supprimer le contenu ; sa préférence reste persistante. Une seule zone défilante contient onglets et titres pour éviter les débordements sur mobile. Panneau des passages non ouvert automatiquement après création. Papier, encre, ruban et couleurs douces conservés.
+- Ajustement suivant : croix du plan retirée ; seul le bouton « Plan » replie le panneau. Largeur du panneau réduite et plafond de 900 px supprimé : la page utilise la largeur disponible en mode « Largeur de page », sans modifier les dimensions d’export ni les zooms fixes.
+- Le formulaire de création propose priorité et difficulté (Moyenne / Non évaluée par défaut). La difficulté initiale est sauvegardée atomiquement avec le document ; les sauvegardes et restaurations suivantes ne remplacent jamais une évaluation plus récente.
 - Réglage de fuseau horaire retiré de l’interface, les dates documentaires utilisant le fuseau de l’appareil. Les anciennes préférences ne sont pas effacées lors d’un changement de nom.
 
 ## Données

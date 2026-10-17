@@ -117,6 +117,33 @@ async function evaluate(id: string, difficulty: string, difficultyRevision = 0, 
   );
 }
 describe('Révision unique, annotations et difficulté persistante', () => {
+  it('enregistre la difficulté choisie à la création sans écraser une évaluation ultérieure', async () => {
+    for (const initialDifficulty of ['unrated', 'easy', 'medium', 'hard']) {
+      const id = crypto.randomUUID();
+      const node = marked(id, 'Passage avec difficulté', 'medium');
+      node.marks!.find((m) => m.type === 'memoryAnchor')!.attrs!.initialDifficulty =
+        initialDifficulty;
+      const d = await doc([node]);
+      expect((await anchors(d))[0]).toMatchObject({
+        difficulty: initialDifficulty,
+        difficultyRevision: 0,
+      });
+      await evaluate(id, 'easy');
+      const updated = await save(d, [node]);
+      expect((await anchors(updated))[0]).toMatchObject({
+        difficulty: 'easy',
+        difficultyRevision: 1,
+      });
+    }
+    const invalid = marked(crypto.randomUUID(), 'Invalide');
+    invalid.marks!.find((m) => m.type === 'memoryAnchor')!.attrs!.initialDifficulty = 'inventée';
+    await alice.call(
+      '/documents',
+      'POST',
+      { title: 'Invalide', content: content([invalid]), layout: defaultLayout },
+      400,
+    );
+  });
   it('préserve les passages multistyles, indices et priorité ; aucune carte n’est créée', async () => {
     const id = crypto.randomUUID(),
       second = crypto.randomUUID();

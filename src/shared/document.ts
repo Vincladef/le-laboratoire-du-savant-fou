@@ -150,6 +150,12 @@ export function validateDocument(value: unknown): RichNode {
         !['high', 'medium', 'low'].includes(ma.priority)
       )
         throw new Error('Priorité de passage invalide.');
+      if (
+        m.type === 'memoryAnchor' &&
+        ma.initialDifficulty != null &&
+        !['unrated', 'easy', 'medium', 'hard'].includes(ma.initialDifficulty)
+      )
+        throw new Error('Difficulté initiale de passage invalide.');
       if ((node.marks || []).filter((mark: any) => mark.type === 'memoryAnchor').length > 1)
         throw new Error('Deux passages ne peuvent pas se superposer.');
       for (const key of ['color', 'backgroundColor'])
@@ -302,6 +308,7 @@ export type Anchor = {
   slices: RichNode[];
   hint?: string;
   priority?: 'high' | 'medium' | 'low';
+  initialDifficulty?: 'unrated' | 'easy' | 'medium' | 'hard';
   disconnected: boolean;
 };
 export function extractAnchors(node: RichNode): Anchor[] {
@@ -323,12 +330,14 @@ export function extractAnchors(node: RichNode): Anchor[] {
           slices: [],
           hint: mark.attrs?.hint ?? undefined,
           priority: mark.attrs?.priority ?? undefined,
+          initialDifficulty: mark.attrs?.initialDifficulty ?? undefined,
           disconnected: false,
         };
         if (anchor.slices.length && previous !== id) anchor.disconnected = true;
         if (
           anchor.hint !== (mark.attrs?.hint ?? undefined) ||
           anchor.priority !== (mark.attrs?.priority ?? undefined) ||
+          anchor.initialDifficulty !== (mark.attrs?.initialDifficulty ?? undefined) ||
           anchor.sourceId !== mark.attrs?.sourceId
         )
           throw new Error('Les fragments d’un passage portent des métadonnées différentes.');

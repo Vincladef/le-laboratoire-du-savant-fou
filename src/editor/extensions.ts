@@ -46,6 +46,10 @@ export const MemoryAnchor = Mark.create<{ clipboard?: MemoryClipboard }>({
       sourceId: { default: null, parseHTML: (el) => el.getAttribute('data-memory-source') },
       hint: { default: null, parseHTML: (el) => el.getAttribute('data-memory-hint') },
       priority: { default: null, parseHTML: (el) => el.getAttribute('data-memory-priority') },
+      initialDifficulty: {
+        default: null,
+        parseHTML: (el) => el.getAttribute('data-memory-initial-difficulty'),
+      },
     };
   },
   parseHTML() {
@@ -59,6 +63,7 @@ export const MemoryAnchor = Mark.create<{ clipboard?: MemoryClipboard }>({
         'data-memory-source': HTMLAttributes.sourceId,
         'data-memory-hint': HTMLAttributes.hint,
         'data-memory-priority': HTMLAttributes.priority,
+        'data-memory-initial-difficulty': HTMLAttributes.initialDifficulty,
         class: 'memory-anchor',
       },
       0,

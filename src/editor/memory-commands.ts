@@ -1,6 +1,11 @@
 import type { Editor } from '@tiptap/core';
-import type { Priority } from '../shared/learning';
-export function createPassage(editor: Editor, hint: string, priority: Priority) {
+import type { Difficulty, Priority } from '../shared/learning';
+export function createPassage(
+  editor: Editor,
+  hint: string,
+  priority: Priority,
+  initialDifficulty: Difficulty = 'unrated',
+) {
   const { from, to, empty } = editor.state.selection;
   if (empty || !editor.state.doc.textBetween(from, to, '\n', '\ufffc').trim())
     throw new Error('Sélectionnez le passage à mémoriser.');
@@ -26,7 +31,13 @@ export function createPassage(editor: Editor, hint: string, priority: Priority) 
     editor.state.tr.addMark(
       from,
       to,
-      editor.schema.marks.memoryAnchor.create({ id, sourceId: null, hint, priority }),
+      editor.schema.marks.memoryAnchor.create({
+        id,
+        sourceId: null,
+        hint,
+        priority,
+        initialDifficulty,
+      }),
     ),
   );
   return id;

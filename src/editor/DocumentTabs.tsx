@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
-import { Plus, MoreHorizontal, X, FileText } from 'lucide-react';
+import { Plus, MoreHorizontal, FileText } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { tabDepth, type DocumentTab } from '../shared/tabs';
 
@@ -13,7 +13,6 @@ export function DocumentTabs({
   onRename,
   onDuplicate,
   onDelete,
-  onClose,
 }: {
   editor: Editor;
   tabs: DocumentTab[];
@@ -23,7 +22,6 @@ export function DocumentTabs({
   onRename: (id: string, title: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
-  onClose: () => void;
 }) {
   const [rename, setRename] = useState<DocumentTab | null>(null),
     [title, setTitle] = useState('');
@@ -52,9 +50,6 @@ export function DocumentTabs({
         <h2>Onglets</h2>
         <button className="icon-button" aria-label="Ajouter un onglet" onClick={() => onAdd(null)}>
           <Plus size={17} />
-        </button>
-        <button className="icon-button" aria-label="Masquer le plan" onClick={onClose}>
-          <X size={16} />
         </button>
       </div>
       <div className="document-tabs-list" role="navigation" aria-label="Onglets du document">

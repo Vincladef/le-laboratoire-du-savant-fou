@@ -333,13 +333,7 @@ function DocumentEditor({
     zoom === 'fit' && workspaceWidth < 600
       ? 1
       : zoom === 'fit'
-        ? Math.max(
-            0.4,
-            Math.min(
-              900 / ((pageWidth * 96) / 25.4),
-              (workspaceWidth - 2) / ((pageWidth * 96) / 25.4),
-            ),
-          )
+        ? Math.max(0.4, (workspaceWidth - 2) / ((pageWidth * 96) / 25.4))
         : zoom / 100;
   return (
     <MemoryTools
@@ -618,10 +612,6 @@ function DocumentEditor({
                     } catch (e) {
                       setError((e as Error).message);
                     }
-                  }}
-                  onClose={() => {
-                    setOutline(false);
-                    outlineToggle.current?.focus();
                   }}
                 />
               )}

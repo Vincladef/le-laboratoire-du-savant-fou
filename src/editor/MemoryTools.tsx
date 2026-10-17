@@ -41,6 +41,7 @@ export function MemoryTools({
   );
   const [hint, setHint] = useState(''),
     [priority, setPriority] = useState<Priority>('medium');
+  const [difficulty, setDifficulty] = useState<Difficulty>('unrated');
   const live = useEditorState({
     editor,
     selector: ({ editor }) => ({
@@ -60,6 +61,7 @@ export function MemoryTools({
     setError('');
     setHint('');
     setPriority('medium');
+    setDifficulty('unrated');
     setModal({ id: null, doc: editor.state.doc });
   };
   useEffect(() => {
@@ -282,7 +284,7 @@ export function MemoryTools({
                     'Le document a changé. Rouvrez cette action avec une sélection actuelle.',
                   );
                 if (modal.id) modifyPassage(editor, modal.id, { hint, priority });
-                else createPassage(editor, hint, priority);
+                else createPassage(editor, hint, priority, difficulty);
                 setModal(null);
               } catch (e) {
                 setError((e as Error).message);
@@ -305,6 +307,21 @@ export function MemoryTools({
                 ))}
               </select>
             </label>
+            {!modal.id && (
+              <label>
+                Difficulté
+                <select
+                  value={difficulty}
+                  onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+                >
+                  {Object.entries(difficultyLabels).map(([key, label]) => (
+                    <option key={key} value={key}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <button className="button primary" type="submit">
               {modal.id ? 'Enregistrer l’indice' : 'Créer le passage'}
             </button>

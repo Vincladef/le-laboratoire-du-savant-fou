@@ -67,7 +67,7 @@ export async function verifyHostedBrowser(
     ).toHaveAttribute('aria-expanded', 'false');
     const paper = page.locator('.document-paper');
     const paperBounds = await paper.boundingBox();
-    if (!paperBounds || paperBounds.width < 850)
+    if (!paperBounds || paperBounds.width < 1000)
       throw new Error('Page trop étroite sur ordinateur');
     await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
@@ -76,7 +76,8 @@ export async function verifyHostedBrowser(
     );
     await expect(page.locator('.editor-header-actions .outline-toggle')).toHaveCount(0);
     await expect(page.locator('.document-tab-item .tab-headings')).toBeVisible();
-    await page.getByRole('button', { name: 'Masquer le plan', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Masquer le plan', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
     checks.push('hosted-browser-stationery-and-outline-toggle');
     await expect(editor.locator('strong')).toContainText('Une réponse');
     await expect(editor.locator('em')).toContainText('formatée');
@@ -102,12 +103,29 @@ export async function verifyHostedBrowser(
       .getByRole('dialog')
       .getByLabel('Indice facultatif')
       .fill('Ajout depuis le navigateur hébergé');
+    await page
+      .getByRole('dialog')
+      .getByRole('combobox', { name: 'Priorité', exact: true })
+      .selectOption('medium');
+    await page
+      .getByRole('dialog')
+      .getByRole('combobox', { name: 'Difficulté', exact: true })
+      .selectOption('hard');
     await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
     await expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 30000 });
     const anchors = await (
       await page.request.get(`${origin}/api/documents/${documentId}/anchors`)
     ).json();
     if (anchors.length !== 3) throw new Error('Annotation navigateur non persistée');
+    if (
+      !anchors.some(
+        (a: any) =>
+          a.hint === 'Ajout depuis le navigateur hébergé' &&
+          a.priority === 'medium' &&
+          a.difficulty === 'hard',
+      )
+    )
+      throw new Error('Priorité ou difficulté initiale non persistée');
     checks.push('hosted-browser-create-rich-passage');
     await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
     await expect(page).toHaveURL(`${origin}/study/${documentId}`);

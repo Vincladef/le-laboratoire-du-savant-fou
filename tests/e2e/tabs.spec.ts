@@ -103,7 +103,7 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
     await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
   await page.getByRole('button', { name: 'Onglet 3', exact: true }).click();
   await expect(editor).toContainText('Mesure dans un sous-onglet.');
-  await page.getByRole('button', { name: 'Masquer le plan', exact: true }).click();
+  await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
   await page.screenshot({ path: info.outputPath('onglets-mobile.png'), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(
     true,

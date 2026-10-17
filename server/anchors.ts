@@ -63,6 +63,8 @@ export async function syncAnchors(tx: any, doc: typeof documents.$inferSelect) {
       metadata: { confirmedQuote: a.quote },
       hint,
       priority,
+      // Creation seed only: later document saves/restores must not reset evaluations.
+      difficulty: existing?.difficulty ?? a.initialDifficulty ?? 'unrated',
       status,
       revision: existing ? existing.revision + (changed ? 1 : 0) : 1,
       documentRevision: doc.revision,
