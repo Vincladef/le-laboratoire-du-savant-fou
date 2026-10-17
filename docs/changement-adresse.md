@@ -18,3 +18,9 @@ Les anciens rapports de recette gardent leurs URLs historiques : ils décrivent 
 ## Accueil
 
 Sous-titre sous la marque, « L’atelier de vos connaissances », texte « Un espace à vous… » et phrase « Vos documents vous attendent. Reprenons le fil. » retirés. Les indications utiles aux parcours d’inscription, confirmation et récupération restent visibles. Les tests vérifient ces suppressions, les formulaires, l’accessibilité et les affichages ordinateur/téléphone.
+
+## Recette de développement
+
+TypeScript, compilation, 96 tests unitaires/intégration et 14 parcours Playwright réussis. Le commit `518c440886acd0ccf1c4b18399eed70d19b9f8ca` est publié sur la nouvelle URL de développement ; déploiement de recette `6ad37be75676098e1f6af647` **ready**, 17 contrôles HTTPS/Neon et 9 parcours Chromium, aucune erreur JavaScript. L’accueil allégé et la connexion sont vérifiés sur la nouvelle origine. Inventaire et empreintes avant/après identiques, aucune migration appliquée, aucun compte ou document existant supprimé.
+
+La publication production est une vérification séparée de cette recette de développement.
