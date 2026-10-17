@@ -121,7 +121,8 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
   await expect(editor).toContainText('Mesure dans un sous-onglet.');
   await page.setViewportSize({ width: 1440, height: 1000 });
   const toggle = page.getByRole('button', { name: 'Plan du document', exact: true });
-  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+  // Wait for the desktop preference instead of clicking during the resize transition.
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   const restoredRevision = (await (await page.request.get(`/api/documents/${id}`)).json()).revision;
   await page.getByLabel('Options de l’onglet Observations', { exact: true }).click();
   page.once('dialog', (dialog) => dialog.accept());

@@ -246,7 +246,8 @@ export async function verifyHostedBrowser(
       },
     });
     if (longResponse.status() !== 201) throw new Error('Document mobile de contrôle non créé');
-    await page.goto(`${origin}/document/${(await longResponse.json()).id}`);
+    const longDocumentId = (await longResponse.json()).id;
+    await page.goto(`${origin}/document/${longDocumentId}`);
     await expect(editor).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 2000));
     await expect
@@ -280,6 +281,35 @@ export async function verifyHostedBrowser(
     await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
     await page.keyboard.press('Escape');
     checks.push('hosted-browser-sticky-mobile-toolbar-and-navigation');
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    for (const y of [2000, 5000]) {
+      await page.evaluate((y) => window.scrollTo(0, y), y);
+      await expect
+        .poll(async () => Math.round((await page.locator('.writing-tools').boundingBox())!.y))
+        .toBe(0);
+    }
+    await editor.locator('p').last().click();
+    await editor.press('ControlOrMeta+End');
+    await page.keyboard.type(' Saisie sur ordinateur.');
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const range = getSelection()?.getRangeAt(0);
+          if (!range) return false;
+          const caret = range.getBoundingClientRect(),
+            tools = document.querySelector('.writing-tools')!.getBoundingClientRect();
+          return caret.top >= tools.bottom - 2 && caret.bottom <= innerHeight + 2;
+        }),
+      )
+      .toBe(true);
+    await expect(page.locator('.save-state')).toHaveText('Enregistré');
+    const savedLongDocument = await (
+      await page.request.get(`${origin}/api/documents/${longDocumentId}`)
+    ).json();
+    if (!JSON.stringify(savedLongDocument.content).includes('Saisie sur ordinateur.'))
+      throw new Error('Saisie ordinateur non persistée');
+    checks.push('hosted-browser-sticky-desktop-toolbar-and-visible-caret');
+    await page.setViewportSize({ width: 390, height: 844 });
     if (process.env.LAB_VERIFY_BILLING === '1') {
       await page.goto(`${origin}/billing`);
       await expect(

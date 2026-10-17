@@ -81,7 +81,7 @@ export function Toolbar({
     const update = () => {
       const mobile = window.matchMedia('(max-width: 760px)').matches;
       const top = mobile ? Math.max(0, window.visualViewport?.offsetTop || 0) : 0;
-      const height = mobile ? tools.current?.getBoundingClientRect().height || 0 : 0;
+      const height = tools.current?.getBoundingClientRect().height || 0;
       if (top === previousTop && height === previousHeight) return;
       previousTop = top;
       previousHeight = height;

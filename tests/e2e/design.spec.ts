@@ -170,73 +170,89 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await page.reload();
   await expect(editor).toContainText('Ajout mobile.');
 });
-test('barre mobile persistante au milieu et à la fin, saisie en petite hauteur et navigation générale', async ({
-  page,
-}, info) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await register(page);
-  const created = await page.request.post('/api/documents', {
-    headers: { Origin: 'http://localhost:5174' },
-    data: {
-      title: 'Écriture mobile longue',
-      layout: defaultLayout,
-      content: {
-        type: 'doc',
-        content: Array.from({ length: 100 }, (_, i) => ({
-          type: 'paragraph',
-          content: [
-            {
-              type: 'text',
-              text: `Paragraphe ${i + 1}. Un document assez long pour éprouver le défilement et continuer à écrire librement.`,
-            },
-          ],
-        })),
+for (const desktop of [true, false]) {
+  test(`barre ${desktop ? 'ordinateur' : 'mobile'} persistante au milieu et à la fin, saisie en petite hauteur et navigation générale`, async ({
+    page,
+  }, info) => {
+    await page.setViewportSize(
+      desktop ? { width: 1440, height: 1000 } : { width: 390, height: 844 },
+    );
+    await register(page);
+    const created = await page.request.post('/api/documents', {
+      headers: { Origin: 'http://localhost:5174' },
+      data: {
+        title: 'Écriture longue',
+        layout: defaultLayout,
+        content: {
+          type: 'doc',
+          content: Array.from({ length: 100 }, (_, i) => ({
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: `Paragraphe ${i + 1}. Un document assez long pour éprouver le défilement et continuer à écrire librement.`,
+              },
+            ],
+          })),
+        },
       },
-    },
+    });
+    expect(created.status()).toBe(201);
+    await page.goto(`/document/${(await created.json()).id}`);
+    const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+    const plan = page.getByRole('button', { name: 'Plan du document', exact: true });
+    await expect(plan).toHaveAttribute('aria-expanded', desktop ? 'true' : 'false');
+    await expect(page.locator('.workspace-global-header')).toHaveCount(0);
+    const tools = page.locator('.writing-tools');
+    for (const position of [2000, 5000]) {
+      await page.evaluate((y) => window.scrollTo(0, y), position);
+      await expect.poll(async () => Math.round((await tools.boundingBox())!.y)).toBe(0);
+      await expect(page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true })).toBeVisible();
+      if (desktop)
+        expect((await plan.boundingBox())!.y).toBeGreaterThanOrEqual(
+          (await tools.boundingBox())!.height,
+        );
+    }
+    await page.screenshot({
+      path: info.outputPath(`outils-milieu-${desktop ? 'ordinateur' : 'mobile'}.png`),
+    });
+    await page.setViewportSize(
+      desktop ? { width: 1440, height: 550 } : { width: 390, height: 420 },
+    );
+    await editor.locator('p').last().click();
+    await editor.press('ControlOrMeta+End');
+    await page.keyboard.type(' Ajout avec une hauteur réduite.');
+    await expect(editor.locator('p').last()).toContainText('Ajout avec une hauteur réduite.');
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const range = getSelection()?.getRangeAt(0),
+            tools = document.querySelector('.writing-tools')!.getBoundingClientRect();
+          if (!range) return false;
+          const caret = range.getBoundingClientRect();
+          return caret.top >= tools.bottom - 2 && caret.bottom <= innerHeight + 2;
+        }),
+      )
+      .toBe(true);
+    await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
+    await page.keyboard.type(' Encore du texte.');
+    await expect(editor.locator('p').last().locator('strong')).toContainText('Encore du texte.');
+    await page.screenshot({ path: info.outputPath('outils-fin-petite-hauteur.png') });
+    await page.setViewportSize(
+      desktop ? { width: 1440, height: 1000 } : { width: 390, height: 844 },
+    );
+    if (!desktop) {
+      await page.getByRole('button', { name: 'Ouvrir le menu', exact: true }).click();
+      await page
+        .getByRole('dialog', { name: 'Navigation principale' })
+        .getByRole('button', { name: 'Réglages', exact: true })
+        .click();
+    } else await page.getByRole('button', { name: 'Réglages', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.save-state')).toHaveText('Enregistré');
   });
-  expect(created.status()).toBe(201);
-  await page.goto(`/document/${(await created.json()).id}`);
-  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
-  const plan = page.getByRole('button', { name: 'Plan du document', exact: true });
-  await expect(plan).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.locator('.workspace-global-header')).toHaveCount(0);
-  const tools = page.locator('.writing-tools');
-  for (const position of [2000, 5000]) {
-    await page.evaluate((y) => window.scrollTo(0, y), position);
-    await expect.poll(async () => Math.round((await tools.boundingBox())!.y)).toBe(0);
-    await expect(page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true })).toBeVisible();
-  }
-  await page.screenshot({ path: info.outputPath('outils-milieu-mobile.png') });
-  await page.setViewportSize({ width: 390, height: 420 });
-  await editor.locator('p').last().click();
-  await editor.press('ControlOrMeta+End');
-  await page.keyboard.type(' Ajout avec une hauteur réduite.');
-  await expect(editor.locator('p').last()).toContainText('Ajout avec une hauteur réduite.');
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const range = getSelection()?.getRangeAt(0),
-          tools = document.querySelector('.writing-tools')!.getBoundingClientRect();
-        if (!range) return false;
-        const caret = range.getBoundingClientRect();
-        return caret.top >= tools.bottom - 2 && caret.bottom <= innerHeight + 2;
-      }),
-    )
-    .toBe(true);
-  await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
-  await page.keyboard.type(' Encore du texte.');
-  await expect(editor.locator('p').last().locator('strong')).toContainText('Encore du texte.');
-  await page.screenshot({ path: info.outputPath('outils-fin-petite-hauteur.png') });
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole('button', { name: 'Ouvrir le menu', exact: true }).click();
-  await page
-    .getByRole('dialog', { name: 'Navigation principale' })
-    .getByRole('button', { name: 'Réglages', exact: true })
-    .click();
-  await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.save-state')).toHaveText('Enregistré');
-});
+}
 test('grand document : 1 000 paragraphes, 100 annotations, édition et persistance', async ({
   page,
 }, info) => {

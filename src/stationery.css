@@ -962,6 +962,16 @@ textarea {
 .writing-tools {
   flex: none;
   min-width: 0;
+  position: sticky;
+  top: var(--editor-visual-top, 0px);
+  /* Above the document and outline; below the document header's menus (15). */
+  z-index: 14;
+}
+html:has(.editor-shell) {
+  scroll-padding-top: calc(var(--editor-toolbar-height, 0px) + 12px);
+}
+.document-paper .tiptap > * {
+  scroll-margin-top: calc(var(--editor-toolbar-height, 0px) + 12px);
 }
 .advanced-toolbar {
   margin: 0 16px;
@@ -987,7 +997,7 @@ textarea {
   width: 224px;
   flex: 0 0 224px;
   position: sticky;
-  top: 18px;
+  top: calc(var(--editor-toolbar-height, 0px) + 18px);
   padding-top: 0;
 }
 .outline-toggle.button {
@@ -1016,7 +1026,7 @@ textarea {
   border: 1px solid #dfc478;
   border-radius: 1px;
   box-shadow: 0 5px 8px #51463815;
-  max-height: calc(100dvh - 95px);
+  max-height: calc(100dvh - var(--editor-toolbar-height, 0px) - 95px);
   height: auto;
   overflow: visible;
   z-index: 10;
@@ -1210,9 +1220,9 @@ textarea {
   border: 1px solid #dfd1b8;
   border-radius: 5px;
   box-shadow: 0 3px 9px #51463810;
-  max-height: calc(100dvh - 50px);
+  max-height: calc(100dvh - var(--editor-toolbar-height, 0px) - 50px);
   position: sticky;
-  top: 18px;
+  top: calc(var(--editor-toolbar-height, 0px) + 18px);
   overflow: auto;
 }
 .passages-panel > h2 {
@@ -1452,9 +1462,6 @@ textarea {
     justify-content: flex-end;
   }
   .writing-tools {
-    position: sticky;
-    top: var(--editor-visual-top, 0px);
-    z-index: 40;
     margin: 0 10px;
     background: #fffdf7;
     border-radius: 10px;
@@ -1480,12 +1487,6 @@ textarea {
   }
   .writing-tools .context-toolbar > * {
     flex: none;
-  }
-  html:has(.editor-shell) {
-    scroll-padding-top: calc(var(--editor-toolbar-height, 0px) + 12px);
-  }
-  .document-paper .tiptap > * {
-    scroll-margin-top: calc(var(--editor-toolbar-height, 0px) + 12px);
   }
   .editor-workspace {
     display: flex;
