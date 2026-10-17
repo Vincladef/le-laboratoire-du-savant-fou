@@ -36,3 +36,17 @@ Aucun achat Stripe ni changement d’abonnement n’est déclenché par cette re
 La sauvegarde refuse aussi qu’un ancien client dépourvu de support des onglets remplace silencieusement un document à onglets par un document plat. La nouvelle interface annonce sa version documentaire côté requête ; elle peut restaurer volontairement une version historique plate, sans contourner les contrôles de propriétaire et de révision. Un test vérifie le refus ancien client, la préservation du contenu, l’isolation et la restauration explicite.
 
 La version finale applicative `7cdcf269ade654ee372acc1e6ee791794672e2c0` est publiée en development : préparation **`6ad24f78e10274b3bbd4e8ce`** (`ready`, 16 contrôles Neon) puis recette publique **`6ad2502b2025ad0708e88077`** (`ready`, **17 contrôles HTTPS/Neon et 8 parcours Chromium**, ordinateur et 390×844, **0 erreur JavaScript**). Les onglets, la reprise, les trous et les notes FSRS sont relus dans Neon. Inventaires avant/après identiques ; quatre identités Auth préexistantes conservées, aucune fixture applicative restante. La production est autorisée après cette validation.
+
+## Publication production — 17 octobre 2026
+
+Le commit `772cc1c18f7aadf56af3dcab10da5cdf05d3f454` est poussé sur `main`, puis relu via Git. Le déploiement **`6ad33add011f910a79930c9b`** est `ready` : 10 migrations historiques reconnues, **2 migrations additives appliquées**, 19 tables et **16 contrôles Neon réussis**. Le déploiement de relance **`6ad33ae6b532d7c2a4f707e4`** reconnaît les 12 migrations, n’en réapplique aucune et réussit les mêmes contrôles.
+
+Les inventaires production avant/après sont identiques : 1 utilisateur applicatif, 2 documents, 19 versions, 2 identités Auth, 1 passage, 1 carte, 1 révision et 1 séance ; profil historique conservé. L’empreinte documentaire est `0285f131500278483cd2bff9b2ef21dc`. Ces nombres sont un constat daté, pas une cible à rétablir en effaçant de nouvelles données. Les fixtures synthétiques de la recette sont retirées.
+
+TypeScript, **89 tests Vitest**, compilation Vite, ZIP officiel Functions v2 et **13 parcours Chromium locaux** sont rejoués avec succès sur cette version. Les empreintes SHA-1 de l’HTML, du JavaScript principal, du CSS et de la texture publiés correspondent au build local.
+
+La recette publique production **`6ad33baf329caca8f7bcf26f`** est **`ready`** : **17 contrôles HTTPS/Neon**, **8 parcours Chromium hébergés** sur ordinateur et téléphone 390×844, **0 erreur JavaScript**. Elle vérifie la connexion Neon, l’édition enrichie et les passages, le plan masquable, le mode libre, la séance FSRS avec rechargement et reprise mobile, les onglets, la déconnexion/reconnexion, ainsi que les liens Stripe et la fenêtre de conditions. Contenus, position de reprise et révisions sont relus dans Neon ; inventaire et empreinte documentaire inchangés après nettoyage des fixtures.
+
+Cette recette ne prétend pas confirmer la réception d’emails personnels, un consentement Google personnel ou un paiement Stripe. Les limites de conversion DOCX, d’impression PDF et d’activation des abonnements restent celles indiquées plus haut ; aucune fonctionnalité n’est simulée pour les masquer.
+
+Les **8 variables temporaires** de préparation/recette sont ensuite retirées par API. L’inventaire final confirme uniquement les **5 variables permanentes**, avec leurs contextes préservés. Les builds ordinaires n’exécutent plus ni migration distante ni fixture de recette. Aucun nouveau projet, changement d’offre, achat ou paiement n’a été effectué.
