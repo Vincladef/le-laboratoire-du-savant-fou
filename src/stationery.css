@@ -978,8 +978,8 @@ textarea {
   overflow: visible;
 }
 .outline-dock {
-  width: 216px;
-  flex: 0 0 216px;
+  width: 252px;
+  flex: 0 0 252px;
   position: sticky;
   top: 18px;
   padding-top: 0;
@@ -987,11 +987,11 @@ textarea {
 .outline-toggle.button {
   position: relative;
   display: flex;
-  width: auto;
+  width: 94px;
   min-height: 35px;
   justify-content: flex-start;
   gap: 8px;
-  margin-bottom: 0;
+  margin-bottom: 15px;
   padding: 7px 10px;
   color: #4c6578;
   background: #eaf2f7;
@@ -1004,8 +1004,8 @@ textarea {
   flex-direction: column;
   position: relative;
   inset: auto;
-  width: 216px;
-  padding: 14px 10px;
+  width: 252px;
+  padding: 18px 13px 20px;
   background: #fff1aa;
   border: 1px solid #dfc478;
   border-radius: 1px;
@@ -1110,20 +1110,8 @@ textarea {
   width: 210px;
 }
 .tab-headings {
-  min-height: 0;
-  flex-shrink: 1;
-  margin: 10px 0 0;
-  border-top: 1px solid #8b8b6d44;
-  padding-top: 10px;
-  max-height: 32dvh;
-  overflow-y: auto;
-}
-.tab-headings h3 {
-  margin: 0 8px 6px;
-  font:
-    600 11px/1.5 system-ui,
-    sans-serif;
-  color: #5c5637;
+  margin: 4px 0 9px 17px;
+  border-left: 1px solid #8b8b6d44;
 }
 .tab-headings > button {
   width: 100%;

@@ -100,32 +100,37 @@ export function DocumentTabs({
                 </div>
               </details>
             </div>
+            {tab.id === activeId && (
+              <nav className="tab-headings" aria-label="Titres de l’onglet actif">
+                {headings.length ? (
+                  headings.map((h) => (
+                    <button
+                      key={h.pos}
+                      style={{ paddingLeft: 8 + (h.level - 1) * 10 }}
+                      onClick={() =>
+                        editor
+                          .chain()
+                          .focus()
+                          .setTextSelection(h.pos + 1)
+                          .scrollIntoView()
+                          .run()
+                      }
+                    >
+                      {h.text || 'Titre sans texte'}
+                    </button>
+                  ))
+                ) : (
+                  <p>
+                    Vos titres apparaîtront ici.
+                    <br />
+                    Utilisez les styles Titre 1, 2 et 3 pour structurer vos idées.
+                  </p>
+                )}
+              </nav>
+            )}
           </div>
         ))}
       </div>
-      <nav className="tab-headings" aria-label="Titres de l’onglet actif">
-        <h3>Titres de l’onglet</h3>
-        {headings.length ? (
-          headings.map((h) => (
-            <button
-              key={h.pos}
-              style={{ paddingLeft: 8 + (h.level - 1) * 10 }}
-              onClick={() =>
-                editor
-                  .chain()
-                  .focus()
-                  .setTextSelection(h.pos + 1)
-                  .scrollIntoView()
-                  .run()
-              }
-            >
-              {h.text || 'Titre sans texte'}
-            </button>
-          ))
-        ) : (
-          <p>Ajoutez un titre pour le retrouver ici.</p>
-        )}
-      </nav>
       {rename && (
         <Modal title="Renommer l’onglet" onClose={() => setRename(null)}>
           <form

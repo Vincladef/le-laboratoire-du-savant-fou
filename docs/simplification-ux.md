@@ -8,8 +8,8 @@ Mission demandée le 17 octobre 2026 : identité Bristol conservée, commandes p
 - Filtres exacts de priorité et de difficulté, combinables et initialement sur Toutes.
 - Contexte intact : seuls les trous filtrés sont masqués ; les autres sont du texte normal.
 - Indices au niveau du passage ; évaluation facultative après révélation et modification possible dans les outils de l’éditeur.
-- Barre compacte, commandes de révélation visibles, navigation des onglets distincte du plan des titres.
-- Espace de navigation absent lorsqu’il est fermé ; panneau des passages non ouvert automatiquement après création. Papier, encre, ruban et couleurs douces conservés.
+- Barre compacte et commandes de révélation visibles. Après retour utilisateur, le plan de l’éditeur reprend son organisation précédente : bouton « Plan » au-dessus du carnet à gauche et titres sous l’onglet actif, sans bouton « Navigation » dans l’en-tête.
+- Le plan peut être masqué sans supprimer le contenu ; sa préférence reste persistante. Une seule zone défilante contient onglets et titres pour éviter les débordements sur mobile. Panneau des passages non ouvert automatiquement après création. Papier, encre, ruban et couleurs douces conservés.
 - Réglage de fuseau horaire retiré de l’interface, les dates documentaires utilisant le fuseau de l’appareil. Les anciennes préférences ne sont pas effacées lors d’un changement de nom.
 
 ## Données

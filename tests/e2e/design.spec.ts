@@ -93,6 +93,8 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await editor.fill('Observations du laboratoire.');
   await expect(page.locator('.save-state')).toHaveText('Enregistré');
   const toggle = page.getByRole('button', { name: 'Plan du document', exact: true });
+  await expect(toggle).toHaveText('Plan');
+  await expect(page.locator('.editor-header-actions .outline-toggle')).toHaveCount(0);
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await documentMenu(page);
   await expect(page.getByLabel('Zoom', { exact: true })).toHaveValue('fit');
@@ -104,6 +106,12 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await page.screenshot({ path: info.outputPath('carnet-desktop.png'), fullPage: true });
   await toggle.click();
   await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
+  await expect(
+    page
+      .locator('.document-tab-item')
+      .filter({ has: page.locator('.tab-title-row.active') })
+      .getByRole('navigation', { name: 'Titres de l’onglet actif' }),
+  ).toBeVisible();
   await page.reload();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await page.getByRole('button', { name: 'Masquer le plan' }).click();

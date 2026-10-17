@@ -71,6 +71,11 @@ export async function verifyHostedBrowser(
       throw new Error('Page trop étroite sur ordinateur');
     await page.getByRole('button', { name: 'Plan du document', exact: true }).click();
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Plan du document', exact: true })).toHaveText(
+      'Plan',
+    );
+    await expect(page.locator('.editor-header-actions .outline-toggle')).toHaveCount(0);
+    await expect(page.locator('.document-tab-item .tab-headings')).toBeVisible();
     await page.getByRole('button', { name: 'Masquer le plan', exact: true }).click();
     checks.push('hosted-browser-stationery-and-outline-toggle');
     await expect(editor.locator('strong')).toContainText('Une réponse');

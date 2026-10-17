@@ -393,17 +393,6 @@ function DocumentEditor({
             </div>
             <div className="editor-header-actions">
               <button
-                ref={outlineToggle}
-                className="button subtle outline-toggle"
-                aria-label="Plan du document"
-                aria-expanded={outline}
-                aria-controls="document-outline"
-                onClick={() => setOutline(!outline)}
-              >
-                <PanelLeft size={17} />
-                <span>Navigation</span>
-              </button>
-              <button
                 className="button subtle concentration-toggle"
                 aria-label={shell.focusMode ? 'Quitter la concentration' : 'Concentration'}
                 aria-pressed={shell.focusMode}
@@ -591,8 +580,18 @@ function DocumentEditor({
             </div>
           )}
           <div className="editor-workspace">
-            {outline && (
-              <div className="outline-dock">
+            <div className="outline-dock">
+              <button
+                ref={outlineToggle}
+                className="button subtle outline-toggle"
+                aria-label="Plan du document"
+                aria-expanded={outline}
+                aria-controls="document-outline"
+                onClick={() => setOutline(!outline)}
+              >
+                <PanelLeft size={17} /> Plan
+              </button>
+              {outline && (
                 <DocumentTabs
                   editor={editor}
                   tabs={tabs}
@@ -625,8 +624,8 @@ function DocumentEditor({
                     outlineToggle.current?.focus();
                   }}
                 />
-              </div>
-            )}
+              )}
+            </div>
             <main className="paper-workspace" ref={workspace} aria-label="Espace d’écriture">
               <div
                 className="paper-ruler"
