@@ -21,3 +21,9 @@ La recette hébergée ajoute un parcours dédié à la barre mobile, avec docume
 ## Vérification locale
 
 TypeScript, compilation Vite et 96 tests unitaires/intégration réussis. Les 15 parcours navigateur sont validés : 13 dans la dernière exécution complète puis les 2 restants rejoués avec succès après correction d’une lecture concurrente de mail de développement et adaptation du test au bouton Masquer supprimé. Le scénario de défilement mobile a aussi réussi isolément. Les contrôles de contraste et de navigation clavier sont conservés, sans assertions désactivées.
+
+## Développement hébergé
+
+Commit `079ff274719c4dd608f19ab83d680a3bc69713ae`, déploiement de recette `6ad3865f2082312a2004f65e` **ready** : 17 contrôles HTTPS/Neon et 10 parcours Chromium hébergés réussis, aucune erreur JavaScript. Le nouveau parcours vérifie la barre sticky, la saisie en petite hauteur et l’accès aux réglages depuis l’éditeur mobile. Les filtres multiples sont vérifiés sur l’URL réelle. Inventaire et empreintes avant/après inchangés, aucune migration appliquée.
+
+La validation production doit être contrôlée séparément après publication sur `main`.
