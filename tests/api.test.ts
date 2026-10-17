@@ -203,6 +203,21 @@ describe('Authentification et cloisonnement réels dans PostgreSQL', () => {
     ).toBe(400);
     expect((await (await alice.request('/profile')).json()).role).toBe('free');
   });
+  it('modifie le nom sans imposer un ancien réglage de calendrier ni effacer ses préférences', async () => {
+    expect(
+      (await alice.request('/profile', 'PATCH', { name: 'Alice', timezone: 'Pacific/Tahiti' }))
+        .status,
+    ).toBe(200);
+    expect((await alice.request('/profile', 'PATCH', { name: 'Alice simplifiée' })).status).toBe(
+      200,
+    );
+    const profile = await (await alice.request('/profile')).json();
+    expect(profile.preferences.timezone).toBe('Pacific/Tahiti');
+    expect(profile.role).toBe('free');
+    expect(
+      (await alice.request('/profile', 'PATCH', { name: 'Alice', timezone: 'invalide' })).status,
+    ).toBe(400);
+  });
   it('refuse les images distantes et les liens exécutables', async () => {
     const badImage = {
       type: 'doc',

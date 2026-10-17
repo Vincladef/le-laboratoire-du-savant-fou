@@ -8,6 +8,7 @@ import { getConfig } from '../server/config';
 import { verifyHostedBrowser } from './hosted-browser-smoke';
 import { verifyManagedSignup } from './managed-signup-smoke';
 import { authRetryDelay, waitForAuthWindow } from './auth-retry';
+import { reviewDataFingerprint } from './review-migration-proof';
 
 /** Development-first checks; production additionally requires an explicit deployment gate. */
 export async function verifyManagedAuth(client: PoolClient, db: Database) {
@@ -33,6 +34,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
       )
     ).rows[0];
   const before = await counts();
+  const preservedBefore = await reviewDataFingerprint(client);
   const ownerEmail = process.env.LAB_OWNER_EMAIL;
   const ownerCandidates = ownerEmail
     ? (
@@ -245,40 +247,27 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     )
       throw new Error('Annotations Neon incohérentes');
     checks.push('neon-rich-annotations-hints-priorities');
-    const createdSession = await (
-      await call(
-        '/learning/sessions',
-        'POST',
-        {
-          id: randomUUID(),
-          filters: { documentIds: [docId], folderIds: [], priorities: ['high'] },
-        },
-        201,
-      )
-    ).json();
-    if (createdSession.total !== 1 || createdSession.current.anchor.id !== anchorId)
-      throw new Error('Filtrage programmé incorrect');
-    const path = `/learning/sessions/${createdSession.id}/items/${createdSession.current.itemId}`;
-    await call(`${path}/rate`, 'POST', { actionId: randomUUID(), rating: 3 }, 409);
-    await call(`${path}/reveal`, 'POST', {});
-    const resumed = await (await call(`/learning/sessions/${createdSession.id}`)).json();
-    if (!resumed.current.revealed) throw new Error('Révélation non persistée');
-    const actionId = randomUUID();
-    await call(`${path}/rate`, 'POST', { actionId, rating: 3 });
-    await call(`${path}/rate`, 'POST', { actionId, rating: 3 });
-    const history = await (await call(`/anchors/${anchorId}/reviews`)).json();
-    if (history.length !== 1) throw new Error('Révision dupliquée');
+    const difficultyPath = `/anchors/${anchorId}/difficulty`;
+    const evaluation = { difficulty: 'hard', difficultyRevision: 0 };
+    await call(difficultyPath, 'PATCH', evaluation);
+    await call(difficultyPath, 'PATCH', evaluation);
+    await call(difficultyPath, 'PATCH', { difficulty: 'easy', difficultyRevision: 0 }, 409);
     const direct = await client.query(
-      'select c.reps,c.stability,c.difficulty,c.due,count(r.id)::int as reviews from lab.fsrs_cards c join lab.review_history r on r.card_id=c.id where c.anchor_id=$1 and c.owner_id=$2 group by c.id',
+      'select difficulty,difficulty_revision,(select count(*)::int from lab.fsrs_cards where owner_id=$2) as cards,(select count(*)::int from lab.study_sessions where owner_id=$2) as sessions from lab.memory_anchors where id=$1 and owner_id=$2',
       [anchorId, legacyId],
     );
     if (
-      direct.rows[0]?.reps !== 1 ||
-      direct.rows[0]?.reviews !== 1 ||
-      !(Number(direct.rows[0]?.stability) > 0)
+      direct.rows[0]?.difficulty !== 'hard' ||
+      direct.rows[0]?.difficulty_revision !== 1 ||
+      direct.rows[0]?.cards !== 0 ||
+      direct.rows[0]?.sessions !== 0
     )
-      throw new Error('Persistance FSRS Neon incorrecte');
-    checks.push('neon-fsrs-scheduling-deduplication-direct-sql');
+      throw new Error('Difficulté manuelle non persistée ou ancienne planification encore active');
+    const reading = await (await call(`/documents/${docId}/review`)).json();
+    if (!isDeepStrictEqual(reading.document.content, content) || reading.passages.length !== 2)
+      throw new Error('Document de révision incohérent');
+    await call('/learning/sessions', 'POST', {}, 410);
+    checks.push('neon-manual-difficulty-concurrency-and-direct-sql');
     await call(
       `/documents/${docId}`,
       'PUT',
@@ -290,8 +279,8 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     cookies.clear();
     await call('/auth/sign-in/email', 'POST', { email, password });
     const persisted = await (await call(`/documents/${docId}/anchors`)).json();
-    if (persisted.find((a: any) => a.id === anchorId)?.card.reps !== 1)
-      throw new Error('FSRS perdu après reconnexion');
+    if (persisted.find((a: any) => a.id === anchorId)?.difficulty !== 'hard')
+      throw new Error('Difficulté perdue après reconnexion');
     checks.push('neon-learning-persists-after-relogin');
     const ownCookies = new Map(cookies);
     cookies.clear();
@@ -299,8 +288,13 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     const foreignProfile = await (await call('/profile')).json();
     if (foreignProfile.role !== 'free') throw new Error('Rôle inattendu pour un nouveau compte');
     await call(`/documents/${docId}/anchors`, 'GET', undefined, 404);
-    await call(`/anchors/${anchorId}/reviews`, 'GET', undefined, 404);
-    await call(`/learning/sessions/${createdSession.id}`, 'GET', undefined, 404);
+    await call(`/documents/${docId}/review`, 'GET', undefined, 404);
+    await call(
+      `/anchors/${anchorId}/difficulty`,
+      'PATCH',
+      { difficulty: 'easy', difficultyRevision: 1 },
+      404,
+    );
     await call('/auth/sign-out', 'POST', {});
     cookies.clear();
     for (const [k, v] of ownCookies) cookies.set(k, v);
@@ -355,11 +349,16 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     if (process.env.LAB_VERIFY_BROWSER === '1') {
       browser = await verifyHostedBrowser(config.baseURL, email, password, docId);
       const persisted = await client.query(
-        'select count(*)::int as count, sum(c.reps)::int as reps from lab.fsrs_cards c join lab.memory_anchors a on a.id=c.anchor_id where a.document_id=$1 and a.owner_id=$2',
-        [docId, legacyId],
+        'select count(*)::int as count,count(*) filter (where difficulty=$3)::int as easy,(select count(*)::int from lab.fsrs_cards where owner_id=$2) as cards,(select count(*)::int from lab.study_sessions where owner_id=$2) as sessions from lab.memory_anchors where document_id=$1 and owner_id=$2',
+        [docId, legacyId, 'easy'],
       );
-      if (persisted.rows[0].count !== 3 || persisted.rows[0].reps !== 3)
-        throw new Error('Données navigateur non persistées dans Neon');
+      if (
+        persisted.rows[0].count !== 3 ||
+        persisted.rows[0].easy !== 1 ||
+        persisted.rows[0].cards !== 0 ||
+        persisted.rows[0].sessions !== 0
+      )
+        throw new Error('Révision simple navigateur non persistée dans Neon');
       checks.push('hosted-browser-learning-direct-neon-persistence');
     }
     cookies.clear();
@@ -428,6 +427,11 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     await client.query('delete from lab."user" where id=$1 and email=$2', [legacyId, email]);
   }
   const after = await counts();
+  const preservedAfter = await reviewDataFingerprint(client);
+  if (!isDeepStrictEqual(before, after) || !isDeepStrictEqual(preservedBefore, preservedAfter))
+    throw new Error(
+      'L’inventaire a changé pendant la recette. Vérifiez les données avant publication.',
+    );
   const leftovers = await client.query(
     'select (select count(*) from lab."user" where id=$1 or id in (select user_id from lab.auth_identities where subject=$2)) + (select count(*) from neon_auth."user" where id=$3 or id=$2::uuid) as count',
     [legacyId, foreignId, id],
@@ -440,6 +444,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     before,
     after,
     inventoryStable: JSON.stringify(before) === JSON.stringify(after),
+    archivedDataPreserved: true,
     emailDelivery: 'shared-provider-not-inbox-tested',
     google: 'shared-provider-initial-redirect-tested-consent-not-tested',
     ownerCandidate:

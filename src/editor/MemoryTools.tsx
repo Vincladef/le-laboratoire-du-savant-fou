@@ -6,7 +6,13 @@ import { BookOpen, Brain, Plus, Trash2 } from 'lucide-react';
 import { Modal } from '../components/Modal';
 import { api, json } from '../lib/api';
 import { extractAnchors, type RichNode } from '../shared/document';
-import { priorityLabels, type MemoryPassage, type Priority } from '../shared/learning';
+import {
+  priorityLabels,
+  difficultyLabels,
+  type Difficulty,
+  type MemoryPassage,
+  type Priority,
+} from '../shared/learning';
 import { createPassage, modifyPassage, selectPassage } from './memory-commands';
 import type { SaveState } from './useAutosave';
 export function MemoryTools({
@@ -85,11 +91,11 @@ export function MemoryTools({
       setBusy(false);
     }
   }
-  async function confirm(p: MemoryPassage, resetSchedule: boolean) {
+  async function confirm(p: MemoryPassage) {
     await saved();
     await api(`/anchors/${p.id}/confirm`, {
       method: 'POST',
-      body: json({ revision: p.revision, resetSchedule }),
+      body: json({ revision: p.revision }),
     });
     await remote.refetch();
   }
@@ -131,6 +137,35 @@ export function MemoryTools({
                 ))}
               </select>
             </label>
+            <label>
+              Difficulté
+              <select
+                aria-label={`Difficulté du passage ${index + 1}`}
+                value={p?.difficulty || 'unrated'}
+                disabled={busy || !p}
+                onChange={(e) => {
+                  const difficulty = e.target.value as Difficulty;
+                  if (p)
+                    void run(async () => {
+                      await saved();
+                      try {
+                        await api(`/anchors/${p.id}/difficulty`, {
+                          method: 'PATCH',
+                          body: json({ difficulty, difficultyRevision: p.difficultyRevision }),
+                        });
+                      } finally {
+                        await remote.refetch();
+                      }
+                    });
+                }}
+              >
+                {Object.entries(difficultyLabels).map(([key, label]) => (
+                  <option key={key} value={key}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button
               className="button subtle"
               onClick={() => {
@@ -150,23 +185,13 @@ export function MemoryTools({
             </button>
             {p?.status === 'needs_review' && (
               <div className="passage-warning">
-                <p>
-                  La réponse a changé. Ce passage est suspendu du calendrier jusqu’à votre
-                  validation.
-                </p>
+                <p>Le texte a changé. Vérifiez ce passage avant de le masquer à nouveau.</p>
                 <button
                   className="button subtle"
                   disabled={busy}
-                  onClick={() => void run(() => confirm(p, false))}
+                  onClick={() => void run(() => confirm(p))}
                 >
-                  Valider et conserver le calendrier
-                </button>
-                <button
-                  className="button subtle"
-                  disabled={busy}
-                  onClick={() => void run(() => confirm(p, true))}
-                >
-                  Valider et recommencer l’apprentissage
+                  Valider le passage
                 </button>
               </div>
             )}
@@ -214,34 +239,20 @@ export function MemoryTools({
           </div>
         ),
         reviews: (
-          <div className="memory-review-options">
-            {' '}
-            <button
-              className="button subtle"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await saved();
-                  navigate(`/study/free/${documentId}`);
-                })
-              }
-            >
-              <BookOpen size={16} />
-              Révision libre
-            </button>
-            <button
-              className="button subtle"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await saved();
-                  navigate(`/study?document=${documentId}`);
-                })
-              }
-            >
-              Révision programmée
-            </button>
-          </div>
+          <button
+            className="button primary review-document-button"
+            aria-label="Réviser ce document"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await saved();
+                navigate(`/study/${documentId}`);
+              })
+            }
+          >
+            <BookOpen size={16} />
+            Réviser
+          </button>
         ),
         panel,
       })}
@@ -272,7 +283,6 @@ export function MemoryTools({
                   );
                 if (modal.id) modifyPassage(editor, modal.id, { hint, priority });
                 else createPassage(editor, hint, priority);
-                setExpanded(true);
                 setModal(null);
               } catch (e) {
                 setError((e as Error).message);

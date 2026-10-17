@@ -233,6 +233,11 @@ export const memoryAnchors = lab.table(
     metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
     hint: text('hint').notNull().default(''),
     priority: text('priority').$type<'high' | 'medium' | 'low'>().notNull().default('medium'),
+    difficulty: text('difficulty')
+      .$type<'easy' | 'medium' | 'hard' | 'unrated'>()
+      .notNull()
+      .default('unrated'),
+    difficultyRevision: integer('difficulty_revision').notNull().default(0),
     revision: integer('revision').notNull().default(1),
     documentRevision: integer('document_revision').notNull(),
     createdAt: created(),
@@ -249,8 +254,12 @@ export const memoryAnchors = lab.table(
     index('anchors_document_owner_status_idx').on(t.documentId, t.ownerId, t.status),
     check('anchor_status', sql`${t.status} IN ('active','deleted','needs_review')`),
     check('anchor_priority', sql`${t.priority} IN ('high','medium','low')`),
+    check('anchor_difficulty', sql`${t.difficulty} IN ('easy','medium','hard','unrated')`),
+    check('anchor_difficulty_revision', sql`${t.difficultyRevision} >= 0`),
   ],
 );
+// Inactive legacy archive: no application route writes or schedules these records.
+// Retained to avoid destroying existing evaluations/history during UX simplification.
 export const fsrsCards = lab.table(
   'fsrs_cards',
   {

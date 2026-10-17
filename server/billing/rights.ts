@@ -67,6 +67,6 @@ export async function rights(db: any, userId: string, config: AppConfig, now = n
       clozes: plans[tier].clozes,
       versions: Math.max(plans[tier].versions, profile?.legacyVersionLimit || 0),
     },
-    features: { editor: true, versions: true, cloze: true, fsrs: true, docx: true, pdf: true },
+    features: { editor: true, versions: true, cloze: true, review: true, docx: true, pdf: true },
   };
 }

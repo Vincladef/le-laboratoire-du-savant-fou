@@ -96,7 +96,7 @@ function OfferNote() {
   return (
     <div className="offer-note">
       <p>
-        Éditeur complet, textes à trous et révisions FSRS dans toutes les formules. Images : 4 Mo
+        Éditeur complet, textes à trous et révisions dans toutes les formules. Images : 4 Mo
         maximum par fichier. Les limites de la formule gratuite restent provisoires.
       </p>
       <p>

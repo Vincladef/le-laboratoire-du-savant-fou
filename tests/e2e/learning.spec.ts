@@ -1,4 +1,4 @@
-import { documentMenu, reviewMenu, navigation } from './navigation';
+import { navigation } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
@@ -71,16 +71,22 @@ async function selectText(page: Page, text: string) {
 }
 const saved = async (page: Page) =>
   expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 20000 });
-test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise mobile et persistance', async ({
+test('révision unique : contexte, filtres combinés, indice local, difficulté facultative, réseau et reconnexion', async ({
   page,
-}, testInfo) => {
+}, info) => {
   test.setTimeout(150000);
-  const errors: string[] = [];
+  const errors: string[] = [],
+    obsoleteRequests: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
+  page.on('request', (r) => {
+    if (r.url().includes('/api/learning/')) obsoleteRequests.push(r.url());
+  });
   const email = await register(page);
   await page.getByRole('button', { name: 'Nouveau document', exact: true }).click();
   const editor = page.getByRole('textbox', { name: 'Contenu du document' });
-  await editor.fill('La cellule contient un noyau.');
+  await editor.fill(
+    'La cellule contient un noyau.\nLes mitochondries produisent de l’énergie.\nLe ribosome fabrique les protéines.',
+  );
   await selectText(page, 'cellule');
   await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
   await selectText(page, 'La cellule contient un noyau.');
@@ -89,98 +95,158 @@ test('passages multistyles, entraînement libre, FSRS, réponse perdue, reprise 
   await page.getByRole('dialog').getByRole('combobox').selectOption('high');
   await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
   await expect(editor.locator('strong')).toHaveText('cellule');
-  await editor.press('ControlOrMeta+End');
-  await editor.press('ArrowRight');
-  await editor.press('Enter');
-  await page.keyboard.type('Les mitochondries produisent de l’énergie.');
-  await selectText(page, 'Les mitochondries produisent de l’énergie.');
-  await editor.press('ControlOrMeta+Shift+m');
-  await expect(page.getByRole('dialog')).toBeVisible();
-  await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Organites énergétiques');
-  await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
+  for (const [text, priority] of [
+    ['Les mitochondries produisent de l’énergie.', 'medium'],
+    ['Le ribosome fabrique les protéines.', 'low'],
+  ]) {
+    await selectText(page, text);
+    await editor.press('ControlOrMeta+Shift+m');
+    await expect(page.getByRole('dialog').getByRole('combobox')).toHaveValue('medium');
+    await page.getByRole('dialog').getByRole('combobox').selectOption(priority);
+    await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  }
   await saved(page);
   const id = page.url().split('/').pop()!;
+  const original = await (await page.request.get(`/api/documents/${id}`)).json();
+  await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
+  await expect(page).toHaveURL(`/study/${id}`);
+  await expect(page.locator('.review-reveal')).toHaveCount(3);
+  await expect(page.getByLabel('Filtrer par priorité')).toHaveValue('all');
+  await expect(page.getByLabel('Filtrer par difficulté')).toHaveValue('all');
+  const paper = page.getByRole('document', { name: 'Document de révision' });
+  const bounds = await paper.boundingBox();
+  expect(bounds!.y).toBeLessThan(330);
+  await page.getByLabel('Filtrer par priorité').selectOption('high');
+  await expect(page.locator('.review-reveal')).toHaveCount(1);
+  await expect(paper).toContainText('Les mitochondries produisent');
+  await expect(paper).toContainText('Le ribosome fabrique');
+  await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).click();
+  await expect(page.locator('.review-hint[open]')).toContainText('Unité du vivant');
+  await expect(page.locator('.review-hint')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
+  await expect(
+    page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }),
+  ).toBeFocused();
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
+  await expect(paper.locator('strong')).toHaveText('cellule');
+  // Revealing is entirely optional and never writes an evaluation.
   let passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
-  expect(passages).toHaveLength(2);
-  const before = JSON.stringify(passages.map((p: any) => p.card));
-  await reviewMenu(page);
-  await page.getByRole('button', { name: 'Révision libre', exact: true }).click();
-  await expect(page).toHaveURL(/\/study\/free\//);
-  await page.getByLabel('Priorités à réviser').selectOption('high');
-  await expect(page.getByRole('status')).toContainText('0 / 1');
-  await expect.poll(() => page.locator('.study-hidden').count()).toBeGreaterThan(0);
-  await page.locator('.study-passages > summary').click();
-  await page.getByRole('button', { name: 'Afficher l’indice du passage 1', exact: true }).click();
-  await expect(page.locator('.hint')).toHaveText('Unité du vivant');
-  await page.getByRole('button', { name: 'Révéler toutes les réponses' }).click();
-  await expect(page.locator('.study-hidden')).toHaveCount(0);
-  await page.getByRole('document', { name: 'Document de révision' }).click();
-  await page.keyboard.press('r');
-  await expect.poll(() => page.locator('.study-hidden').count()).toBeGreaterThan(0);
+  expect(passages.every((p: any) => p.difficulty === 'unrated')).toBe(true);
+  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
+  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  await page.getByLabel('Filtrer par priorité').selectOption('all');
+  await page.getByRole('button', { name: 'Tout révéler', exact: true }).click();
+  for (const [number, difficulty] of [
+    [2, 'medium'],
+    [3, 'easy'],
+  ] as const) {
+    await page.getByLabel(`Évaluer la difficulté du passage ${number}`, { exact: true }).click();
+    await page
+      .getByLabel(`Difficulté du passage ${number}`, { exact: true })
+      .selectOption(difficulty);
+    await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  }
+  for (const difficulty of ['easy', 'medium', 'hard']) {
+    await page.getByLabel('Filtrer par difficulté').selectOption(difficulty);
+    await expect(page.locator('.review-reveal')).toHaveCount(1);
+  }
+  await page.getByLabel('Filtrer par difficulté').selectOption('unrated');
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
+  await expect(paper).toContainText('La cellule contient un noyau.');
+  await page.getByLabel('Filtrer par difficulté').selectOption('hard');
+  await page.getByLabel('Filtrer par priorité').selectOption('medium');
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
+  await page.getByLabel('Filtrer par priorité').selectOption('high');
+  await expect(page.locator('.review-reveal')).toHaveCount(1);
+  await page.getByRole('heading', { name: 'Réviser', exact: true }).click();
   await page.keyboard.press('Space');
-  await expect(page.getByRole('status')).toContainText('1 / 1');
-  passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
-  expect(JSON.stringify(passages.map((p: any) => p.card))).toBe(before);
-  await page.goto(`/document/${id}`);
-  await expect(editor).toBeVisible();
-  await page.getByRole('button', { name: /Passages/ }).click();
-  await page.getByRole('button', { name: 'Modifier l’indice' }).first().click();
-  await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Indice amélioré');
-  await page.getByRole('button', { name: 'Enregistrer l’indice', exact: true }).click();
-  await saved(page);
-  await reviewMenu(page);
-  await page.getByRole('button', { name: 'Révision programmée', exact: true }).click();
-  await expect(page).toHaveURL(/\/study\?document=/);
-  await expect(page.getByRole('status')).toContainText('2 passage(s)');
-  await page.getByRole('button', { name: 'Commencer la révision', exact: true }).click();
-  await expect(page).toHaveURL(/\/study\/session\//);
-  const sessionURL = page.url();
-  await page.getByRole('button', { name: 'Révéler la réponse', exact: true }).click();
-  await page.reload();
-  await expect(page.getByRole('button', { name: '3 · Moyen' })).toBeVisible();
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
   await page.route(
-    '**/api/learning/sessions/*/items/*/rate',
+    '**/api/anchors/*/difficulty',
     async (route) => {
       await route.fetch();
       await route.abort('failed');
     },
     { times: 1 },
   );
-  await page.getByRole('button', { name: '3 · Moyen' }).click();
-  await expect(page.getByRole('button', { name: 'Réessayer l’envoi' })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole('status')).toContainText('1 / 2');
-  await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('button', { name: 'Révéler la réponse', exact: true })).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2);
-  expect(overflow).toBe(false);
-  await page.getByRole('document', { name: 'Document de révision' }).click();
-  await page.keyboard.press('Space');
-  await expect(page.getByRole('button', { name: '4 · Facile' })).toBeVisible();
-  await page.getByRole('document', { name: 'Document de révision' }).click();
-  await page.context().setOffline(true);
-  await page.keyboard.press('4');
-  await expect(page.getByRole('button', { name: 'Réessayer l’envoi' })).toBeVisible();
-  await page.context().setOffline(false);
-  await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
+  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
+  await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
+  await page.getByLabel('Filtrer par priorité').selectOption('all');
+  await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
+  await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
+  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
+  const stored = await (await page.request.get(`/api/documents/${id}`)).json();
+  expect(stored.content).toEqual(original.content);
+  expect(stored.revision).toBe(original.revision);
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
-  expect(passages.map((p: any) => p.card.reps)).toEqual([1, 1]);
-  for (const p of passages) {
-    const history = await (await page.request.get(`/api/anchors/${p.id}/reviews`)).json();
-    expect(history).toHaveLength(1);
-  }
-  await page.request.post('/api/auth/sign-out', {
-    data: {},
-    headers: { Origin: new URL(page.url()).origin },
+  expect(passages[0]).toMatchObject({
+    difficulty: 'easy',
+    difficultyRevision: 2,
+    priority: 'high',
   });
-  await page.goto('/');
+  await page.getByLabel('Filtrer par priorité').selectOption('all');
+  await page.getByLabel('Filtrer par difficulté').selectOption('all');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await expect(page.locator('.review-reveal')).toHaveCount(3);
+  await page.getByRole('button', { name: 'Tout révéler', exact: true }).click();
+  await page.getByLabel('Évaluer la difficulté du passage 2', { exact: true }).click();
+  await page.context().setOffline(true);
+  await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('hard');
+  await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
+  await page.context().setOffline(false);
+  await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
+  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(
+    true,
+  );
+  await page.screenshot({ path: info.outputPath('revision-simple-mobile.png'), fullPage: true });
+  await navigation(page);
+  await page.getByRole('button', { name: 'Déconnexion', exact: true }).click();
   await page.getByLabel('Adresse email').fill(email);
   await page.getByLabel('Mot de passe', { exact: true }).fill(password);
-  await page.getByRole('button', { name: 'Me connecter' }).click();
+  await page.getByRole('button', { name: 'Me connecter', exact: true }).click();
   await expect(page).toHaveURL(/\/library$/);
-  await page.goto(sessionURL);
-  await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath('mission-2-mobile.png'), fullPage: true });
+  await page.goto(`/study/free/${id}`);
+  await expect(page).toHaveURL(`/study/${id}`);
+  await expect(page.locator('.review-reveal')).toHaveCount(3);
+  passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+  expect(passages.map((p: any) => p.difficulty)).toEqual(['easy', 'hard', 'easy']);
+  await page.goto(`/document/${id}`);
+  await expect(editor).toBeVisible();
+  await page.getByRole('button', { name: /^Passages/ }).click();
+  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
+  await expect
+    .poll(async () => {
+      const rows = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+      return rows[0].difficulty;
+    })
+    .toBe('hard');
+  await page.getByLabel('Priorité du passage 1', { exact: true }).selectOption('medium');
+  await page.getByRole('button', { name: 'Modifier l’indice', exact: true }).first().click();
+  await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Indice amélioré');
+  await page.getByRole('button', { name: 'Enregistrer l’indice', exact: true }).click();
+  await saved(page);
+  passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+  expect(passages[0]).toMatchObject({
+    difficulty: 'hard',
+    priority: 'medium',
+    hint: 'Indice amélioré',
+  });
+  await expect(editor.locator('strong')).toHaveText('cellule');
+  await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
+  await page.getByLabel('Filtrer par priorité').selectOption('medium');
+  await page.getByLabel('Filtrer par difficulté').selectOption('hard');
+  await expect(page.locator('.review-reveal')).toHaveCount(2);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({ path: info.outputPath('revision-simple-desktop.png'), fullPage: true });
+  expect(obsoleteRequests).toEqual([]);
   expect(errors).toEqual([]);
 });
 test('les écrans Neon proposent la confirmation par code et la récupération par lien', async ({

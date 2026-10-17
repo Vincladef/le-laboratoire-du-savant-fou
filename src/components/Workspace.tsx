@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen,
   Sparkles,
@@ -301,20 +301,11 @@ function NavigationDrawer({ children, onClose }: { children: ReactNode; onClose:
 }
 function ProfileDialog({ user, onClose }: { user: User; onClose: () => void }) {
   const client = useQueryClient();
+  const { refetch: refreshSession } = authClient.useSession();
   const [name, setName] = useState(user.name),
-    [zone, setZone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris'),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
-  const profile = useQuery({
-    queryKey: ['profile', user.id],
-    queryFn: () => api<{ role: string; preferences: { timezone?: string } }>('/profile'),
-  });
-  const [zoneDirty, setZoneDirty] = useState(false);
-  useEffect(() => {
-    if (!zoneDirty && profile.data?.preferences.timezone)
-      setZone(profile.data.preferences.timezone);
-  }, [profile.data, zoneDirty]);
   return (
     <Modal title="Mon compte" onClose={onClose}>
       <form
@@ -323,8 +314,8 @@ function ProfileDialog({ user, onClose }: { user: User; onClose: () => void }) {
           setBusy(true);
           setError('');
           try {
-            await api('/profile', { method: 'PATCH', body: json({ name, timezone: zone }) });
-            await authClient.getSession({ query: { disableCookieCache: true } });
+            await api('/profile', { method: 'PATCH', body: json({ name }) });
+            await refreshSession({ query: { disableCookieCache: true } });
             await client.invalidateQueries({ queryKey: ['profile', user.id] });
             onClose();
           } catch (e) {
@@ -347,17 +338,6 @@ function ProfileDialog({ user, onClose }: { user: User; onClose: () => void }) {
         <label>
           Adresse email
           <input readOnly value={user.email} />
-        </label>
-        <label>
-          Fuseau horaire
-          <input
-            value={zone}
-            placeholder={profile.data?.preferences.timezone || 'Europe/Paris'}
-            onChange={(e) => {
-              setZoneDirty(true);
-              setZone(e.target.value);
-            }}
-          />
         </label>
         <p className="muted small">
           Vos documents et révisions sont privés. Les droits d’abonnement sont vérifiés côté
@@ -387,9 +367,9 @@ function ProfileDialog({ user, onClose }: { user: User; onClose: () => void }) {
           Recevoir un lien pour changer mon mot de passe
         </button>
         {notice && <p role="status">{notice}</p>}
-        {(error || profile.error) && (
+        {error && (
           <p className="alert error" role="alert">
-            {error || profile.error?.message}
+            {error}
           </p>
         )}
         <div className="modal-actions">

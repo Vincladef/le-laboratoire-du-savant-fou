@@ -8,7 +8,7 @@
 - Netlify Free : le site existant est conservé. La branche `mission-2` utilise des variables distinctes et la branche Neon `development` ; `main` utilise `production`.
 - Neon : Managed Better Auth est déjà actif sur les deux branches, avec un fournisseur email **shared** et Google OAuth **shared**. Ces intégrations suffisent au développement et aux premières validations sans serveur SMTP externe ni client Google Cloud propre.
 - L’API Neon refuse les liens de vérification avec son fournisseur email partagé (`INVALID_EMAIL_VERIFICATION_METHOD`). La confirmation emploie donc les codes email. La récupération utilise les liens de réinitialisation prévus par Neon, compatibles avec le fournisseur partagé. La vérification email est exigée avant tout accès aux documents.
-- FSRS : `ts-fsrs` 5.4.2, licence MIT, moteur FSRS 6, fonctionne dans le backend Netlify existant. Aucun service ou abonnement supplémentaire.
+- Révision manuelle : priorité et difficulté persistantes dans Neon. Le moteur FSRS a été retiré à la demande du titulaire ; aucun calendrier ni service de planification supplémentaire.
 - Les textes à trous utilisent les marques Tiptap/ProseMirror déjà prévues. Les révisions, cartes et séances restent dans les tables PostgreSQL `lab`, avec contrôle du propriétaire côté serveur.
 
 ## Limites des fournisseurs partagés

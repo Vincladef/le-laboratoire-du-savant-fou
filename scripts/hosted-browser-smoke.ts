@@ -1,4 +1,4 @@
-import { documentMenu, reviewMenu, navigation } from '../tests/e2e/navigation';
+import { navigation } from '../tests/e2e/navigation';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { chromium, expect as baseExpect, type Page } from '@playwright/test';
@@ -104,31 +104,33 @@ export async function verifyHostedBrowser(
     ).json();
     if (anchors.length !== 3) throw new Error('Annotation navigateur non persistée');
     checks.push('hosted-browser-create-rich-passage');
-    await reviewMenu(page);
-    await page.getByRole('button', { name: 'Révision libre', exact: true }).click();
-    await expect(page).toHaveURL(/\/study\/free\//);
-    await expect.poll(() => page.locator('.study-hidden').count()).toBeGreaterThan(0);
-    await page.getByRole('button', { name: 'Révéler toutes les réponses' }).click();
-    await expect(page.locator('.study-hidden')).toHaveCount(0);
-    checks.push('hosted-browser-free-study');
-    await page.goto(`${origin}/study?document=${documentId}`);
-    await page.getByRole('button', { name: 'Commencer la révision', exact: true }).click();
-    await expect(page).toHaveURL(/\/study\/session\//);
-    const sessionURL = page.url();
-    await page.getByRole('button', { name: 'Révéler la réponse', exact: true }).click();
-    // click() does not wait for the asynchronous reveal request to finish.
-    await expect(page.getByRole('button', { name: '3 · Moyen' })).toBeVisible();
-    await page.reload();
-    await expect(page.getByRole('button', { name: '3 · Moyen' })).toBeVisible();
-    await page.getByRole('button', { name: '3 · Moyen' }).click();
-    await expect(page.getByRole('status')).toContainText('1 / 2');
+    await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
+    await expect(page).toHaveURL(`${origin}/study/${documentId}`);
+    await expect(page.locator('.review-reveal')).toHaveCount(3);
+    await expect(page.getByLabel('Filtrer par priorité')).toHaveValue('all');
+    await expect(page.getByLabel('Filtrer par difficulté')).toHaveValue('all');
+    await page.getByLabel('Filtrer par priorité').selectOption('high');
+    await expect(page.locator('.review-reveal')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
+    await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+    await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
+    await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+    checks.push('hosted-browser-single-review-and-optional-difficulty');
+    await page.getByLabel('Filtrer par priorité').selectOption('all');
+    await page.getByLabel('Filtrer par difficulté').selectOption('easy');
+    await expect(page.locator('.review-reveal')).toHaveCount(1);
+    await page.getByLabel('Filtrer par priorité').selectOption('low');
+    await expect(page.locator('.review-reveal')).toHaveCount(0);
+    await page.getByLabel('Filtrer par priorité').selectOption('all');
+    await page.getByLabel('Filtrer par difficulté').selectOption('all');
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.getByRole('button', { name: 'Révéler la réponse', exact: true }).click();
-    await page.getByRole('button', { name: '4 · Facile' }).click();
-    await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
+    await page.reload();
+    await expect(page.locator('.review-reveal')).toHaveCount(3);
+    await page.getByRole('button', { name: 'Tout révéler', exact: true }).click();
+    await expect(page.locator('.review-reveal')).toHaveCount(0);
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2))
       throw new Error('Débordement mobile');
-    checks.push('hosted-browser-scheduled-fsrs-resume-mobile');
+    checks.push('hosted-browser-combined-filters-and-mobile-reading');
     await page.goto(`${origin}/document/${documentId}`);
     const plan = page.getByRole('button', { name: 'Plan du document', exact: true });
     if ((await plan.getAttribute('aria-expanded')) === 'false') await plan.click();
@@ -164,9 +166,29 @@ export async function verifyHostedBrowser(
     await expect(page).toHaveURL(/\/library$/);
     await page.goto(`${origin}/document/${documentId}`);
     await expect(editor).toContainText('Onglet publié et conservé dans Neon.');
-    await page.goto(sessionURL);
-    await expect(page.getByRole('heading', { name: 'Séance terminée.' })).toBeVisible();
+    await page.goto(`${origin}/study/${documentId}`);
+    await expect(page.locator('.review-reveal')).toHaveCount(3);
+    const persistedDifficulty = await (
+      await page.request.get(`${origin}/api/documents/${documentId}/anchors`)
+    ).json();
+    if (persistedDifficulty.filter((p: any) => p.difficulty === 'easy').length !== 1)
+      throw new Error('Difficulté perdue après reconnexion navigateur');
     checks.push('hosted-browser-relogin-persistence');
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
+    await expect(page.getByLabel('Fuseau horaire')).toHaveCount(0);
+    await page.getByLabel('Nom affiché', { exact: true }).fill('Recette Bouche-trou simplifié');
+    await page
+      .getByRole('dialog')
+      .getByRole('button', { name: 'Enregistrer', exact: true })
+      .click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await expect(page.getByLabel('Nom affiché', { exact: true })).toHaveValue(
+      'Recette Bouche-trou simplifié',
+    );
+    await page.keyboard.press('Escape');
+    checks.push('hosted-browser-simplified-profile-and-managed-neon-update');
     if (process.env.LAB_VERIFY_BILLING === '1') {
       await page.goto(`${origin}/billing`);
       await expect(

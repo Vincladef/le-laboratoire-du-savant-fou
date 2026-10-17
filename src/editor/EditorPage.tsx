@@ -393,6 +393,17 @@ function DocumentEditor({
             </div>
             <div className="editor-header-actions">
               <button
+                ref={outlineToggle}
+                className="button subtle outline-toggle"
+                aria-label="Plan du document"
+                aria-expanded={outline}
+                aria-controls="document-outline"
+                onClick={() => setOutline(!outline)}
+              >
+                <PanelLeft size={17} />
+                <span>Navigation</span>
+              </button>
+              <button
                 className="button subtle concentration-toggle"
                 aria-label={shell.focusMode ? 'Quitter la concentration' : 'Concentration'}
                 aria-pressed={shell.focusMode}
@@ -401,12 +412,7 @@ function DocumentEditor({
                 <Maximize2 size={16} />
                 <span>{shell.focusMode ? 'Quitter la concentration' : 'Concentration'}</span>
               </button>
-              <details className="review-menu menu">
-                <summary className="button primary">
-                  <BookOpen size={17} /> Réviser
-                </summary>
-                <div className="menu-popover">{memory.reviews}</div>
-              </details>
+              {memory.reviews}
               <details className="document-tools menu">
                 <summary aria-label="Options du document" className="icon-button">
                   <MoreHorizontal size={21} />
@@ -585,18 +591,8 @@ function DocumentEditor({
             </div>
           )}
           <div className="editor-workspace">
-            <div className="outline-dock">
-              <button
-                ref={outlineToggle}
-                className="outline-toggle button subtle"
-                aria-label="Plan du document"
-                aria-expanded={outline}
-                aria-controls="document-outline"
-                onClick={() => setOutline(!outline)}
-              >
-                <PanelLeft size={17} /> Plan
-              </button>
-              {outline && (
+            {outline && (
+              <div className="outline-dock">
                 <DocumentTabs
                   editor={editor}
                   tabs={tabs}
@@ -629,8 +625,8 @@ function DocumentEditor({
                     outlineToggle.current?.focus();
                   }}
                 />
-              )}
-            </div>
+              </div>
+            )}
             <main className="paper-workspace" ref={workspace} aria-label="Espace d’écriture">
               <div
                 className="paper-ruler"

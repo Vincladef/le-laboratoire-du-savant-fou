@@ -269,7 +269,8 @@ export function createApp(
             } catch {
               return false;
             }
-          }),
+          })
+          .optional(),
       })
       .strict()
       .parse(await c.req.json());

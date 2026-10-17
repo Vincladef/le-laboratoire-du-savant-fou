@@ -1,8 +1,7 @@
 import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import { HTTPException } from 'hono/http-exception';
 import { extractAnchors, plainText, type RichNode } from '../src/shared/document';
-import { documents, fsrsCards, memoryAnchors } from './db/schema';
-import { initialCard } from './scheduling';
+import { documents, memoryAnchors } from './db/schema';
 
 /** Called inside the document save/version transaction. No detached asynchronous indexing. */
 export async function syncAnchors(tx: any, doc: typeof documents.$inferSelect) {
@@ -86,17 +85,4 @@ export async function syncAnchors(tx: any, doc: typeof documents.$inferSelect) {
         },
       });
   }
-  const cards = await tx
-    .select({ anchorId: fsrsCards.anchorId })
-    .from(fsrsCards)
-    .where(inArray(fsrsCards.anchorId, identities));
-  const initialized = new Set(cards.map((c: any) => c.anchorId));
-  const missing = anchors
-    .filter((a) => !initialized.has(a.id))
-    .map((a) => ({ anchorId: a.id, ownerId: doc.ownerId, ...initialCard(now) }));
-  for (let offset = 0; offset < missing.length; offset += 400)
-    await tx
-      .insert(fsrsCards)
-      .values(missing.slice(offset, offset + 400))
-      .onConflictDoNothing();
 }

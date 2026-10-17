@@ -1,4 +1,4 @@
-import { documentMenu, reviewMenu, navigation } from './navigation';
+import { documentMenu, navigation } from './navigation';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
 test('liens Stripe directs, conditions discrètes et droits privés non falsifiables', async ({

@@ -27,6 +27,14 @@ export function DocumentTabs({
 }) {
   const [rename, setRename] = useState<DocumentTab | null>(null),
     [title, setTitle] = useState('');
+  const orderedTabs: DocumentTab[] = [];
+  const visit = (parentId: string | null) => {
+    for (const tab of tabs.filter((t) => t.parentId === parentId)) {
+      orderedTabs.push(tab);
+      visit(tab.id);
+    }
+  };
+  visit(null);
   const headings = useEditorState({
     editor,
     selector: ({ editor }) => {
@@ -50,7 +58,7 @@ export function DocumentTabs({
         </button>
       </div>
       <div className="document-tabs-list" role="navigation" aria-label="Onglets du document">
-        {tabs.map((tab) => (
+        {orderedTabs.map((tab) => (
           <div
             key={tab.id}
             className="document-tab-item"
@@ -92,37 +100,32 @@ export function DocumentTabs({
                 </div>
               </details>
             </div>
-            {tab.id === activeId && (
-              <div className="tab-headings">
-                {headings.length ? (
-                  headings.map((h) => (
-                    <button
-                      key={h.pos}
-                      style={{ paddingLeft: 12 + (h.level - 1) * 10 }}
-                      onClick={() =>
-                        editor
-                          .chain()
-                          .focus()
-                          .setTextSelection(h.pos + 1)
-                          .scrollIntoView()
-                          .run()
-                      }
-                    >
-                      {h.text || 'Titre sans texte'}
-                    </button>
-                  ))
-                ) : (
-                  <p>
-                    Vos titres apparaîtront ici.
-                    <br />
-                    Utilisez les styles Titre 1, 2 et 3 pour structurer vos idées.
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         ))}
       </div>
+      <nav className="tab-headings" aria-label="Titres de l’onglet actif">
+        <h3>Titres de l’onglet</h3>
+        {headings.length ? (
+          headings.map((h) => (
+            <button
+              key={h.pos}
+              style={{ paddingLeft: 8 + (h.level - 1) * 10 }}
+              onClick={() =>
+                editor
+                  .chain()
+                  .focus()
+                  .setTextSelection(h.pos + 1)
+                  .scrollIntoView()
+                  .run()
+              }
+            >
+              {h.text || 'Titre sans texte'}
+            </button>
+          ))
+        ) : (
+          <p>Ajoutez un titre pour le retrouver ici.</p>
+        )}
+      </nav>
       {rename && (
         <Modal title="Renommer l’onglet" onClose={() => setRename(null)}>
           <form

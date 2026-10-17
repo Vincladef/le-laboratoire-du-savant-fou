@@ -32,6 +32,6 @@ Les limites sont centralisées dans `src/shared/plans.ts`, appliquées via `serv
 
 ## Suite
 
-Mission 2 : `memoryAnchor`, `memory_anchors`, `fsrs_cards`, `review_history`, `study_sessions` et `study_items` portent l’apprentissage actif. Voir [learning.md](learning.md) pour FSRS, les conflits et la reprise. La migration personnalisée `0004` rend la référence entre historique et élément de séance différable : une suppression de compte termine ses cascades avant de vérifier cette référence.
+La révision active repose uniquement sur `memoryAnchor` et `memory_anchors` : priorité, indice et dernière difficulté explicite. `fsrs_cards`, `review_history`, `study_sessions` et `study_items` sont des archives historiques inactives, sans route de planification ni écriture applicative. Le moteur et sa dépendance sont retirés. Voir [learning.md](learning.md) pour migration et concurrence. La migration historique `0004` conserve les cascades différables nécessaires à une suppression de compte sans casser ces archives.
 
 Mission 3 : `subscriptions`, `billing_events` et `billing_admin_audit` portent la facturation. Le SDK Stripe vérifie les signatures ; les événements et la projection des droits sont transactionnels. L’état courant est relu par API pour éviter les inversions lors d’événements tardifs. Les intentions Checkout sont persistées avant l’appel externe. Un événement ne retire pas le droit propriétaire et ne déclenche pas son paiement. Voir [billing.md](billing.md), notamment le blocage volontaire des ventes non raccordées ou non validées juridiquement.

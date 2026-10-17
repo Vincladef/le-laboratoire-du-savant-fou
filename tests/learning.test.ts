@@ -4,11 +4,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { and, eq, sql } from 'drizzle-orm';
 import { hashPassword } from 'better-auth/crypto';
-import { fsrs } from 'ts-fsrs';
 import { openLocalDatabase } from '../scripts/local-database';
 import { createApp } from '../server/app';
-import { account, fsrsCards, memoryAnchors, reviews, user } from '../server/db/schema';
-import { fsrsParameters, toEngine, initialCard, schedule } from '../server/scheduling';
+import { account, fsrsCards, reviews, studySessions, studyItems, user } from '../server/db/schema';
+import { matchesPassage, type MemoryPassage } from '../src/shared/learning';
 import { copyWithNewAnchors, defaultLayout, type RichNode } from '../src/shared/document';
 const origin = 'http://localhost:5173',
   password = 'Learning-Test-Password-42!';
@@ -109,306 +108,223 @@ const save = async (d: any, nodes: RichNode[]) =>
     layout: d.layout,
   });
 const anchors = async (d: any) => alice.call(`/documents/${d.id}/anchors`);
-const start = async (
-  documentIds: string[],
-  priorities = ['high', 'medium', 'low'],
-  folderIds: string[] = [],
-) =>
-  alice.call(
-    '/learning/sessions',
-    'POST',
-    { id: crypto.randomUUID(), filters: { documentIds, folderIds, priorities } },
-    201,
+async function evaluate(id: string, difficulty: string, difficultyRevision = 0, status = 200) {
+  return alice.call(
+    `/anchors/${id}/difficulty`,
+    'PATCH',
+    { difficulty, difficultyRevision },
+    status,
   );
-const reveal = async (s: any) =>
-  alice.call(`/learning/sessions/${s.id}/items/${s.current.itemId}/reveal`, 'POST', {});
-describe('Passages documentaires et vrai calendrier FSRS PostgreSQL', () => {
-  it('synchronise des passages multistyles, leurs indices et priorités sans changer le texte', async () => {
+}
+describe('Révision unique, annotations et difficulté persistante', () => {
+  it('préserve les passages multistyles, indices et priorité ; aucune carte n’est créée', async () => {
     const id = crypto.randomUUID(),
       second = crypto.randomUUID();
-    let d = await doc([
-      marked(id, 'mémoire '),
-      marked(id, 'formatée', 'high', 'Un indice', 'italic'),
+    const d = await doc([
+      marked(id, 'mémoire ', 'medium'),
+      marked(id, 'formatée', 'medium', 'Un indice', 'italic'),
       { type: 'text', text: ' et ' },
-      marked(second, 'science', 'low', 'Savoir'),
+      marked(second, 'science', 'low'),
     ]);
-    let rows = await anchors(d);
+    const rows = await anchors(d);
     expect(rows).toHaveLength(2);
-    expect(rows.find((a: any) => a.id === id)).toMatchObject({
+    expect(rows[0]).toMatchObject({
       quote: 'mémoire formatée',
       hint: 'Un indice',
-      priority: 'high',
-      status: 'active',
-      card: { reps: 0, algorithmVersion: 'FSRS-6 / ts-fsrs@5.4.2' },
+      priority: 'medium',
+      difficulty: 'unrated',
+      difficultyRevision: 0,
     });
-    const before = rows.find((a: any) => a.id === id).card;
-    d = await save(d, [
-      marked(id, 'mémoire ', 'medium', 'Nouvel indice'),
-      marked(id, 'formatée', 'medium', 'Nouvel indice', 'italic'),
-      { type: 'text', text: ' et ' },
-      marked(second, 'science', 'low', 'Savoir'),
-    ]);
-    rows = await anchors(d);
-    const after = rows.find((a: any) => a.id === id);
-    expect(after).toMatchObject({ hint: 'Nouvel indice', priority: 'medium', status: 'active' });
-    expect(after.card).toEqual(before);
+    expect(rows[0]).not.toHaveProperty('card');
     expect(d.content.content[0].content[1].marks[0].type).toBe('italic');
-    const freeBefore = JSON.stringify(after.card);
-    await alice.call(`/documents/${d.id}`);
-    await anchors(d);
-    expect(JSON.stringify((await anchors(d)).find((a: any) => a.id === id).card)).toBe(freeBefore);
+    expect(await connection.db.select().from(fsrsCards)).toHaveLength(0);
   });
-  it('filtre les documents, descendants de dossiers, priorités et échéances', async () => {
-    const parent = await alice.call('/folders', 'POST', { name: 'Parent' }, 201),
-      child = await alice.call('/folders', 'POST', { name: 'Enfant', parentId: parent.id }, 201);
-    const id = crypto.randomUUID(),
-      low = crypto.randomUUID();
-    const d = await doc(
-      [marked(id, 'Important'), { type: 'text', text: ' ' }, marked(low, 'Secondaire', 'low')],
-      child.id,
-    );
-    const selected = await start([], ['high'], [parent.id]);
-    expect(selected.total).toBe(1);
-    expect(selected.current.anchor.id).toBe(id);
-    expect((await start([d.id], ['high', 'medium', 'low'])).total).toBe(2);
-    const [card] = await connection.db.select().from(fsrsCards).where(eq(fsrsCards.anchorId, id));
-    await connection.db
-      .update(fsrsCards)
-      .set({ due: new Date(Date.now() + 86400000) })
-      .where(eq(fsrsCards.id, card.id));
-    expect((await start([d.id], ['high'])).total).toBe(0);
-    await bob.call('/learning/eligible', 'POST', { documentIds: [d.id] }, 404);
-    await bob.call('/learning/eligible', 'POST', { folderIds: [parent.id] }, 404);
+  it('combine les filtres exacts, indépendants, avec toutes les valeurs par défaut', () => {
+    const base = { status: 'active', priority: 'medium', difficulty: 'unrated' } as MemoryPassage;
+    expect(matchesPassage(base, { priority: 'all', difficulty: 'all' })).toBe(true);
+    expect(matchesPassage(base, { priority: 'high', difficulty: 'all' })).toBe(false);
+    expect(matchesPassage(base, { priority: 'medium', difficulty: 'unrated' })).toBe(true);
+    expect(matchesPassage(base, { priority: 'medium', difficulty: 'easy' })).toBe(false);
+    for (const priority of ['high', 'medium', 'low'] as const)
+      for (const difficulty of ['easy', 'medium', 'hard', 'unrated'] as const)
+        expect(matchesPassage({ ...base, priority, difficulty }, { priority, difficulty })).toBe(
+          true,
+        );
+    expect(
+      matchesPassage({ ...base, status: 'needs_review' }, { priority: 'all', difficulty: 'all' }),
+    ).toBe(false);
+    expect(
+      matchesPassage({ ...base, status: 'deleted' }, { priority: 'all', difficulty: 'all' }),
+    ).toBe(false);
   });
-  it('refuse la note avant révélation, persiste le vrai résultat FSRS et déduplique les retransmissions', async () => {
+  it('enregistre une difficulté sans changer le texte, ses styles ou la révision documentaire', async () => {
     const id = crypto.randomUUID(),
-      d = await doc([marked(id, 'Une réponse')]);
-    let s = await start([d.id]);
+      d = await doc([marked(id, 'Un texte')]);
+    await evaluate(id, 'hard');
+    const stored = await alice.call(`/documents/${d.id}`);
+    expect(stored.content).toEqual(d.content);
+    expect(stored.revision).toBe(d.revision);
+    expect((await anchors(d))[0]).toMatchObject({
+      difficulty: 'hard',
+      difficultyRevision: 1,
+      priority: 'high',
+    });
+    expect(await connection.db.select().from(reviews)).toHaveLength(0);
+  });
+  it('résiste aux réponses réseau perdues et aux changements concurrents de difficulté', async () => {
+    const id = crypto.randomUUID(),
+      d = await doc([marked(id, 'Réponse')]);
+    const first = await evaluate(id, 'easy');
+    expect(await evaluate(id, 'easy')).toEqual(first);
+    await evaluate(id, 'hard', 0, 409);
+    expect((await anchors(d))[0].difficulty).toBe('easy');
+    await evaluate(id, 'hard', 1);
+    await evaluate(id, 'easy', 0, 409);
+    await evaluate(id, 'unrated', 2);
+    expect((await anchors(d))[0]).toMatchObject({ difficulty: 'unrated', difficultyRevision: 3 });
+  });
+  it('permet toutes les difficultés et refuse les notes FSRS et champs arbitraires', async () => {
+    const id = crypto.randomUUID();
+    await doc([marked(id, 'Réponse')]);
+    for (const [revision, difficulty] of ['easy', 'medium', 'hard', 'unrated'].entries())
+      await evaluate(id, difficulty, revision);
+    await evaluate(id, 'forgotten', 4, 400);
+    await evaluate(id, 'easy', -1, 400);
     await alice.call(
-      `/learning/sessions/${s.id}/items/${s.current.itemId}/rate`,
-      'POST',
-      { actionId: crypto.randomUUID(), rating: 3 },
-      409,
+      `/anchors/${id}/difficulty`,
+      'PATCH',
+      { difficulty: 'easy', difficultyRevision: 4, ownerId: bob.id },
+      400,
     );
-    s = await reveal(s);
-    expect(s.current.revealed).toBe(true);
-    expect((await alice.call(`/learning/sessions/${s.id}`)).current.revealed).toBe(true);
-    const [before] = await connection.db.select().from(fsrsCards).where(eq(fsrsCards.anchorId, id));
-    const actionId = crypto.randomUUID(),
-      path = `/learning/sessions/${s.id}/items/${s.current.itemId}/rate`;
-    const first = await alice.call(path, 'POST', { actionId, rating: 3 });
-    expect(first.session.completed).toBe(1);
-    expect(first.session.status).toBe('completed');
-    await alice.call(path, 'POST', { actionId, rating: 3 });
-    await alice.call(path, 'POST', { actionId: crypto.randomUUID(), rating: 4 }, 409);
-    const history = await alice.call(`/anchors/${id}/reviews`);
-    expect(history).toHaveLength(1);
-    const expected = fsrs(fsrsParameters).next(
-      toEngine(before),
-      new Date(history[0].reviewedAt),
-      3,
-    ).card;
-    const [after] = await connection.db.select().from(fsrsCards).where(eq(fsrsCards.anchorId, id));
-    expect(after.due.toISOString()).toBe(expected.due.toISOString());
-    expect(after.stability).toBe(expected.stability);
-    expect(after.difficulty).toBe(expected.difficulty);
-    expect(after.reps).toBe(1);
-    await alice.call('/auth/sign-out', 'POST', {});
-    await alice.login();
-    expect((await anchors(d))[0].card.reps).toBe(1);
-    expect(await alice.call(`/anchors/${id}/reviews`)).toHaveLength(1);
+    await alice.call(`/anchors/${id}/difficulty`, 'PATCH', { rating: 4 }, 400);
   });
-  it('calcule les quatre notes du moteur et empêche deux séances de noter la même carte simultanément', async () => {
-    for (const rating of [1, 2, 3, 4]) {
-      const id = crypto.randomUUID(),
-        d = await doc([marked(id, `Réponse ${rating}`)]);
-      const s = await reveal(await start([d.id])),
-        other = await reveal(await start([d.id]));
-      const path = `/learning/sessions/${s.id}/items/${s.current.itemId}/rate`;
-      await alice.call(path, 'POST', { actionId: crypto.randomUUID(), rating });
-      await alice.call(
-        `/learning/sessions/${other.id}/items/${other.current.itemId}/rate`,
-        'POST',
-        { actionId: crypto.randomUUID(), rating },
-        409,
-      );
-      const [a] = await anchors(d);
-      expect(a.card.reps).toBe(1);
-      expect(Number.isFinite(a.card.stability)).toBe(true);
-      expect(new Date(a.card.due).getTime()).toBeGreaterThan(Date.now() - 1000);
-    }
+  it('suit l’ordre documentaire, même après des mises à jour et un déplacement de passages', async () => {
+    const first = crypto.randomUUID(),
+      second = crypto.randomUUID();
+    let d = await doc([
+      marked(first, 'Premier'),
+      { type: 'text', text: ' et ' },
+      marked(second, 'Deuxième'),
+    ]);
+    await evaluate(first, 'hard');
+    const read = () => alice.call(`/documents/${d.id}/review`);
+    expect((await anchors(d)).map((p: any) => p.id)).toEqual([first, second]);
+    expect((await read()).passages.map((p: any) => p.id)).toEqual([first, second]);
+    d = await save(d, [
+      marked(second, 'Deuxième'),
+      { type: 'text', text: ' puis ' },
+      marked(first, 'Premier'),
+    ]);
+    expect((await read()).passages.map((p: any) => p.id)).toEqual([second, first]);
+    expect((await anchors(d)).find((p: any) => p.id === first).difficulty).toBe('hard');
   });
-  it('suspend un passage modifié et conserve son historique lors d’une validation et d’une priorité différente', async () => {
+  it('modifier priorité, indice, style ou paragraphe ne réinitialise pas la difficulté', async () => {
     const id = crypto.randomUUID();
-    let d = await doc([marked(id, 'Réponse initiale')]);
-    let s = await reveal(await start([d.id]));
-    await alice.call(`/learning/sessions/${s.id}/items/${s.current.itemId}/rate`, 'POST', {
-      actionId: crypto.randomUUID(),
-      rating: 3,
-    });
-    const previous = (await anchors(d))[0].card;
-    d = await save(d, [marked(id, 'Réponse complètement modifiée', 'medium')]);
-    let a = (await anchors(d))[0];
-    expect(a.status).toBe('needs_review');
-    expect((await start([d.id])).total).toBe(0);
-    await alice.call(`/anchors/${id}/confirm`, 'POST', { revision: a.revision - 1 }, 409);
-    await alice.call(`/anchors/${id}/confirm`, 'POST', {
-      revision: a.revision,
-      resetSchedule: false,
-    });
-    a = (await anchors(d))[0];
-    expect(a.status).toBe('active');
-    expect(a.card).toEqual(previous);
-    expect(await alice.call(`/anchors/${id}/reviews`)).toHaveLength(1);
-    await alice.call(`/anchors/${id}/confirm`, 'POST', {
-      revision: a.revision,
-      resetSchedule: true,
-    });
-    a = (await anchors(d))[0];
-    expect(a.card.reps).toBe(0);
-    expect(await alice.call(`/anchors/${id}/reviews`)).toHaveLength(1);
-  });
-  it('préserve l’identité avec le style et les déplacements, réidentifie les copies et restaure les annotations', async () => {
-    const id = crypto.randomUUID();
-    let d = await doc([marked(id, 'Déplacer')]);
-    const initial = d;
-    const initialVersion = (await alice.call(`/documents/${d.id}/versions`)).find(
-      (v: any) => v.revision === 1,
-    );
-    const historical = await alice.call(`/documents/${d.id}/versions/${initialVersion.id}`);
+    let d = await doc([marked(id, 'Original')]);
+    await evaluate(id, 'medium');
     d = await save(d, [
       { type: 'text', text: 'Avant ' },
-      marked(id, 'Déplacer', 'high', 'Un indice', 'italic'),
+      marked(id, 'Original', 'low', 'Indice amélioré', 'italic'),
+      { type: 'text', text: ' après.' },
     ]);
-    expect((await anchors(d))[0].status).toBe('active');
-    const copied = copyWithNewAnchors(d.content);
-    const copy = await alice.call('/documents', 'POST', { title: 'Copie', content: copied }, 201);
-    const [a] = await anchors(copy);
-    expect(a.id).not.toBe(id);
-    expect(a.sourceId).toBe(id);
-    expect(a.hint).toBe('Un indice');
-    await bob.call(`/documents/${d.id}/anchors`, 'GET', undefined, 404);
-    await bob.call(`/anchors/${id}/reviews`, 'GET', undefined, 404);
-    await bob.call(`/anchors/${id}/confirm`, 'POST', { revision: 1 }, 404);
-    const obsolete = d;
-    d = await save(d, [{ type: 'text', text: 'Avant Déplacer' }]);
-    expect((await anchors(d))[0].status).toBe('deleted');
-    expect((await start([d.id])).total).toBe(0);
-    await alice.call(
-      `/documents/${d.id}`,
-      'PUT',
-      { revision: obsolete.revision, title: d.title, content: initial.content, layout: d.layout },
-      409,
-    );
-    d = await save(d, historical.content.content[0].content);
-    expect((await anchors(d))[0].status).toBe('active');
-    expect((await anchors(d))[0].id).toBe(id);
+    expect((await anchors(d))[0]).toMatchObject({
+      difficulty: 'medium',
+      difficultyRevision: 1,
+      priority: 'low',
+      hint: 'Indice amélioré',
+      status: 'active',
+    });
+    expect(d.content.content[0].content[1].marks[0].type).toBe('italic');
   });
-  it('exclut une annotation fragmentée, une suppression et un document mis à la corbeille pendant une séance', async () => {
+  it('une réponse modifiée doit être validée ; validation ne programme ni ne réinitialise rien', async () => {
+    const id = crypto.randomUUID();
+    let d = await doc([marked(id, 'Original')]);
+    await evaluate(id, 'hard');
+    d = await save(d, [marked(id, 'Nouveau texte')]);
+    let p = (await anchors(d))[0];
+    expect(p.status).toBe('needs_review');
+    await alice.call(`/anchors/${id}/confirm`, 'POST', { revision: p.revision - 1 }, 409);
+    await alice.call(`/anchors/${id}/confirm`, 'POST', { revision: p.revision });
+    p = (await anchors(d))[0];
+    expect(p).toMatchObject({ status: 'active', difficulty: 'hard', difficultyRevision: 1 });
+    d = await save(d, [marked(id, 'Nouveau texte'), { type: 'text', text: ' contexte' }]);
+    expect((await anchors(d))[0].status).toBe('active');
+  });
+  it('un passage fragmenté reste visible et ne peut pas être confirmé à tort', async () => {
     const id = crypto.randomUUID();
     let d = await doc([marked(id, 'Réponse')]);
-    const s = await reveal(await start([d.id]));
-    d = await save(d, [
-      marked(id, 'Ré'),
-      { type: 'text', text: 'insertion sans marque' },
-      marked(id, 'ponse'),
-    ]);
-    let a = (await anchors(d))[0];
-    expect(a.status).toBe('needs_review');
-    await alice.call(`/anchors/${id}/confirm`, 'POST', { revision: a.revision }, 409);
-    await alice.call(
-      `/learning/sessions/${s.id}/items/${s.current.itemId}/rate`,
-      'POST',
-      { actionId: crypto.randomUUID(), rating: 3 },
-      409,
-    );
-    expect((await alice.call(`/learning/sessions/${s.id}`)).skipped).toBe(1);
-    const other = await doc([marked(crypto.randomUUID(), 'Autre')]);
-    const session = await start([other.id]);
-    await alice.call(`/documents/${other.id}/trash`, 'POST', {
-      revision: other.revision,
-      deleted: true,
-    });
-    expect((await alice.call(`/learning/sessions/${session.id}`)).status).toBe('completed');
-    await bob.call(`/learning/sessions/${session.id}`, 'GET', undefined, 404);
+    d = await save(d, [marked(id, 'Ré'), { type: 'text', text: 'intrus' }, marked(id, 'ponse')]);
+    const p = (await anchors(d))[0];
+    expect(p.status).toBe('needs_review');
+    await alice.call(`/anchors/${id}/confirm`, 'POST', { revision: p.revision }, 409);
   });
-  it('conserve le calcul FSRS et dix minutes réelles pendant le changement d’heure', () => {
-    const now = new Date('2026-10-25T00:55:00.000Z');
-    const card = {
-      id: crypto.randomUUID(),
-      anchorId: crypto.randomUUID(),
-      ownerId: alice.id,
-      ...initialCard(now),
-      revision: 1,
-    };
-    const utc = schedule(card, 3, now),
-      paris = schedule(card, 3, new Date('2026-10-25T02:55:00+02:00'));
-    expect(paris.card).toEqual(utc.card);
-    expect(utc.card.due.toISOString()).toBe('2026-10-25T01:05:00.000Z');
-    expect(new Date('2026-10-25T02:05:00+01:00').getTime()).toBe(utc.card.due.getTime());
-  });
-  it('conserve des centaines de passages et borne la séance sans perdre les suivants', async () => {
-    const nodes: RichNode[] = [];
-    for (let i = 0; i < 420; i++) {
-      nodes.push(marked(crypto.randomUUID(), `Passage ${i}`));
-      nodes.push({ type: 'text', text: ' | ' });
-    }
-    let d = await doc(nodes);
-    const before = await anchors(d);
-    expect(before).toHaveLength(420);
-    expect((await start([d.id])).total).toBe(200);
-    expect((await alice.call('/learning/eligible', 'POST', { documentIds: [d.id] })).count).toBe(
-      420,
-    );
-    d = await save(
-      d,
-      nodes.map((n) =>
-        n.marks
-          ? { ...n, marks: n.marks.map((m) => (m.type === 'bold' ? { type: 'italic' } : m)) }
-          : n,
-      ),
-    );
-    const after = await anchors(d);
-    expect(after.map((a: any) => a.card)).toEqual(before.map((a: any) => a.card));
-    expect(after.every((a: any) => a.status === 'active')).toBe(true);
-  });
-  it('supprime un compte de contrôle et ses historiques sans laisser d’orphelins', async () => {
-    const id = crypto.randomUUID(),
-      temporary = new Client();
-    await connection.db.insert(user).values({
-      id: temporary.id,
-      email: temporary.email,
-      name: 'Temporaire',
-      emailVerified: true,
-    });
-    await connection.db.insert(account).values({
-      id: crypto.randomUUID(),
-      accountId: temporary.id,
-      userId: temporary.id,
-      providerId: 'credential',
-      password: await hashPassword(password),
-    });
-    await temporary.login();
-    const d = await temporary.call(
+  it('suppression, restauration et duplication conservent la bonne identité', async () => {
+    const id = crypto.randomUUID();
+    let d = await doc([marked(id, 'Réponse')]);
+    const original = structuredClone(d);
+    await evaluate(id, 'easy');
+    d = await save(d, [{ type: 'text', text: 'Réponse sans annotation' }]);
+    expect((await anchors(d))[0]).toMatchObject({ status: 'deleted', difficulty: 'easy' });
+    await evaluate(id, 'hard', 1, 404);
+    d = await save(d, original.content.content[0].content);
+    expect((await anchors(d))[0]).toMatchObject({ status: 'active', difficulty: 'easy' });
+    const copied = await alice.call(
       '/documents',
       'POST',
-      { title: 'Temporaire', content: content([marked(id, 'Réponse temporaire')]) },
+      { title: 'Copie', content: copyWithNewAnchors(d.content) },
       201,
     );
-    const s = await temporary.call(
-      '/learning/sessions',
+    const copy = (await anchors(copied))[0];
+    expect(copy.id).not.toBe(id);
+    expect(copy.sourceId).toBe(id);
+    expect(copy.difficulty).toBe('unrated');
+  });
+  it('lit le document et ses passages de façon cohérente et isole les comptes', async () => {
+    const id = crypto.randomUUID(),
+      d = await doc([marked(id, 'Privé')]);
+    const view = await alice.call(`/documents/${d.id}/review`);
+    expect(view.document.content).toEqual(d.content);
+    expect(view.passages[0].id).toBe(id);
+    await bob.call(`/documents/${d.id}/review`, 'GET', undefined, 404);
+    await bob.call(`/documents/${d.id}/anchors`, 'GET', undefined, 404);
+    await bob.call(
+      `/anchors/${id}/difficulty`,
+      'PATCH',
+      { difficulty: 'easy', difficultyRevision: 0 },
+      404,
+    );
+    await bob.call(`/anchors/${id}/confirm`, 'POST', { revision: 1 }, 404);
+  });
+  it('persiste après déconnexion et reconnexion, sans calendrier', async () => {
+    const id = crypto.randomUUID(),
+      d = await doc([marked(id, 'Durable')]);
+    await evaluate(id, 'medium');
+    await alice.call('/auth/sign-out', 'POST', {});
+    await alice.call(`/documents/${d.id}/review`, 'GET', undefined, 401);
+    await alice.login();
+    expect((await alice.call(`/documents/${d.id}/review`)).passages[0].difficulty).toBe('medium');
+  });
+  it('un document à la corbeille ne peut plus être révisé ni évalué', async () => {
+    const id = crypto.randomUUID(),
+      d = await doc([marked(id, 'Archivé')]);
+    await alice.call(`/documents/${d.id}/trash`, 'POST', { revision: d.revision, deleted: true });
+    await alice.call(`/documents/${d.id}/review`, 'GET', undefined, 404);
+    await evaluate(id, 'easy', 0, 404);
+  });
+  it('retire les anciens endpoints et ne crée aucune séance ni carte', async () => {
+    await alice.call('/learning/eligible', 'POST', {}, 410);
+    await alice.call('/learning/sessions', 'GET', undefined, 410);
+    await alice.call('/learning/sessions', 'POST', { id: crypto.randomUUID(), filters: {} }, 410);
+    await alice.call(
+      `/learning/sessions/${crypto.randomUUID()}/items/${crypto.randomUUID()}/rate`,
       'POST',
-      { id: crypto.randomUUID(), filters: { documentIds: [d.id] } },
-      201,
+      { rating: 4 },
+      410,
     );
-    await temporary.call(`/learning/sessions/${s.id}/items/${s.current.itemId}/reveal`, 'POST', {});
-    await temporary.call(`/learning/sessions/${s.id}/items/${s.current.itemId}/rate`, 'POST', {
-      actionId: crypto.randomUUID(),
-      rating: 3,
-    });
-    await connection.db.delete(user).where(eq(user.id, temporary.id));
-    expect(
-      await connection.db.select().from(reviews).where(eq(reviews.ownerId, temporary.id)),
-    ).toHaveLength(0);
+    await alice.call(`/anchors/${crypto.randomUUID()}/reviews`, 'GET', undefined, 410);
+    expect(await connection.db.select().from(studySessions)).toHaveLength(0);
+    expect(await connection.db.select().from(studyItems)).toHaveLength(0);
+    expect(await connection.db.select().from(fsrsCards)).toHaveLength(0);
+    expect(await connection.db.select().from(reviews)).toHaveLength(0);
   });
 });

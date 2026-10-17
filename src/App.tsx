@@ -11,11 +11,8 @@ const EditorPage = lazy(() =>
   import('./editor/EditorPage').then((module) => ({ default: module.EditorPage })),
 );
 const StudyPage = lazy(() => import('./study/StudyPage').then((m) => ({ default: m.StudyPage })));
-const FreeStudyPage = lazy(() =>
-  import('./study/StudyPage').then((m) => ({ default: m.FreeStudyPage })),
-);
-const ScheduledStudyPage = lazy(() =>
-  import('./study/StudyPage').then((m) => ({ default: m.ScheduledStudyPage })),
+const LegacyStudyRedirect = lazy(() =>
+  import('./study/StudyPage').then((m) => ({ default: m.LegacyStudyRedirect })),
 );
 export function App() {
   const { data, isPending, error } = authClient.useSession();
@@ -117,11 +114,11 @@ export function App() {
             }
           />
           <Route
-            path="/study/free/:id"
+            path="/study/:id"
             element={
               user ? (
                 <Workspace user={user}>
-                  <FreeStudyPage user={user} />
+                  <StudyPage user={user} />
                 </Workspace>
               ) : (
                 <Navigate to="/" replace />
@@ -129,17 +126,18 @@ export function App() {
             }
           />
           <Route
-            path="/study/session/:id"
+            path="/study/free/:id"
             element={
               user ? (
                 <Workspace user={user}>
-                  <ScheduledStudyPage user={user} />
+                  <LegacyStudyRedirect />
                 </Workspace>
               ) : (
                 <Navigate to="/" replace />
               )
             }
           />
+          <Route path="/study/session/:id" element={<Navigate to="/study" replace />} />
         </Routes>
       </Suspense>
       {error && user && (

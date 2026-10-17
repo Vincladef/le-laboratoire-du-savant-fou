@@ -2,7 +2,7 @@
 
 Nouveau nom adopté à partir du modèle fourni par le titulaire, anciennement « Le Laboratoire du Savant Fou ». Le dépôt, l’URL, les comptes et les données restent les mêmes. Le bureau en papier froissé, les fiches Bristol et l’organisation de l’éditeur reprennent ce modèle ; ses simulations locales ne sont pas embarquées dans l’application. Voir [la refonte Bristol](docs/design-bristol.md).
 
-Application d’écriture, bibliothèque privée et mémorisation intégrée. React / Tiptap / PostgreSQL, API Netlify Functions, Neon Managed Better Auth, historique et récupération des sauvegardes. La mission 2 ajoute les textes à trous et FSRS 6.
+Application d’écriture, bibliothèque privée et mémorisation intégrée. React / Tiptap / PostgreSQL, API Netlify Functions, Neon Managed Better Auth, historique et récupération des sauvegardes. La révision est désormais unique et manuelle : priorité et difficulté, sans séance ni calendrier.
 
 La mission 3 ajoute droits/quotas serveur, Checkout/Portal, webhooks signés idempotents et administration. La mission 4 apporte le thème carnet, la page d’écriture agrandie, le plan masquable et les liens Stripe directs demandés par l’éditeur. **Ces liens permettent de payer chez Stripe mais n’activent pas automatiquement de droits dans l’application** : le raccordement serveur reste non configuré. Les conditions préparatoires sont accessibles dans une fenêtre discrète, sans cases d’acceptation. Voir [facturation](docs/billing.md) et [validation de la mission 4](docs/validation-mission-4.md).
 
@@ -42,8 +42,8 @@ Les tests navigateur créent une base distincte par exécution et des serveurs s
 - Historique, import/export DOCX, PDF via l’impression, export texte et JSON.
 - A4/Letter, marges, orientation et sauts de page manuels. **Pas de pagination automatique exacte à l’écran** : le document s’affiche en continu et se pagine à l’impression.
 - Textes à trous : sélection multistyle, indices et priorités, annotations supprimables sans effacer le texte, identité persistante et filiation des copies.
-- Révision libre sans modification du calendrier ; révision programmée filtrée par documents/dossiers/priorités, séances conservées côté serveur, notes dédupliquées et reprise après interruption réseau.
-- FSRS 6 avec `ts-fsrs` 5.4.2. Les réponses modifiées ou fragmentées sont suspendues jusqu’à validation explicite ; changer la priorité conserve l’apprentissage.
+- Un seul parcours « Réviser » : document immédiatement lisible, filtres exacts et combinables de priorité et de difficulté, indices près des passages, révélation individuelle ou globale.
+- Dernière difficulté facultative conservée côté serveur, indépendante de la priorité et des sauvegardes documentaires. Plus de séances, d’échéances ni de moteur de planification. Les anciennes données sont archivées sans suppression ; les réponses modifiées ou fragmentées restent visibles jusqu’à validation.
 
 Les conversions Word ne sont pas sans perte ; le JSON référence les images sans leurs fichiers. Voir [les limites des formats](docs/formats.md).
 

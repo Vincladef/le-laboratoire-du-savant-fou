@@ -7,11 +7,11 @@ import { assertDatabaseTarget, assertMigrationHistory } from './deployment-guard
 import * as schema from '../server/db/schema';
 import { verifyRemoteDeployment } from './remote-smoke';
 import { verifyManagedAuth } from './managed-auth-smoke';
-import { prepareLearning } from '../server/prepare-learning';
 import { surveyProduction } from './production-survey';
 import { cleanupFailedFixtures } from './cleanup-failed-fixtures';
 import { inspectStripeLinks } from './inspect-stripe-links';
 import { safeDiagnostic } from './safe-diagnostic';
+import { reviewDataFingerprint, verifyReviewMigration } from './review-migration-proof';
 
 let stage = 'target-validation';
 async function prepare() {
@@ -57,6 +57,8 @@ async function prepare() {
     const local = readMigrationFiles({ migrationsFolder: 'migrations' });
     const labExists = inventory.rows.some((row) => row.nspname === 'lab');
     const pending = assertMigrationHistory(labExists, applied, local);
+    const simplifyingReviews = applied.length === 12 && local.length === 13;
+    const previousReviewData = simplifyingReviews ? await reviewDataFingerprint(client) : null;
     console.log(
       'DEPLOY_DATABASE_INSPECTED',
       JSON.stringify({
@@ -69,7 +71,9 @@ async function prepare() {
     const db = drizzle(client, { schema });
     stage = 'migrations';
     await migrate(db, { migrationsFolder: 'migrations' });
-    const learning = await prepareLearning(db);
+    const reviewMigration = previousReviewData
+      ? await verifyReviewMigration(client, previousReviewData)
+      : null;
     const fixtureCleanup = await cleanupFailedFixtures(client);
     const tables = await client.query(
       "select count(*)::int as count from pg_tables where schemaname = 'lab'",
@@ -95,9 +99,9 @@ async function prepare() {
         previouslyApplied: applied.length,
         migrationsApplied: pending,
         tables: tables.rows[0].count,
+        reviewMigration,
         remote,
         managedAuth,
-        learning,
         productionSurvey,
         fixtureCleanup,
         stripeLinks,

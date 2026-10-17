@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { readFile, readdir } from 'node:fs/promises';
-import { documentMenu, reviewMenu, navigation } from './navigation';
+import { documentMenu, navigation } from './navigation';
 test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, export intégral et restauration', async ({
   page,
 }, info) => {
@@ -88,12 +88,11 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
   expect(await page.evaluate(() => (window as any).__printed)).toContain(
     'Premier contenu à conserver.',
   );
-  await reviewMenu(page);
-  await page.getByRole('button', { name: 'Révision libre', exact: true }).click();
+  await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
   const study = page.getByRole('document', { name: 'Document de révision' });
   await expect(study).toContainText('Deuxième contenu indépendant.');
   await expect(study).toContainText('Mesure dans un sous-onglet.');
-  await expect(page.locator('.study-reveal')).toHaveCount(2);
+  await expect(page.locator('.review-reveal')).toHaveCount(2);
   await page.goto(url);
   await page.setViewportSize({ width: 390, height: 844 });
   if (

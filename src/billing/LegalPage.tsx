@@ -116,9 +116,10 @@ export function LegalPage() {
           </p>
           <h2>Données et finalités</h2>
           <p>
-            Le compte conserve nom, adresse email, identité d’authentification et sessions.
-            Documents, images, versions, annotations, indices, priorités, cartes et historiques FSRS
-            permettent l’écriture et la révision. Les références Stripe, statuts, échéances et
+            Le compte conserve nom, adresse email, identité d’authentification et sessions. Les
+            documents, images, versions, annotations, indices, priorités et difficultés permettent
+            l’écriture et la révision. Les anciennes données de planification sont archivées et ne
+            servent plus à programmer des révisions. Les références Stripe, statuts, échéances et
             acceptations contractuelles servent à la facturation et au contrôle des droits. Le
             contenu des documents n’est pas envoyé à Stripe. Les numéros de carte et cryptogrammes
             ne sont pas enregistrés dans notre base.
@@ -160,7 +161,7 @@ export function LegalPage() {
             <a href="https://www.cnil.fr/fr/plaintes" rel="noreferrer">
               CNIL
             </a>
-            . Aucune décision juridique automatisée n’est prise à partir de vos notes FSRS.
+            . Aucune décision juridique automatisée n’est prise à partir de vos évaluations.
           </p>
         </>
       )}
@@ -173,7 +174,7 @@ export function LegalPage() {
           <h2>Service, formules et commande</h2>
           <p>
             Bouche-trou permet de rédiger des documents, d’annoter des textes à trous et de réviser
-            avec FSRS. La <Link to="/pricing">page des formules</Link> décrit les plafonds
+            à votre rythme. La <Link to="/pricing">page des formules</Link> décrit les plafonds
             applicables. Le moteur d’édition n’est pas une garantie de fidélité parfaite à Google
             Docs ou Word : pagination visuelle, impression PDF et conversions DOCX ont les limites
             documentées dans l’application et le dépôt.

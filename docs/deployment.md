@@ -25,7 +25,7 @@ Les valeurs sont découvertes ou générées par API puis enregistrées directem
 
 `NETLIFY_SITE_ID` est connu par API ; la liaison CLI peut utiliser `.netlify/state.json` ignoré. Aucune recopie manuelle n’est nécessaire.
 
-La mission 3 conserve ces cinq variables du socle. Les variables Stripe facultatives, leur provisionnement automatisé et les informations légales sont décrits dans [billing.md](billing.md). Une configuration absente ferme les ventes côté serveur sans bloquer l’éditeur, Neon ou FSRS. Aucune valeur fictive ne doit être injectée pour faire apparaître un état « configuré ».
+La mission 3 conserve ces cinq variables du socle. Les variables Stripe facultatives, leur provisionnement automatisé et les informations légales sont décrits dans [billing.md](billing.md). Une configuration absente ferme les ventes côté serveur sans bloquer l’éditeur, Neon ou les révisions manuelles. Aucune valeur fictive ne doit être injectée pour faire apparaître un état « configuré ».
 
 Netlify Free a refusé le périmètre « Functions » seul. Les variables utilisent les périmètres standards gratuits `builds`, `functions`, `runtime`, `post_processing`. Aucune variable secrète n’a de préfixe `VITE_`. Ne jamais afficher l’environnement.
 
@@ -71,14 +71,14 @@ Pour une préparation Netlify ponctuelle :
 | `LAB_VERIFY_BILLING=1` | Droits gratuits réels, plafonds d’offre, ventes non raccordées refusées et administration protégée |
 | `LAB_ALLOW_PRODUCTION_CHECKS=1` | Autorisation supplémentaire des contrôles sur la production exacte |
 
-La branche `mission-2` ne peut migrer que son hôte development reconnu. La production requiert sa cible exacte et ses gardes supplémentaires. Les migrations prennent un verrou et sont transactionnelles/idempotentes. Seuls les cartes manquantes et les emplacements réservés sans révision sont initialisés.
+La branche `mission-2` ne peut migrer que son hôte development reconnu. La production requiert sa cible exacte et ses gardes supplémentaires. Les migrations prennent un verrou et sont transactionnelles/idempotentes. La simplification des révisions n’initialise plus aucune carte ni séance ; la migration `0012` ajoute la difficulté et reprend seulement la dernière réponse explicite. Les archives historiques ne sont ni réécrites ni supprimées.
 
 La migration personnalisée `0004_defer_review_cleanup.sql` rend différable la référence entre historique et élément de séance : la suppression d’un compte termine ses cascades avant vérification. Ne pas réécrire une migration appliquée.
 
 ## Recette et publication
 
 1. Compiler et exécuter les tests locaux dans leurs bases temporaires isolées.
-2. Migrer et vérifier development : identités, documents, annotations, FSRS, conflits, isolation et reprise.
+2. Migrer et vérifier development : identités, documents, annotations, difficulté, conflits, isolation et reprise.
 3. Après publication de cette branche, vérifier son URL par API et avec Chromium. Un test prépublication ne valide pas un artefact encore non servi.
 4. Inventorier production en lecture seule, puis configurer ses variables et Auth via API.
 5. Publier le code validé sur `main`, migrer/vérifier Neon et contrôler le site publié.

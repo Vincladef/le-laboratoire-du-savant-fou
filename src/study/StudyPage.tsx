@@ -1,89 +1,40 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { z } from 'zod';
-import { ArrowLeft, BookOpen, RotateCcw, MoreHorizontal } from 'lucide-react';
-
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ArrowLeft, Eye, EyeOff, Pencil } from 'lucide-react';
 import { api, ApiError, json } from '../lib/api';
 import {
   priorityLabels,
-  ratingLabels,
+  difficultyLabels,
+  matchesPassage,
   type MemoryPassage,
-  type Priority,
-  type StudyFilters,
-  type StudySession,
+  type Difficulty,
+  type ReviewFilters,
 } from '../shared/learning';
 import type { DocumentRecord, DocumentSummary, FolderRecord } from '../shared/document';
 import { StudyDocument } from './StudyDocument';
+import './review.css';
+
 type Props = { user: { id: string } };
-const localDate = (value: string) =>
-  new Intl.DateTimeFormat('fr', { dateStyle: 'medium', timeStyle: 'short' }).format(
-    new Date(value),
-  );
-const levels = (level: string): Priority[] =>
-  level === 'high' ? ['high'] : level === 'medium' ? ['high', 'medium'] : ['high', 'medium', 'low'];
-function LevelPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <label>
-      Priorités
-      <select
-        aria-label="Priorités à réviser"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="high">Haute seulement</option>
-        <option value="medium">Haute et moyenne</option>
-        <option value="all">Toutes les priorités</option>
-      </select>
-    </label>
-  );
-}
-function Header({ title, back = '/library' }: { title: string; back?: string }) {
-  return (
-    <header className="study-header">
-      <Link className="icon-button" aria-label="Revenir à la bibliothèque" to={back}>
-        <ArrowLeft size={21} />
-      </Link>
-      <h1>{title}</h1>
-    </header>
-  );
-}
-function useKeys(handler: (event: KeyboardEvent) => void) {
-  const live = useRef(handler);
-  live.current = handler;
-  useEffect(() => {
-    const fn = (e: KeyboardEvent) => {
-      if (
-        !e.ctrlKey &&
-        !e.metaKey &&
-        !e.altKey &&
-        !(
-          e.target instanceof HTMLElement &&
-          (e.target.isContentEditable ||
-            ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A'].includes(e.target.tagName))
-        )
-      )
-        live.current(e);
-    };
-    window.addEventListener('keydown', fn);
-    return () => window.removeEventListener('keydown', fn);
-  }, []);
+type ReviewDocument = { document: DocumentRecord; passages: MemoryPassage[] };
+type Pending = { id: string; difficulty: Difficulty; difficultyRevision: number };
+export function LegacyStudyRedirect() {
+  const { id } = useParams();
+  return <Navigate to={id ? `/study/${id}` : '/study'} replace />;
 }
 export function StudyPage({ user }: Props) {
-  const [params] = useSearchParams(),
-    navigate = useNavigate();
-  const [scope, setScope] = useState(
-    params.has('document') ? 'documents' : params.has('folder') ? 'folders' : 'all',
-  );
-  const [documentIds, setDocuments] = useState<string[]>(
-      params.get('document') ? [params.get('document')!] : [],
-    ),
-    [folderIds, setFolders] = useState<string[]>(
-      params.get('folder') ? [params.get('folder')!] : [],
-    );
-  const [level, setLevel] = useState('all'),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false);
+  const { id } = useParams(),
+    [params] = useSearchParams(),
+    navigate = useNavigate(),
+    client = useQueryClient();
+  const [folderId, setFolderId] = useState('');
+  const [filters, setFilters] = useState<ReviewFilters>({ priority: 'all', difficulty: 'all' });
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [error, setError] = useState(''),
+    [message, setMessage] = useState('');
+  const [pending, setPending] = useState<Pending | null>(null),
+    [busyId, setBusyId] = useState<string | null>(null);
+  const sending = useRef(false);
   const docs = useQuery({
     queryKey: ['study-documents', user.id],
     queryFn: () => api<DocumentSummary[]>('/documents'),
@@ -92,581 +43,275 @@ export function StudyPage({ user }: Props) {
     queryKey: ['folders', user.id],
     queryFn: () => api<FolderRecord[]>('/folders'),
   });
-  const sessions = useQuery({
-    queryKey: ['study-sessions', user.id],
-    queryFn: () =>
-      api<Omit<StudySession, 'current' | 'total' | 'completed' | 'skipped'>[]>(
-        '/learning/sessions',
-      ),
-  });
-  const filters: StudyFilters = {
-    documentIds: scope === 'documents' ? documentIds : [],
-    folderIds: scope === 'folders' ? folderIds : [],
-    priorities: levels(level),
-  };
-  const valid =
-    scope === 'all' ||
-    (scope === 'documents' && documentIds.length > 0) ||
-    (scope === 'folders' && folderIds.length > 0);
-  const due = useQuery({
-    queryKey: ['eligible', user.id, filters],
-    queryFn: () =>
-      api<{ count: number; sessionLimit: number }>('/learning/eligible', {
-        method: 'POST',
-        body: json(filters),
-      }),
-    enabled: valid,
-    refetchInterval: 30000,
-  });
-  const startId = useRef<string | null>(null);
+  const allowedFolders = new Set(folderId ? [folderId] : []);
+  if (folderId)
+    for (let n = 0; n < (folders.data?.length || 0); n++)
+      for (const folder of folders.data || [])
+        if (folder.parentId && allowedFolders.has(folder.parentId)) allowedFolders.add(folder.id);
+  const available = (docs.data || []).filter(
+    (d) => !folderId || (d.folderId && allowedFolders.has(d.folderId)),
+  );
   useEffect(() => {
-    startId.current = null;
-  }, [JSON.stringify(filters)]);
-  async function start() {
-    setBusy(true);
+    if (!id && docs.data) {
+      const requested = params.get('document');
+      const first =
+        docs.data.find((d) => d.id === requested) ||
+        docs.data.find((d) => (d.passageCount || 0) > 0) ||
+        docs.data[0];
+      if (first) navigate(`/study/${first.id}`, { replace: true });
+    }
+  }, [id, docs.data, params, navigate]);
+  const key = ['review-document', user.id, id];
+  const query = useQuery({
+    queryKey: key,
+    enabled: Boolean(id),
+    refetchOnWindowFocus: true,
+    queryFn: () => api<ReviewDocument>(`/documents/${id}/review`),
+  });
+  useEffect(() => {
     setError('');
+    setMessage('');
+    setPending(null);
+  }, [id]);
+  useEffect(() => setRevealed(new Set()), [id, filters.priority, filters.difficulty]);
+  const selected = (query.data?.passages || []).filter((p) => matchesPassage(p, filters));
+  const hidden = selected.filter((p) => !revealed.has(p.id)).map((p) => p.id);
+  const reveal = (passageId: string) => setRevealed((s) => new Set([...s, passageId]));
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        e.ctrlKey ||
+        e.metaKey ||
+        e.altKey ||
+        target.isContentEditable ||
+        ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A', 'SUMMARY'].includes(target.tagName)
+      )
+        return;
+      if (e.code === 'Space' && hidden[0]) {
+        e.preventDefault();
+        reveal(hidden[0]);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [hidden.join(',')]);
+  async function saveDifficulty(change: Pending) {
+    if (sending.current) return;
+    sending.current = true;
+    setBusyId(change.id);
+    setError('');
+    setMessage('');
+    setPending(change);
     try {
-      startId.current ??= crypto.randomUUID();
-      const session = await api<StudySession>('/learning/sessions', {
-        method: 'POST',
-        body: json({ id: startId.current, filters }),
-      });
-      navigate(`/study/session/${session.id}`);
+      const updated = await api<Pick<MemoryPassage, 'id' | 'difficulty' | 'difficultyRevision'>>(
+        `/anchors/${change.id}/difficulty`,
+        {
+          method: 'PATCH',
+          body: json({
+            difficulty: change.difficulty,
+            difficultyRevision: change.difficultyRevision,
+          }),
+        },
+      );
+      client.setQueryData<ReviewDocument>(
+        key,
+        (current) =>
+          current && {
+            ...current,
+            passages: current.passages.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+          },
+      );
+      setPending(null);
+      setMessage('Difficulté enregistrée.');
     } catch (e) {
       setError((e as Error).message);
+      if (e instanceof ApiError && [404, 409].includes(e.status)) {
+        setPending(null);
+        await query.refetch();
+      }
     } finally {
-      setBusy(false);
+      sending.current = false;
+      setBusyId(null);
     }
   }
   return (
-    <main className="study-shell">
-      <Header title="Réviser" />
-      <p className="study-intro">Retrouver vos idées, au bon moment.</p>
-      <div className="study-settings">
-        <section className="study-card">
-          <span className="eyebrow">RÉVISION PROGRAMMÉE</span>
-          <h2>On s’y remet ?</h2>
-          <p>
-            Chaque passage suit son propre calendrier. Choisissez ce que vous souhaitez réviser
-            aujourd’hui.
-          </p>
-          <details
-            className="study-filter-options"
-            open={params.has('document') || params.has('folder')}
+    <main className="review-shell">
+      <header className="review-heading">
+        <Link
+          className="icon-button"
+          to={id ? `/document/${id}` : '/library'}
+          aria-label={id ? 'Revenir à l’éditeur' : 'Revenir à la bibliothèque'}
+        >
+          <ArrowLeft size={19} />
+        </Link>
+        <h1>Réviser</h1>
+        {id && (
+          <Link className="button subtle review-edit" to={`/document/${id}`}>
+            <Pencil size={15} /> Modifier le document
+          </Link>
+        )}
+      </header>
+      <div className="review-toolbar" aria-label="Commandes de révision">
+        <label className="review-document-picker">
+          Document
+          <select
+            aria-label="Document à réviser"
+            value={id || ''}
+            onChange={(e) => navigate(`/study/${e.target.value}`)}
           >
-            <summary>Choisir les documents et les priorités</summary>
-            <label>
-              Périmètre
-              <select
-                aria-label="Périmètre de révision"
-                value={scope}
-                onChange={(e) => setScope(e.target.value)}
-              >
-                <option value="all">Tous mes documents</option>
-                <option value="documents">Choisir des documents</option>
-                <option value="folders">Choisir des dossiers et leurs sous-dossiers</option>
-              </select>
-            </label>
-            {scope !== 'all' && (
-              <fieldset className="study-scope">
-                <legend>{scope === 'documents' ? 'Documents' : 'Dossiers'}</legend>
-                {(scope === 'documents' ? docs.data : folders.data)?.map((item) => (
-                  <label key={item.id}>
-                    <input
-                      type="checkbox"
-                      checked={(scope === 'documents' ? documentIds : folderIds).includes(item.id)}
-                      onChange={(e) => {
-                        const setter = scope === 'documents' ? setDocuments : setFolders;
-                        setter((ids) =>
-                          e.target.checked ? [...ids, item.id] : ids.filter((id) => id !== item.id),
-                        );
-                      }}
-                    />
-                    {'title' in item ? item.title : item.name}
-                  </label>
-                ))}
-              </fieldset>
+            {!id && <option value="">Choisir un document…</option>}
+            {id && !available.some((d) => d.id === id) && query.data && (
+              <option value={id}>{query.data.document.title}</option>
             )}
-            <LevelPicker value={level} onChange={setLevel} />
-          </details>
-          {(error || due.error || docs.error || folders.error || sessions.error) && (
-            <p role="alert" className="alert error">
-              {error ||
-                due.error?.message ||
-                docs.error?.message ||
-                folders.error?.message ||
-                sessions.error?.message}
-            </p>
-          )}
-          <p role="status">
-            {!valid
-              ? 'Choisissez au moins un élément.'
-              : due.isPending
-                ? 'Recherche des passages…'
-                : `${due.data?.count ?? 0} passage(s) à réviser maintenant.`}
-          </p>
-          {(due.data?.count ?? 0) > 200 && (
-            <p>
-              Chaque séance contient jusqu’à 200 passages. Les suivants restent disponibles pour une
-              autre séance.
-            </p>
-          )}
-          <button
-            className="button primary"
-            disabled={busy || !valid || !due.data?.count}
-            onClick={() => void start()}
-          >
-            <BookOpen size={17} />
-            {busy ? 'Préparation…' : 'Commencer la révision'}
-          </button>
-        </section>
-        <section className="study-card">
-          <span className="eyebrow">ENTRAÎNEMENT LIBRE</span>
-          <h2>À votre rythme.</h2>
-          <p>
-            Masquez et révélez les réponses autant que vous le souhaitez. Le calendrier reste
-            inchangé.
-          </p>
-          <label>
-            Document
+            {available.map((d) => (
+              <option value={d.id} key={d.id}>
+                {d.title}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!!folders.data?.length && (
+          <label className="review-folder-picker">
+            Dossier
             <select
-              aria-label="Document en révision libre"
-              defaultValue=""
-              onChange={(e) => {
-                if (e.target.value) navigate(`/study/free/${e.target.value}`);
-              }}
+              aria-label="Dossier des documents"
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
             >
-              <option value="">Choisir un document…</option>
-              {docs.data?.map((doc) => (
-                <option value={doc.id} key={doc.id}>
-                  {doc.title}
+              <option value="">Tous</option>
+              {folders.data.map((f) => (
+                <option value={f.id} key={f.id}>
+                  {f.name}
                 </option>
               ))}
             </select>
           </label>
-        </section>
-        <section className="study-card">
-          <h2>Séances à reprendre</h2>
-          {!sessions.data?.some((s) => s.status === 'active') && (
-            <p className="muted">Aucune séance interrompue.</p>
-          )}
-          {sessions.data
-            ?.filter((s) => s.status === 'active')
-            .map((s) => (
-              <Link className="button subtle" key={s.id} to={`/study/session/${s.id}`}>
-                Reprendre la séance du {localDate(s.createdAt)}
-              </Link>
+        )}
+        <label>
+          Priorité
+          <select
+            aria-label="Filtrer par priorité"
+            value={filters.priority}
+            onChange={(e) =>
+              setFilters((f) => ({ ...f, priority: e.target.value as ReviewFilters['priority'] }))
+            }
+          >
+            <option value="all">Toutes</option>
+            {Object.entries(priorityLabels).map(([v, label]) => (
+              <option value={v} key={v}>
+                {label}
+              </option>
             ))}
-        </section>
-      </div>
-    </main>
-  );
-}
-export function FreeStudyPage({ user }: Props) {
-  const { id } = useParams();
-  const [level, setLevel] = useState('all'),
-    [revealed, setRevealed] = useState<Set<string>>(new Set()),
-    [hints, setHints] = useState<Set<string>>(new Set());
-  const doc = useQuery({
-    queryKey: ['free-document', user.id, id],
-    queryFn: () => api<DocumentRecord>(`/documents/${id}`),
-  });
-  const passages = useQuery({
-    queryKey: ['free-anchors', user.id, id],
-    queryFn: () => api<MemoryPassage[]>(`/documents/${id}/anchors`),
-  });
-  const selected = (passages.data || []).filter(
-    (p) => p.status === 'active' && levels(level).includes(p.priority),
-  );
-  const hidden = selected.filter((p) => !revealed.has(p.id)).map((p) => p.id);
-  const reveal = (id: string) => setRevealed((s) => new Set([...s, id]));
-  useKeys((e) => {
-    if (e.code === 'Space') {
-      e.preventDefault();
-      if (hidden[0]) reveal(hidden[0]);
-    }
-    if (e.key.toLowerCase() === 'r') {
-      setRevealed(new Set());
-      setHints(new Set());
-    }
-  });
-  if (doc.isPending || passages.isPending)
-    return <p className="app-loading">Ouverture de la révision…</p>;
-  if (doc.error || passages.error)
-    return (
-      <p role="alert" className="alert error">
-        {doc.error?.message || passages.error?.message}
-        <Link to="/study">Revenir aux révisions</Link>
-      </p>
-    );
-  if (doc.data.deletedAt)
-    return (
-      <main>
-        <Header title="Document dans la corbeille" />
-        <p>Restaurez ce document pour le réviser.</p>
-      </main>
-    );
-  return (
-    <main className="study-shell study-session">
-      <div className="study-session-toolbar">
-        <Header title={doc.data.title} back={`/document/${id}`} />
-        <span className="session-mode">Libre · calendrier inchangé</span>
-        <div className="study-controls">
-          <LevelPicker
-            value={level}
-            onChange={(v) => {
-              setLevel(v);
-              setRevealed(new Set());
-              setHints(new Set());
-            }}
-          />
-          <p role="status">
-            {selected.length - hidden.length} / {selected.length} réponses révélées
-          </p>
+          </select>
+        </label>
+        <label>
+          Difficulté
+          <select
+            aria-label="Filtrer par difficulté"
+            value={filters.difficulty}
+            onChange={(e) =>
+              setFilters((f) => ({
+                ...f,
+                difficulty: e.target.value as ReviewFilters['difficulty'],
+              }))
+            }
+          >
+            <option value="all">Toutes</option>
+            {Object.entries(difficultyLabels).map(([v, label]) => (
+              <option value={v} key={v}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="review-reveal-actions">
           <button
             className="button primary"
+            disabled={!hidden.length}
             onClick={() => setRevealed(new Set(selected.map((p) => p.id)))}
           >
-            Révéler toutes les réponses
+            <Eye size={16} /> Tout révéler
           </button>
           <button
             className="button subtle"
-            onClick={() => {
-              setRevealed(new Set());
-              setHints(new Set());
-            }}
+            disabled={!revealed.size}
+            onClick={() => setRevealed(new Set())}
           >
-            <RotateCcw size={16} />
-            Recommencer
+            <EyeOff size={16} /> Masquer
           </button>
-          <small className="session-keyboard-help">
-            Espace : révéler le passage suivant · R : recommencer
-          </small>
         </div>
       </div>
-      {passages.data?.some((p) => p.status === 'needs_review') && (
-        <p className="alert info">
-          Certains passages ont changé et restent visibles. Validez-les dans l’éditeur pour les
-          réactiver.
-        </p>
-      )}
-      {!selected.length && (
-        <p className="alert info">
-          Aucun passage actif pour ces priorités. Créez ou validez des annotations dans l’éditeur.
-        </p>
-      )}
-      <div className="study-workspace">
-        <details className="study-passages" aria-label="Passages de la révision">
-          <summary>Indices et passages</summary>
-          {selected.map((p, i) => (
-            <article key={p.id}>
-              <strong>Passage {i + 1}</strong>
-              <small>Priorité {priorityLabels[p.priority].toLowerCase()}</small>
-              {p.hint && (
-                <>
-                  <button
-                    className="text-button"
-                    onClick={() => setHints((s) => new Set([...s, p.id]))}
-                  >
-                    Afficher l’indice du passage {i + 1}
-                  </button>
-                  {hints.has(p.id) && <p className="hint">{p.hint}</p>}
-                </>
-              )}
-              <button
-                className="button subtle"
-                disabled={revealed.has(p.id)}
-                onClick={() => reveal(p.id)}
-              >
-                {revealed.has(p.id) ? 'Réponse révélée' : `Révéler la réponse ${i + 1}`}
-              </button>
-            </article>
-          ))}
-        </details>
-        <StudyDocument key={doc.data.id} document={doc.data} hidden={hidden} onReveal={reveal} />
-      </div>
-    </main>
-  );
-}
-
-const pendingRatingSchema = z
-  .object({
-    sessionId: z.string().uuid(),
-    itemId: z.string().uuid(),
-    actionId: z.string().uuid(),
-    rating: z.number().int().min(1).max(4),
-  })
-  .strict();
-type PendingRating = z.infer<typeof pendingRatingSchema>;
-export function ScheduledStudyPage({ user }: Props) {
-  const { id } = useParams();
-  const [session, setSession] = useState<StudySession | null>(null),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [showHint, setShowHint] = useState(false),
-    [hasPending, setHasPending] = useState(false);
-  const storageKey = `lab-rating/${user.id}/${id}`;
-  const [pendingItemId, setPendingItemId] = useState<string | null>(null);
-  const requestInFlight = useRef(false);
-  async function load() {
-    setSession(await api<StudySession>(`/learning/sessions/${id}`));
-  }
-  async function sendPending() {
-    let raw: string | null;
-    try {
-      raw = localStorage.getItem(storageKey);
-    } catch {
-      throw new Error(
-        'Le navigateur ne permet pas de lire la réponse conservée. Autorisez le stockage local pour reprendre la séance.',
-      );
-    }
-    if (!raw) {
-      setHasPending(false);
-      return false;
-    }
-    setHasPending(true);
-    let pending: PendingRating;
-    try {
-      pending = pendingRatingSchema.parse(JSON.parse(raw));
-    } catch {
-      throw new Error(
-        'La réponse locale est illisible. Vérifiez l’état enregistré de la séance avant de l’écarter.',
-      );
-    }
-    setPendingItemId(pending.itemId);
-    if (pending.sessionId !== id)
-      throw new Error('La réponse locale ne correspond pas à cette séance.');
-    const result = await api<{ recorded: boolean; session: StudySession }>(
-      `/learning/sessions/${id}/items/${pending.itemId}/rate`,
-      { method: 'POST', body: json({ actionId: pending.actionId, rating: pending.rating }) },
-    );
-    localStorage.removeItem(storageKey);
-    setHasPending(false);
-    setSession(result.session);
-    setShowHint(false);
-    return true;
-  }
-  async function run(action: () => Promise<void>) {
-    if (requestInFlight.current) return;
-    requestInFlight.current = true;
-    setBusy(true);
-    setError('');
-    try {
-      await action();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      requestInFlight.current = false;
-      setBusy(false);
-    }
-  }
-  useEffect(() => {
-    setSession(null);
-    void run(async () => {
-      const sent = await sendPending();
-      if (!sent) await load();
-    });
-  }, [id, user.id]);
-  useEffect(() => {
-    const online = () =>
-      void run(async () => {
-        if (!(await sendPending())) await load();
-      });
-    window.addEventListener('online', online);
-    return () => window.removeEventListener('online', online);
-  }, [id, user.id]);
-  async function reveal() {
-    if (!session?.current || session.current.revealed || hasPending) return;
-    await run(async () => {
-      setSession(
-        await api<StudySession>(
-          `/learning/sessions/${id}/items/${session.current!.itemId}/reveal`,
-          { method: 'POST', body: json({}) },
-        ),
-      );
-    });
-  }
-  async function rate(rating: number) {
-    if (!session?.current?.revealed || hasPending) return;
-    await run(async () => {
-      const pending: PendingRating = {
-        sessionId: id!,
-        itemId: session.current!.itemId,
-        actionId: crypto.randomUUID(),
-        rating,
-      };
-      // Persist before sending: a lost HTTP response can safely be retried after refresh.
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(pending));
-      } catch {
-        throw new Error(
-          'Le navigateur ne peut pas conserver cette réponse. Aucun envoi n’a été effectué ; libérez du stockage local puis réessayez.',
-        );
-      }
-      setHasPending(true);
-      await sendPending();
-    });
-  }
-  useKeys((e) => {
-    if (busy) return;
-    if (e.code === 'Space') {
-      e.preventDefault();
-      void reveal();
-    }
-    if (['1', '2', '3', '4'].includes(e.key) && session?.current?.revealed)
-      void rate(Number(e.key));
-  });
-  const current = session?.current;
-  return (
-    <main className="study-shell study-session">
-      <div className="study-session-toolbar">
-        <Header title={current?.document.title || 'Révision programmée'} back="/study" />
-        <span className="session-mode">Programmée · FSRS</span>
-        {session && (
-          <div className="session-progress">
-            <p role="status">
-              {session.completed} / {session.total} passages révisés
-              {session.skipped ? ` · ${session.skipped} devenus inéligibles` : ''}
-            </p>
-            <progress
-              aria-label="Progression de la séance"
-              value={session.completed}
-              max={Math.max(1, session.total)}
-            />
-          </div>
-        )}
-        {current && (
-          <>
-            <small className="session-priority">
-              Priorité {priorityLabels[current.anchor.priority].toLowerCase()}
-            </small>
-            {current.anchor.hint && (
-              <button
-                className="button subtle"
-                aria-expanded={showHint}
-                onClick={() => setShowHint(!showHint)}
-              >
-                Afficher l’indice
-              </button>
-            )}
-            {!current.revealed && (
-              <button
-                className="button primary"
-                disabled={busy || hasPending}
-                onClick={() => void reveal()}
-              >
-                Révéler la réponse
-              </button>
-            )}
-          </>
-        )}
-        <details className="menu session-options">
-          <summary aria-label="Options de la révision" className="icon-button">
-            <MoreHorizontal size={20} />
-          </summary>
-          <div className="menu-popover">
-            <Link to="/study">Interrompre et reprendre plus tard</Link>
-            {current && (
-              <Link to={`/document/${current.document.id}`}>Ouvrir ce document dans l’éditeur</Link>
-            )}
-            <small>Espace : révéler · 1 à 4 : évaluer après révélation</small>
-          </div>
-        </details>
-      </div>
-      {error && (
+      {(error || query.error || docs.error || folders.error) && (
         <div className="alert error" role="alert">
-          <p>{error}</p>
-          {hasPending ? (
-            <>
-              <p>
-                Votre réponse est conservée sur cet appareil. Sa retransmission ne peut pas créer
-                une seconde révision.
-              </p>
-              <button
-                className="button"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await sendPending();
-                  })
-                }
-              >
-                Réessayer l’envoi
-              </button>
-              <button
-                className="button subtle"
-                disabled={busy}
-                onClick={() =>
-                  void run(async () => {
-                    await load();
-                  })
-                }
-              >
-                Vérifier l’état de la séance
-              </button>
-              {session && session.current?.itemId !== pendingItemId && (
-                <button
-                  className="button subtle"
-                  onClick={() => {
-                    localStorage.removeItem(storageKey);
-                    setHasPending(false);
-                    setError('');
-                  }}
-                >
-                  Écarter la réponse devenue obsolète
-                </button>
-              )}
-            </>
-          ) : (
-            <button className="button" disabled={busy} onClick={() => void run(load)}>
-              Recharger la séance
+          {error || query.error?.message || docs.error?.message || folders.error?.message}
+          {pending && (
+            <button
+              className="button"
+              disabled={Boolean(busyId)}
+              onClick={() => void saveDifficulty(pending)}
+            >
+              Réessayer l’enregistrement
+            </button>
+          )}
+          {query.error && (
+            <button className="button" onClick={() => void query.refetch()}>
+              Réessayer
             </button>
           )}
         </div>
       )}
-
-      {!session && !error && <p className="app-loading">Reprise de votre séance…</p>}
-      {session && !current && (
-        <section className="study-card study-finished">
-          <h2>Séance terminée.</h2>
-          <p>Vos réponses et vos prochaines dates de révision sont enregistrées.</p>
-          <Link className="button primary" to="/study">
-            Revenir aux révisions
-          </Link>
-        </section>
+      {query.isFetching && !query.data && id && (
+        <p className="app-loading">Ouverture du document…</p>
       )}
-      {current && (
+      {query.data && (
         <>
-          {showHint && current.anchor.hint && (
-            <p className="hint session-hint">{current.anchor.hint}</p>
-          )}
-          {current.revealed && (
-            <section className="review-grade">
-              <h2>Comment s’est passé ce rappel ?</h2>
-              <div className="rating-buttons" aria-label="Évaluer ma mémorisation">
-                {Object.entries(ratingLabels).map(([rating, label]) => (
-                  <button
-                    className={`button rating-${rating}`}
-                    key={rating}
-                    disabled={busy || hasPending}
-                    onClick={() => void rate(Number(rating))}
-                  >
-                    {rating} · {label}
-                    <small>
-                      {current.previews?.[rating] ? localDate(current.previews[rating]) : ''}
-                    </small>
-                  </button>
-                ))}
-              </div>
-            </section>
+          <div className="review-context">
+            <span>
+              {selected.length
+                ? `${hidden.length} trou${hidden.length > 1 ? 's' : ''} masqué${hidden.length > 1 ? 's' : ''}`
+                : 'Aucun trou ne correspond aux filtres.'}
+            </span>
+            <span className="review-keyboard-help">
+              Cliquez sur un trou pour le révéler · Espace : suivant
+            </span>
+            <span role="status" className="review-save-feedback">
+              {busyId ? 'Enregistrement…' : message}
+            </span>
+          </div>
+          {query.data.passages.some((p) => p.status === 'needs_review') && (
+            <p className="review-notice">
+              Certains passages modifiés restent visibles. Vous pouvez les valider dans l’éditeur.
+            </p>
           )}
           <StudyDocument
-            key={`${current.itemId}/${current.document.revision}`}
-            document={current.document}
-            hidden={current.revealed ? [] : [current.anchor.id]}
-            onReveal={() => void reveal()}
+            key={`${id}/${query.data.document.revision}`}
+            document={query.data.document}
+            passages={query.data.passages}
+            selected={selected.map((p) => p.id)}
+            hidden={hidden}
+            onReveal={reveal}
+            busyId={busyId}
+            onDifficulty={(passageId, difficulty) => {
+              const p = query.data.passages.find((p) => p.id === passageId);
+              if (p)
+                void saveDifficulty({
+                  id: p.id,
+                  difficulty,
+                  difficultyRevision: p.difficultyRevision,
+                });
+            }}
           />
         </>
+      )}
+      {!id && !docs.isPending && !docs.data?.length && !docs.error && (
+        <section className="review-empty">
+          <h2>Vos documents, vos réponses.</h2>
+          <p>Créez un document et sélectionnez du texte pour y ajouter vos premiers trous.</p>
+          <Link className="button primary" to="/library">
+            Ouvrir ma bibliothèque
+          </Link>
+        </section>
       )}
     </main>
   );

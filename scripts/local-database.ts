@@ -5,7 +5,6 @@ import { mkdir } from 'node:fs/promises';
 import * as schema from '../server/db/schema';
 import type { Database } from '../server/db';
 import type { AppConfig } from '../server/config';
-import { prepareLearning } from '../server/prepare-learning';
 export async function openLocalDatabase(config: AppConfig) {
   if (!config.development || process.env.NETLIFY || process.env.NODE_ENV === 'production')
     throw new Error('PostgreSQL embarqué interdit en production.');
@@ -13,6 +12,5 @@ export async function openLocalDatabase(config: AppConfig) {
   const client = new PGlite(`${config.localDir}/postgres`);
   const db = drizzle(client, { schema });
   await migrate(db, { migrationsFolder: 'migrations' });
-  await prepareLearning(db as unknown as Database);
   return { db: db as unknown as Database, close: () => client.close() };
 }

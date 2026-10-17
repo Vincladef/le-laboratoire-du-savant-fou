@@ -1,4 +1,4 @@
-import { documentMenu, reviewMenu, navigation } from './navigation';
+import { documentMenu, navigation } from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
@@ -56,6 +56,32 @@ test('contraste et accessibilité des formulaires, des formules et du dialogue l
   await page.setViewportSize({ width: 390, height: 844 });
   await accessible(page);
   await page.screenshot({ path: info.outputPath('formules-mobile.png'), fullPage: true });
+});
+test('compte simplifié : aucun réglage de calendrier, nom modifiable et préférences préservées', async ({
+  page,
+}) => {
+  await register(page);
+  const headers = { Origin: 'http://localhost:5174' };
+  expect(
+    (
+      await page.request.patch('/api/profile', {
+        headers,
+        data: { name: 'Camille Carnet', timezone: 'Pacific/Tahiti' },
+      })
+    ).status(),
+  ).toBe(200);
+  await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
+  await expect(page.getByLabel('Fuseau horaire')).toHaveCount(0);
+  await page.getByLabel('Nom affiché', { exact: true }).fill('Camille Bouche-trou');
+  await accessible(page);
+  await page.getByRole('dialog').getByRole('button', { name: 'Enregistrer', exact: true }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const profile = await (await page.request.get('/api/profile')).json();
+  expect(profile.preferences.timezone).toBe('Pacific/Tahiti');
+  expect(profile.role).toBe('free');
+  await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+  await expect(page.getByLabel('Nom affiché', { exact: true })).toHaveValue('Camille Bouche-trou');
 });
 test('page agrandie, plan persistant utilisable sur mobile, clavier et interface accessible', async ({
   page,
@@ -173,6 +199,11 @@ test('grand document : 1 000 paragraphes, 100 annotations, édition et persistan
     }),
     contentType: 'application/json',
   });
+  await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
+  await expect(page.locator('.review-reveal')).toHaveCount(100);
+  await expect(page.getByRole('document', { name: 'Document de révision' })).toContainText(
+    'Mesure finale conservée.',
+  );
 });
 
 test('une panne de chargement affiche une récupération et permet de rouvrir le document', async ({
@@ -188,7 +219,7 @@ test('une panne de chargement affiche une récupération et permet de rouvrir le
   await expect(page.getByRole('textbox', { name: 'Contenu du document' })).toBeVisible();
 });
 
-test('accessibilité de la bibliothèque remplie et des révisions libres et programmées', async ({
+test('accessibilité de la bibliothèque, du document à réviser et des commandes proches des trous', async ({
   page,
 }) => {
   await register(page);
@@ -226,17 +257,16 @@ test('accessibilité de la bibliothèque remplie et des révisions libres et pro
     page.getByRole('heading', { name: 'La cellule', exact: true }).first(),
   ).toBeVisible();
   await accessible(page);
-  await page.goto(`/study/free/${id}`);
-  await expect(page.getByRole('button', { name: 'Révéler toutes les réponses' })).toBeVisible();
+  await page.goto(`/study/${id}`);
+  await expect(page.getByRole('button', { name: 'Tout révéler' })).toBeVisible();
   await accessible(page);
-  await page.getByRole('button', { name: 'Révéler toutes les réponses' }).click();
+  await page.getByRole('button', { name: 'Tout révéler' }).click();
   await accessible(page);
-  await page.goto(`/study?document=${id}`);
-  await expect(
-    page.getByRole('button', { name: 'Commencer la révision', exact: true }),
-  ).toBeVisible();
+  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await accessible(page);
-  await page.getByRole('button', { name: 'Commencer la révision', exact: true }).click();
-  await page.getByRole('button', { name: 'Révéler la réponse', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Masquer', exact: true }).click();
+  await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).click();
   await accessible(page);
 });
