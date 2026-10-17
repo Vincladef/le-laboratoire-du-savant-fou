@@ -41,3 +41,21 @@ La recette publique **`6ad368c339c15e0abda1bc3a`** est `ready` : **17 contrôles
 Un dernier cas de navigation volumineuse (30 onglets et 25 titres sur téléphone) a mis en évidence un débordement des deux listes. Leur hauteur est désormais partagée dans le post-it, avec défilement interne ; elles ne recouvrent plus le document. Le scénario est conservé dans la recette d’onglets.
 
 Le complément `d9dfe3d39efe34e782cc43034daaed8242789440` est rejoué localement (95 tests, 14 parcours), puis publié : préparation **`6ad36a3abb8fe7eec56c8029`** (`ready`, 16 contrôles Neon), recette publique finale **`6ad36a8d2c5d3d8bb76b8505`** (`ready`, **17 contrôles HTTPS/Neon, 9 parcours hébergés, 0 erreur JavaScript**). Les archives et l’inventaire restent inchangés ; aucune migration n’est réappliquée. Cette validation autorise la publication en production.
+
+## Production — 17 octobre 2026
+
+Le commit `62cf477274be210a480c969b7c6a76f4575c5198` est poussé sur `main` puis relu depuis GitHub. Le déploiement **`6ad36b28f02590fa05ace865`** est `ready` : une migration appliquée après les 12 précédentes, 19 tables et **16 contrôles Neon réussis**. La preuve SQL confirme documents, annotations et archives préservés ; deux passages présents, dont une difficulté reprise d’une évaluation explicite.
+
+L’inventaire production avant/après recette est identique : 1 utilisateur applicatif, 2 documents, 27 versions, 2 identités Auth, 2 passages, 2 anciennes cartes, 1 ancienne révision et 1 ancienne séance ; profil historique préservé. Empreinte documentaire : `993207f8ba5f312f83c01f170ee0dcbe`. Ce sont les données constatées à ce moment, pas des nombres à rétablir en supprimant des modifications ultérieures. Aucune carte ou séance nouvelle n’est créée par la recette ; les fixtures sont retirées.
+
+La recette publique production **`6ad36bb4026934cc262c4891`** est **`ready`** : **17 contrôles HTTPS/Neon et 9 parcours Chromium hébergés**, ordinateur et téléphone 390×844, **0 erreur JavaScript**. Elle vérifie connexion réelle, création multistyle de trous, filtrage combiné, révélation, difficulté facultative, reprise des onglets et reconnexion, profil Neon et affichage mobile. La persistance des difficultés est relue directement dans Neon ; documents, annotations et archives ont les mêmes empreintes avant/après nettoyage des fixtures.
+
+Les huit variables temporaires de préparation/recette ont ensuite été retirées par API, dans tous leurs contextes. L’inventaire final confirme seulement les cinq variables serveur permanentes, dont les valeurs et contextes sont préservés. Les builds ordinaires ne lancent ni migration distante ni fixture de test. Aucun nouveau projet, changement d’offre ou achat de service n’a été effectué.
+
+## Limites et choix explicites
+
+- Un rechargement remasque les réponses : aucune séance ou progression n’est conservée. Seule la dernière difficulté enregistrée persiste.
+- Après erreur réseau, l’évaluation n’est pas annoncée comme enregistrée ; le bouton de renvoi doit être utilisé avant de quitter la page. Aucun nouveau mécanisme de séance ou de suivi hors ligne n’est introduit.
+- Les données FSRS historiques restent des archives inactives, récupérables dans la base. Leur conservation ne réactive aucun calendrier.
+- Le JSON documentaire exporte texte, styles, indices et priorités, pas les évaluations serveur. DOCX reste une conversion partielle et PDF repose sur l’impression. Les limites détaillées des [formats](formats.md) restent valables.
+- Aucun paiement réel n’a été exécuté. Les liens Stripe et les limites de raccordement automatique antérieures sont inchangés. La réception d’emails personnels et le consentement Google personnel ne sont pas attestés par ces fixtures.
