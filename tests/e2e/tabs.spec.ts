@@ -195,4 +195,41 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
   const rows = await (await page.request.get('/api/documents')).json();
   expect(rows.every((d: any) => d.passageCount === 3)).toBe(true);
   await page.screenshot({ path: info.outputPath('bibliotheque-bristol.png'), fullPage: true });
+  const long = await page.request.post('/api/documents', {
+    headers: { Origin: 'http://localhost:5174' },
+    data: {
+      title: 'Navigation volumineuse',
+      content: {
+        type: 'doc',
+        content: Array.from({ length: 30 }, (_, index) => ({
+          type: 'documentTab',
+          attrs: { id: crypto.randomUUID(), title: `Partie ${index + 1}`, parentId: null },
+          content:
+            index === 0
+              ? Array.from({ length: 25 }, (_, n) => ({
+                  type: 'heading',
+                  attrs: { level: 2 },
+                  content: [{ type: 'text', text: `Titre ${n + 1}` }],
+                }))
+              : [{ type: 'paragraph', content: [{ type: 'text', text: `Contenu ${index + 1}` }] }],
+        })),
+      },
+    },
+  });
+  expect(long.status()).toBe(201);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/document/${(await long.json()).id}`);
+  const navigationToggle = page.getByRole('button', { name: 'Plan du document', exact: true });
+  if ((await navigationToggle.getAttribute('aria-expanded')) === 'false')
+    await navigationToggle.click();
+  const outlinePanel = page.getByRole('complementary', { name: 'Plan du document' });
+  await expect(outlinePanel).toBeVisible();
+  const dimensions = await outlinePanel.evaluate((el) => ({
+    visible: el.clientHeight,
+    content: el.scrollHeight,
+  }));
+  expect(dimensions.content).toBeLessThanOrEqual(dimensions.visible + 2);
+  await page.getByRole('button', { name: 'Partie 30', exact: true }).click();
+  await expect(editor).toContainText('Contenu 30');
+  await page.screenshot({ path: info.outputPath('navigation-longue-mobile.png'), fullPage: true });
 });

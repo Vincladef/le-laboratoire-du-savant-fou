@@ -29,3 +29,13 @@ Recette locale terminée : **95 tests Vitest dans 12 fichiers**, **14 parcours P
 Les essais ont permis de corriger l’ordre serveur des passages (désormais celui du document, pas un ordre de dates identiques) et le rafraîchissement du nom du profil dans l’état client. Le scénario d’annotation prépare d’abord le texte complet, puis attend la fermeture réelle des fenêtres de création avant l’action suivante. Les assertions de persistance, de style, de concurrence et d’isolation restent actives.
 
 Avant/après migration distante, des empreintes agrégées vérifient documents, annotations et archives sans publier leur contenu. La reprise de la dernière difficulté explicite est relue par SQL. La recette distante contrôle ensuite son inventaire avant/après et échoue en cas d’écart, sans effacer de nouvelles données pour rétablir un ancien comptage.
+
+## Publication development
+
+Le commit applicatif `e2a7ba14e25f0d42027c0d71f3a7717e2a40a581` est poussé et relu depuis GitHub. Le déploiement **`6ad3685574c0970654ae42e9`** est `ready` : **16 contrôles Neon réussis**, migration `0012` appliquée après reconnaissance des 12 migrations précédentes, 19 tables conservées.
+
+Le contrôle SQL de migration confirme la préservation des documents, annotations, archives et évaluations explicites. L’inventaire development avant/après recette est identique : quatre identités Auth préexistantes conservées ; aucune donnée applicative de test restante. La production n’est pas modifiée par ce déploiement.
+
+La recette publique **`6ad368c339c15e0abda1bc3a`** est `ready` : **17 contrôles HTTPS/Neon et 9 parcours Chromium hébergés**, ordinateur et 390×844, **0 erreur JavaScript**. Elle vérifie aussi la modification réelle du profil via Neon Managed Auth. Inventaire et empreintes des archives restent inchangés après nettoyage des fixtures.
+
+Un dernier cas de navigation volumineuse (30 onglets et 25 titres sur téléphone) a mis en évidence un débordement des deux listes. Leur hauteur est désormais partagée dans le post-it, avec défilement interne ; elles ne recouvrent plus le document. Le scénario est conservé dans la recette d’onglets.

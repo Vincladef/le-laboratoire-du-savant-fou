@@ -1000,6 +1000,8 @@ textarea {
   font-size: 12px;
 }
 .document-outline {
+  display: flex;
+  flex-direction: column;
   position: relative;
   inset: auto;
   width: 216px;
@@ -1035,6 +1037,7 @@ textarea {
   filter: drop-shadow(-1px -1px 1px #78633120);
 }
 .outline-heading {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -1050,6 +1053,8 @@ textarea {
   height: 25px;
 }
 .document-tabs-list {
+  min-height: 0;
+  flex-shrink: 1;
   max-height: calc(100dvh - 170px);
   overflow-y: auto;
   overflow-x: clip;
@@ -1105,6 +1110,8 @@ textarea {
   width: 210px;
 }
 .tab-headings {
+  min-height: 0;
+  flex-shrink: 1;
   margin: 10px 0 0;
   border-top: 1px solid #8b8b6d44;
   padding-top: 10px;
