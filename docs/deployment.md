@@ -2,9 +2,9 @@
 
 ## Ressources réutilisées
 
-- Site Netlify : `le-laboratoire-du-savant-fou`, ID `449cbaf7-eaaa-43ce-8b27-50460f3d036c`.
-- Production : https://le-laboratoire-du-savant-fou.netlify.app, branche Git `main`.
-- Site de test : https://mission-2--le-laboratoire-du-savant-fou.netlify.app, branche Git `mission-2`.
+- Site Netlify : `bouche-trou`, ID `449cbaf7-eaaa-43ce-8b27-50460f3d036c` (site renommé, non recréé).
+- Production : https://bouche-trou.netlify.app, branche Git `main`.
+- Site de test : https://mission-2--bouche-trou.netlify.app, branche Git `mission-2`.
 - Projet Neon : `little-dust-51900608`, base `laboratoire`.
 - Production : `br-soft-hall-baxp2gvr`, endpoint `ep-wispy-lake-ba7v96jl`.
 - Development : `br-twilight-term-bax765a0`, endpoint `ep-holy-breeze-bap2004l`.

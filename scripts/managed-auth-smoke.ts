@@ -24,7 +24,7 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     process.env.LAB_EXPECTED_DATABASE_HOST ===
       'ep-wispy-lake-ba7v96jl-pooler.c-8.eu-central-1.aws.neon.tech' &&
     config.neonAuthURL?.includes('ep-wispy-lake-ba7v96jl.neonauth.') &&
-    config.baseURL === 'https://le-laboratoire-du-savant-fou.netlify.app';
+    config.baseURL === 'https://bouche-trou.netlify.app';
   if (!development && !production)
     throw new Error('Recette réservée aux cibles explicitement autorisées.');
   const counts = async () =>

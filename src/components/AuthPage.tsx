@@ -97,17 +97,11 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
       <section className="auth-story">
         <Brand />
         <div className="auth-story-body">
-          <span className="eyebrow">L’ATELIER DE VOS CONNAISSANCES</span>
           <h1>
             Des trous dans vos textes,
             <br />
             <em>pas dans votre mémoire.</em>
           </h1>
-          <p>
-            Un espace à vous pour écrire, organiser
-            <br />
-            et faire grandir vos connaissances.
-          </p>
           <div className="story-paper">
             <div className="paper-number">CARNET N° 001</div>
             <h3>Apprendre en retrouvant.</h3>
@@ -149,13 +143,13 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                     ? 'Un nouveau mot de passe.'
                     : 'Heureux de vous retrouver.'}
           </h2>
-          <p className="muted">
-            {mode === 'signup'
-              ? 'Créez votre compte et donnez une place à vos idées.'
-              : mode === 'signin'
-                ? 'Vos documents vous attendent. Reprenons le fil.'
+          {mode !== 'signin' && (
+            <p className="muted">
+              {mode === 'signup'
+                ? 'Créez votre compte et donnez une place à vos idées.'
                 : 'Nous vous aidons à retrouver votre espace.'}
-          </p>
+            </p>
+          )}
           {config.isError && (
             <p className="alert error" role="alert">
               {config.error.message} La connexion au service n’est pas encore disponible.

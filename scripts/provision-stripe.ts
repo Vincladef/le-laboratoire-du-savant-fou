@@ -68,8 +68,8 @@ async function configure() {
   if (!production && mode !== 'test')
     throw Error('La branche de développement ne doit pas utiliser Stripe live.');
   const origin = production
-    ? 'https://le-laboratoire-du-savant-fou.netlify.app'
-    : 'https://mission-2--le-laboratoire-du-savant-fou.netlify.app';
+    ? 'https://bouche-trou.netlify.app'
+    : 'https://mission-2--bouche-trou.netlify.app';
   const stripe = new Stripe(key, { timeout: 10000, maxNetworkRetries: 1 });
   const merchant = await stripe.accounts.retrieveCurrent();
   if (

@@ -55,6 +55,10 @@ export async function verifyHostedBrowser(
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
     await page.goto(origin, { timeout: 45000 });
+    await expect(page.locator('.brand-wordmark small')).toHaveCount(0);
+    await expect(page.getByText('L’ATELIER DE VOS CONNAISSANCES', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/Un espace à vous pour écrire/)).toHaveCount(0);
+    await expect(page.getByText(/Vos documents vous attendent/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Continuer avec Google' })).toBeVisible();
     await signIn(page, email, password);
     await expect(page).toHaveURL(/\/library$/, { timeout: 30000 });

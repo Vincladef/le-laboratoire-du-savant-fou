@@ -13,7 +13,6 @@ export function Brand({ compact = false }: { compact?: boolean }) {
         <b>
           Bouche<span className="brand-gap">-trou</span>
         </b>
-        <small>Apprendre en retrouvant</small>
       </span>
     </div>
   );

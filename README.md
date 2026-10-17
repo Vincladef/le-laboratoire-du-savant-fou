@@ -6,7 +6,7 @@ Application d’écriture, bibliothèque privée et mémorisation intégrée. Re
 
 La mission 3 ajoute droits/quotas serveur, Checkout/Portal, webhooks signés idempotents et administration. La mission 4 apporte le thème carnet, la page d’écriture agrandie, le plan masquable et les liens Stripe directs demandés par l’éditeur. **Ces liens permettent de payer chez Stripe mais n’activent pas automatiquement de droits dans l’application** : le raccordement serveur reste non configuré. Les conditions préparatoires sont accessibles dans une fenêtre discrète, sans cases d’acceptation. Voir [facturation](docs/billing.md) et [validation de la mission 4](docs/validation-mission-4.md).
 
-Site : https://le-laboratoire-du-savant-fou.netlify.app. Les ressources Neon et Netlify existantes sont conservées. Les essais de migration et de mémorisation utilisent d’abord la branche Neon `development` et un déploiement de branche Netlify ; la production n’est mise à jour qu’après leur validation. Les intégrations partagées email et Google de Neon évitent la configuration d’un SMTP externe pour cette étape.
+Site : https://bouche-trou.netlify.app. Les ressources Neon et Netlify existantes sont conservées. Les essais de migration et de mémorisation utilisent d’abord la branche Neon `development` et un déploiement de branche Netlify ; la production n’est mise à jour qu’après leur validation. Les intégrations partagées email et Google de Neon évitent la configuration d’un SMTP externe pour cette étape.
 
 ## Démarrer
 

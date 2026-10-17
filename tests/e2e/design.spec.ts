@@ -45,7 +45,17 @@ test('contraste et accessibilité des formulaires, des formules et du dialogue l
 }, info) => {
   await page.goto('/');
   await expect(page.getByLabel('Adresse email')).toBeVisible();
+  await expect(page.locator('.brand-wordmark small')).toHaveCount(0);
+  await expect(page.getByText('L’ATELIER DE VOS CONNAISSANCES', { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Un espace à vous pour écrire/)).toHaveCount(0);
+  await expect(page.getByText(/Vos documents vous attendent/)).toHaveCount(0);
+  await page.screenshot({ path: info.outputPath('accueil-desktop.png'), fullPage: true });
   await accessible(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole('button', { name: 'Me connecter', exact: true })).toBeVisible();
+  await accessible(page);
+  await page.screenshot({ path: info.outputPath('accueil-mobile.png'), fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/pricing');
   await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
   await accessible(page);
