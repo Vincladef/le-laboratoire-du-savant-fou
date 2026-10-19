@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 41 41">
+  <title>Bouche-trou</title>
+  <rect x=".5" y=".5" width="40" height="40" rx="12" fill="#f7eed9" stroke="#e9ddc4"/>
+  <path d="M1 28h7M33 28h7" fill="none" stroke="#50718b" stroke-width="2"/>
+  <rect x="11" y="9.5" width="19" height="22" rx="2" fill="#f6df8d" fill-opacity=".333" stroke="#50718b" stroke-width="1.5" stroke-dasharray="3 2"/>
+</svg>
