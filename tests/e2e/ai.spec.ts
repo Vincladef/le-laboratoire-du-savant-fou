@@ -8,9 +8,9 @@ async function ensureAI(page: Page) {
 }
 const saved = (page: Page) =>
   expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 20000 });
-async function register(page: Page) {
+async function register(page: Page, fromPublic = false) {
   const email = `ai-${crypto.randomUUID()}@example.test`;
-  await page.goto('/');
+  if (!fromPublic) await page.goto('/');
   await page.getByRole('button', { name: 'Créer mon espace' }).click();
   await page.getByLabel('Votre nom').fill('Camille Carnet');
   await page.getByLabel('Adresse email').fill(email);
@@ -28,7 +28,8 @@ async function register(page: Page) {
     })
     .toBe(true);
   await page.goto(url);
-  await page.getByRole('button', { name: 'Nouveau document', exact: true }).click();
+  if (!fromPublic)
+    await page.getByRole('button', { name: 'Nouveau document', exact: true }).click();
   return email;
 }
 async function select(page: Page, text: string) {
@@ -292,7 +293,7 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
   );
 });
 
-test('partage : lecture anonyme, révision, copie après connexion et révocation', async ({
+test('partage : lecture anonyme, révision, copie après connexion ou inscription et révocation', async ({
   page,
   browser,
 }) => {
@@ -324,6 +325,20 @@ test('partage : lecture anonyme, révision, copie après connexion et révocatio
   await expect(guest.getByRole('textbox', { name: 'Contenu du document' })).toContainText(
     'cellule',
   );
+  const signupContext = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  try {
+    const signupGuest = await signupContext.newPage();
+    await signupGuest.goto(link);
+    await signupGuest.getByRole('link', { name: 'Créer un compte et obtenir ma copie' }).click();
+    await register(signupGuest, true);
+    await expect(signupGuest).toHaveURL(/\/document\//);
+    await expect(signupGuest.getByRole('textbox', { name: 'Contenu du document' })).toContainText(
+      'cellule',
+    );
+    expect(signupGuest.url()).not.toBe(page.url());
+  } finally {
+    await signupContext.close();
+  }
   await panel.getByRole('button', { name: 'Révoquer le lien' }).click();
   await guest.goto(link);
   await expect(guest.getByRole('heading', { name: 'Ce lien n’est plus disponible' })).toBeVisible();
