@@ -2141,3 +2141,11 @@ html:has(.editor-shell) {
     bottom: 8px;
   }
 }
+.ai-panel .ai-generate:disabled {
+  background: #d1d9d9;
+  color: #65777b;
+  border-color: #c7d0d0;
+  opacity: 1;
+  cursor: not-allowed;
+  box-shadow: none;
+}

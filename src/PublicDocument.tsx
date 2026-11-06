@@ -1,3 +1,4 @@
+import { RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -198,13 +199,15 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
               onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
             />
             <button
-              className="button subtle"
+              className="icon-button"
+              aria-label="Recommencer la révision"
+              title="Recommencer la révision"
               onClick={() => {
                 setRevealed([]);
                 setActiveRating(null);
               }}
             >
-              Recommencer la révision
+              <RotateCcw size={18} />
             </button>
             <details>
               <summary>Mes réglages</summary>

@@ -12,7 +12,6 @@ type MaskState = {
   hidden: Set<string>;
   passages: MemoryPassage[];
   busyId: string | null;
-  activeRatingId?: string | null;
 };
 const empty: MaskState = { selected: new Set(), hidden: new Set(), passages: [], busyId: null };
 const maskKey = new PluginKey<MaskState>('review-mask');
@@ -113,11 +112,47 @@ function maskExtension(
                         hint.setAttribute('role', 'note');
                         details.append(hint);
                       }
+                      if (!hidden && !readOnly) {
+                        const { details, summary } = popup(
+                          passage.difficulty === 'unrated'
+                            ? 'Évaluer'
+                            : difficultyLabels[passage.difficulty],
+                          'review-evaluation',
+                        );
+                        summary.setAttribute(
+                          'aria-label',
+                          `Évaluer la difficulté du passage ${number}`,
+                        );
+                        const panel = document.createElement('span');
+                        panel.className = 'review-inline-popover';
+                        const label = document.createElement('label');
+                        label.append('Difficulté ');
+                        const select = document.createElement('select');
+                        select.setAttribute('aria-label', `Difficulté du passage ${number}`);
+                        select.disabled = value.busyId !== null;
+                        for (const [key, text] of Object.entries(difficultyLabels)) {
+                          const option = document.createElement('option');
+                          option.value = key;
+                          option.textContent = text;
+                          select.append(option);
+                        }
+                        select.value = passage.difficulty;
+                        select.addEventListener('change', () => {
+                          details.open = false;
+                          evaluate(id, select.value as Difficulty);
+                        });
+                        label.append(select);
+                        panel.append(label);
+                        const note = document.createElement('small');
+                        note.textContent = 'Facultatif · modifiable à tout moment';
+                        panel.append(note);
+                        details.append(panel);
+                      }
                       return root;
                     },
                     {
                       side: hidden ? -1 : 1,
-                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${number}/${value.activeRatingId === id}`,
+                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${number}`,
                       stopEvent: () => true,
                     },
                   ),
@@ -139,7 +174,6 @@ export function StudyDocument({
   onReveal,
   onDifficulty,
   busyId,
-  activeRatingId,
   readOnly = false,
 }: {
   document: DocumentRecord;
@@ -149,7 +183,6 @@ export function StudyDocument({
   onReveal: (id: string) => void;
   onDifficulty: (id: string, difficulty: Difficulty) => void;
   busyId: string | null;
-  activeRatingId?: string | null;
   readOnly?: boolean;
 }) {
   const callbacks = useRef({ onReveal, onDifficulty });
@@ -181,21 +214,19 @@ export function StudyDocument({
         hidden: new Set(hidden),
         passages,
         busyId,
-        activeRatingId,
       } satisfies MaskState),
     );
     if (focused) {
       const root = [...editor.view.dom.querySelectorAll<HTMLElement>('[data-passage-id]')].find(
         (el) => el.dataset.passageId === focused.dataset.passageId,
       );
-      const target = hintFocused
-        ? root?.querySelector<HTMLElement>('.review-hint summary')
-        : window.document.querySelector<HTMLElement>(
-            `summary[data-rating-id="${focused.dataset.passageId}"]`,
-          );
-      target?.focus({ preventScroll: true });
+      root
+        ?.querySelector<HTMLElement>(
+          hintFocused ? '.review-hint summary' : '.review-evaluation summary',
+        )
+        ?.focus();
     }
-  }, [editor, selected.join(','), hidden.join(','), passages, busyId, activeRatingId]);
+  }, [editor, selected.join(','), hidden.join(','), passages, busyId]);
   useEffect(() => {
     if (!editor) return;
     const close = (event: PointerEvent) => {
@@ -206,83 +237,15 @@ export function StudyDocument({
     return () => window.document.removeEventListener('pointerdown', close);
   }, [editor]);
   return (
-    <>
-      <article
-        className="review-paper document-page"
-        aria-label={doc.title}
-        style={{
-          fontFamily: doc.layout.typography?.fontFamily || 'Arial',
-          fontSize: `${doc.layout.typography?.fontSize || 11}pt`,
-        }}
-      >
-        <EditorContent editor={editor} />
-      </article>
-      {!readOnly && (
-        <div className="review-evaluations" role="group" aria-label="Évaluations des réponses">
-          {passages
-            .filter((p) => selected.includes(p.id) && !hidden.includes(p.id))
-            .map((p) => {
-              const number = passages.findIndex((item) => item.id === p.id) + 1;
-              return (
-                <details key={p.id} className="review-evaluation">
-                  <summary
-                    data-rating-id={p.id}
-                    aria-label={`Évaluer la difficulté du passage ${number}`}
-                  >
-                    Passage {number} · {difficultyLabels[p.difficulty]}
-                  </summary>
-                  <label>
-                    {p.quote}
-                    <select
-                      aria-label={`Difficulté du passage ${number}`}
-                      value={p.difficulty}
-                      disabled={busyId !== null}
-                      onChange={(e) => {
-                        e.target.closest('details')!.open = false;
-                        onDifficulty(p.id, e.target.value as Difficulty);
-                      }}
-                    >
-                      {Object.entries(difficultyLabels).map(([key, label]) => (
-                        <option key={key} value={key}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </details>
-              );
-            })}
-        </div>
-      )}
-
-      {!readOnly &&
-        activeRatingId &&
-        selected.includes(activeRatingId) &&
-        !hidden.includes(activeRatingId) && (
-          <aside className="review-rating-bar" aria-label="Évaluer la réponse révélée">
-            <span>
-              Passage {passages.findIndex((p) => p.id === activeRatingId) + 1} ·{' '}
-              {passages.find((p) => p.id === activeRatingId)?.quote}
-            </span>
-            {(
-              [
-                ['easy', 'Facile'],
-                ['medium', 'Moyen'],
-                ['hard', 'Difficile'],
-              ] as const
-            ).map(([rating, label]) => (
-              <button
-                key={rating}
-                className="button subtle"
-                disabled={busyId !== null}
-                aria-label={`${label} · passage ${passages.findIndex((p) => p.id === activeRatingId) + 1}`}
-                onClick={() => onDifficulty(activeRatingId, rating)}
-              >
-                {label}
-              </button>
-            ))}
-          </aside>
-        )}
-    </>
+    <article
+      className="review-paper document-page"
+      aria-label={doc.title}
+      style={{
+        fontFamily: doc.layout.typography?.fontFamily || 'Arial',
+        fontSize: `${doc.layout.typography?.fontSize || 11}pt`,
+      }}
+    >
+      <EditorContent editor={editor} />
+    </article>
   );
 }

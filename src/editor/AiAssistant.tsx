@@ -319,7 +319,7 @@ export function AiAssistant({
             <button
               className="button primary ai-generate"
               type="submit"
-              disabled={busy || !config.data?.enabled}
+              disabled={busy || !config.data?.enabled || (mode !== 'cloze' && !instructions.trim())}
             >
               {busy ? (
                 <>

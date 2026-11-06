@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, Pencil } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Pencil, RotateCcw } from 'lucide-react';
 import { api, ApiError, json } from '../lib/api';
 import {
   priorityLabels,
@@ -79,7 +79,6 @@ export function StudyPage({ user }: Props) {
     priority: ['high', 'medium', 'low'],
     difficulty: ['easy', 'medium', 'hard', 'unrated'],
   });
-  const [activeRatingId, setActiveRatingId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [error, setError] = useState(''),
     [message, setMessage] = useState('');
@@ -126,13 +125,11 @@ export function StudyPage({ user }: Props) {
   }, [id]);
   useEffect(() => {
     setRevealed(new Set());
-    setActiveRatingId(null);
   }, [id, filters.priority, filters.difficulty]);
   const selected = (query.data?.passages || []).filter((p) => matchesPassage(p, filters));
   const hidden = selected.filter((p) => !revealed.has(p.id)).map((p) => p.id);
   const reveal = (passageId: string) => {
     setRevealed((s) => new Set([...s, passageId]));
-    setActiveRatingId(passageId);
   };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -180,7 +177,6 @@ export function StudyPage({ user }: Props) {
           },
       );
       setPending(null);
-      setActiveRatingId((current) => (current === change.id ? null : current));
       setMessage('Difficulté enregistrée.');
       requestAnimationFrame(() =>
         document.querySelector<HTMLButtonElement>('.review-reveal')?.focus({ preventScroll: true }),
@@ -262,13 +258,14 @@ export function StudyPage({ user }: Props) {
           onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
         />
         <button
-          className="button subtle"
+          className="icon-button"
+          aria-label="Recommencer la révision"
+          title="Recommencer la révision"
           onClick={() => {
             setRevealed(new Set());
-            setActiveRatingId(null);
           }}
         >
-          Recommencer la révision
+          <RotateCcw size={18} />
         </button>
       </div>
       {(error || query.error || docs.error || folders.error) && (
@@ -321,7 +318,6 @@ export function StudyPage({ user }: Props) {
             hidden={hidden}
             onReveal={reveal}
             busyId={busyId}
-            activeRatingId={activeRatingId}
             onDifficulty={(passageId, difficulty) => {
               const p = query.data.passages.find((p) => p.id === passageId);
               if (p)

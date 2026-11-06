@@ -448,7 +448,9 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await page.setViewportSize({ width: 1440, height: 1000 });
 
   await ai.getByLabel('Que souhaitez-vous faire ?').selectOption('write');
+  await expect(ai.getByRole('button', { name: 'Proposer', exact: true })).toBeDisabled();
   await ai.getByLabel(/Vos consignes/).fill('Ajoute une phrase.');
+  await expect(ai.getByRole('button', { name: 'Proposer', exact: true })).toBeEnabled();
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
   await expect(ai).toContainText('Proposition à vérifier');
   await ai.getByRole('button', { name: 'Appliquer', exact: true }).click();
@@ -469,8 +471,10 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
   await expect(page.locator('.review-secondary')).toHaveCount(0);
   await expect(page.getByLabel('Filtrer par priorité')).toBeVisible();
+  await expect(page.locator('.review-evaluations, .review-rating-bar')).toHaveCount(0);
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
-  await page.getByRole('button', { name: 'Facile · passage 1', exact: true }).click();
+  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
   await expect
     .poll(async () => {
       const rows = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
@@ -478,7 +482,8 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
     })
     .toBe('easy');
   await page.getByRole('button', { name: 'Révéler le passage 2', exact: true }).click();
-  await page.getByRole('button', { name: 'Moyen · passage 2', exact: true }).click();
+  await page.getByLabel('Évaluer la difficulté du passage 2', { exact: true }).click();
+  await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('medium');
   await expect(page.locator('.review-context')).toContainText('2 / 2 réponses révélées');
   await page.getByRole('button', { name: 'Recommencer la révision' }).click();
   await expect(page.locator('.review-reveal')).toHaveCount(2);
