@@ -1,0 +1,19 @@
+# Création rapide et assistant IA
+
+« Texte à trous », le bouton contextuel et Ctrl/Cmd + Maj + M créent immédiatement une annotation native : indice vide, priorité Moyenne, difficulté Non évaluée. Le curseur revient à la fin du passage pour poursuivre l’écriture. Cliquer sur le passage ouvre une petite fiche avec indice, priorité, difficulté et retrait de l’annotation. Alt + Entrée ouvre aussi cette fiche lorsque le curseur se trouve dans un passage. Échap la ferme.
+
+L’assistant propose quatre actions : annoter le texte existant, rédiger, compléter et rédiger avec des trous. Le contexte peut être la sélection, l’onglet actif ou tous les onglets du document. Les options de nombre de trous (1–20), longueur, priorité et difficulté sont repliées. Une proposition ne modifie rien avant application : on peut relire le texte, le modifier, régler les passages, en désélectionner certains ou tout rejeter.
+
+Les annotations automatiques ajoutent uniquement des marques ProseMirror aux positions vérifiées. Le texte, les styles, tableaux, liens, images et annotations antérieures restent dans leur arbre d’origine. Les annotations existantes et les objets non textuels ne sont pas envoyés comme candidats à OpenAI. Le texte rédigé est inséré après la sélection ou au curseur d’origine, sous forme de paragraphes natifs ; aucun HTML du fournisseur n’est interprété. Si le contenu ou l’onglet a changé après la demande, l’application est refusée et il faut relancer la proposition. Les sauvegardes automatiques, copies locales et versions restent les mécanismes existants ; aucune migration n’est nécessaire.
+
+## Fournisseur et coût
+
+Le serveur appelle l’API OpenAI Responses, avec `gpt-6-luna` par défaut et une sortie JSON structurée. `OPENAI_MODEL` permet d’adapter le modèle aux accès du compte sans changer le client. `OPENAI_API_KEY` doit être disponible dans le contexte Netlify concerné, périmètre Functions (et Builds pour la recette explicite). Une modification de variable exige un redéploiement. La clé n’est jamais retournée au navigateur. Le panneau indique quand le fournisseur n’est pas configuré.
+
+Pour limiter les dépenses : 30 000 caractères de source et 4 000 caractères de consignes par demande, 5 000 tokens de sortie maximum, raisonnement faible, aucun nouvel essai automatique et une seule demande à la fois dans le panneau. Le serveur applique des compteurs persistants et atomiques dans la table de limites déjà existante : 12 demandes par heure et par compte, 40 par jour et par compte, 500 par jour pour le site. Les plafonds journaliers se règlent via `AI_DAILY_LIMIT` et `AI_SITE_DAILY_LIMIT`. Les fenêtres sont fixes, en UTC. Une tentative envoyée au fournisseur consomme une demande, même en cas d’erreur ou d’annulation de l’attente dans le navigateur. Ces plafonds bornent le volume ; ils ne constituent pas un plafond de facturation en euros. Le montant dépend du tarif OpenAI applicable au modèle et du nombre de tokens réellement consommés. Aucun tarif ni coût par génération n’est inventé dans l’interface.
+
+Chaque accès IA exige une session valide, l’origine autorisée et la propriété du document. Aucun texte de consigne ou de document n’est journalisé ou stocké par cette intégration. La requête utilise `store: false` ; cela ne modifie pas les autres règles de conservation du fournisseur.
+
+## Recette du fournisseur
+
+Les tests locaux utilisent des réponses déterministes pour les parcours navigateur et un fournisseur injecté pour les tests serveur. Ils ne sollicitent pas OpenAI. La variable temporaire `LAB_VERIFY_AI=1`, réservée à un build Netlify, déclenche quatre petites générations réelles avec un texte synthétique. Elle vérifie les quatre modes, les citations exactes et la sortie structurée sans écrire dans aucun document. Le statut Netlify expose seulement le modèle et les contrôles réussis. Retirer ce drapeau après vérification : les builds ordinaires ne dépensent aucun token.

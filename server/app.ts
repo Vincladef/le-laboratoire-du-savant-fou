@@ -10,6 +10,7 @@ import type { AppConfig } from './config';
 import { documents, folders, versions, profiles, assets, memoryAnchors, user } from './db/schema';
 import { syncAnchors } from './anchors';
 import { learningRoutes } from './learning';
+import { aiRoutes, type AiGenerator } from './ai';
 import { billingService } from './billing/service';
 import { billingRoutes } from './billing/routes';
 import { stripeGateway, type StripeGateway } from './billing/stripe';
@@ -43,7 +44,7 @@ const failure = (status: 400 | 403 | 404 | 409 | 413 | 429 | 503, message: strin
 export function createApp(
   db: Database,
   config: AppConfig,
-  dependencies: { stripe?: StripeGateway } = {},
+  dependencies: { stripe?: StripeGateway; ai?: AiGenerator } = {},
 ) {
   const auth = config.neonAuthURL ? null : createAuth(db, config);
   const managed = config.neonAuthURL ? managedAuth(config, db) : null;
@@ -237,6 +238,7 @@ export function createApp(
       );
   }
   app.route('/api', learningRoutes(db));
+  app.route('/api', aiRoutes(db, config, ownedDocument, dependencies.ai));
   app.route('/api', billingRoutes(db, config, billing));
   app.get('/api/profile', async (c) => {
     await db

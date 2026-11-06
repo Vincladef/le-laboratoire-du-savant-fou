@@ -479,3 +479,93 @@ describe('Configuration de production', () => {
     }
   });
 });
+
+it('protège les générations IA par session, origine, propriété, validation et quota atomique', async () => {
+  const previousRuntime = runtime;
+  let calls = 0;
+  runtime = createApp(
+    connection.db,
+    {
+      development: true,
+      baseURL: origin,
+      secret: 'integration-test-secret-longer-than-thirty-two-characters',
+      localDir,
+      google: false,
+      mail: false,
+      ai: { key: 'test-only-key', model: 'gpt-6-luna', dailyLimit: 2, siteDailyLimit: 500 },
+    },
+    {
+      ai: async (request) => {
+        calls++;
+        return {
+          text: '',
+          holes: [
+            {
+              sourceId: request.sources[0].id,
+              quote: 'cellule',
+              occurrence: 1,
+              hint: 'Unité du vivant',
+              priority: 'medium',
+              difficulty: 'unrated',
+            },
+          ],
+        };
+      },
+    },
+  );
+  try {
+    const doc = await (await alice.request('/documents', 'POST', { title: 'IA isolée' })).json();
+    const data = {
+      mode: 'cloze',
+      instructions: '',
+      count: 5,
+      length: 'short',
+      priority: 'medium',
+      difficulty: 'unrated',
+      sources: [{ id: 'main:0', text: 'La cellule.' }],
+    };
+    const before = await (await alice.request(`/documents/${doc.id}`)).json();
+    expect(
+      (await new Client('guest', '192.0.2.190').request(`/documents/${doc.id}/ai`, 'POST', data))
+        .status,
+    ).toBe(401);
+    expect((await bob.request(`/documents/${doc.id}/ai`, 'POST', data)).status).toBe(404);
+    expect(
+      (await alice.request(`/documents/${doc.id}/ai`, 'POST', data, 'https://untrusted.example'))
+        .status,
+    ).toBe(403);
+    expect(
+      (await alice.request(`/documents/${doc.id}/ai`, 'POST', { ...data, count: 100 })).status,
+    ).toBe(400);
+    const results = await Promise.all([
+      alice.request(`/documents/${doc.id}/ai`, 'POST', data),
+      alice.request(`/documents/${doc.id}/ai`, 'POST', data),
+      alice.request(`/documents/${doc.id}/ai`, 'POST', data),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 200, 429]);
+    expect(calls).toBe(2);
+    const after = await (await alice.request(`/documents/${doc.id}`)).json();
+    expect(after.content).toEqual(before.content);
+    expect(after.revision).toBe(before.revision);
+    const publicConfig = await (await alice.request('/ai/config')).json();
+    expect(publicConfig).toEqual({ enabled: true, model: 'gpt-6-luna' });
+    expect(JSON.stringify(publicConfig)).not.toContain('test-only-key');
+  } finally {
+    runtime = previousRuntime;
+  }
+});
+
+it('indique la clé manquante sans envoyer de texte au fournisseur', async () => {
+  const doc = await (await bob.request('/documents', 'POST', { title: 'IA sans clé' })).json();
+  const result = await bob.request(`/documents/${doc.id}/ai`, 'POST', {
+    mode: 'write',
+    instructions: 'Bonjour',
+    count: 5,
+    length: 'short',
+    priority: 'medium',
+    difficulty: 'unrated',
+    sources: [],
+  });
+  expect(result.status).toBe(503);
+  expect((await result.json()).error).toContain('OPENAI_API_KEY');
+});

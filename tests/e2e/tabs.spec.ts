@@ -32,8 +32,12 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
   await editor.press('ControlOrMeta+a');
   await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
   await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).click();
+  await editor.locator('[data-memory-id]').first().click();
   await page.getByLabel('Indice facultatif').fill('Indice de contrôle');
-  await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Réglages du passage' })
+    .getByRole('button', { name: 'Enregistrer', exact: true })
+    .click();
   await expect(page.locator('.save-state')).toHaveText('Enregistré');
   const url = page.url(),
     id = url.split('/').pop()!;

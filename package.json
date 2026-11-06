@@ -11,7 +11,7 @@
     "dev:api": "tsx watch scripts/dev-server.ts",
     "dev:web": "vite --host 0.0.0.0",
     "build": "tsc --noEmit && vite build",
-    "build:netlify": "tsx scripts/netlify-prepare.ts && npm run build",
+    "build:netlify": "tsx scripts/netlify-prepare.ts && tsx scripts/verify-ai-provider.ts && npm run build",
     "build:functions": "tsx scripts/build-functions.ts",
     "typecheck": "tsc --noEmit",
     "format": "prettier --write src server scripts tests netlify '*.ts' package.json tsconfig.json",

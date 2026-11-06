@@ -91,19 +91,30 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await page.getByRole('button', { name: 'Gras (Ctrl+B)', exact: true }).click();
   await selectText(page, 'La cellule contient un noyau.');
   await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).click();
-  await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Unité du vivant');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(editor).toBeFocused();
+  await editor.locator('[data-memory-id]').first().click();
   await page
-    .getByRole('dialog')
+    .getByRole('region', { name: 'Réglages du passage' })
+    .getByLabel('Indice facultatif')
+    .fill('Unité du vivant');
+  await page
+    .getByRole('region', { name: 'Réglages du passage' })
     .getByRole('combobox', { name: 'Priorité', exact: true })
     .selectOption('high');
   await expect(
-    page.getByRole('dialog').getByRole('combobox', { name: 'Difficulté', exact: true }),
+    page
+      .getByRole('region', { name: 'Réglages du passage' })
+      .getByRole('combobox', { name: 'Difficulté', exact: true }),
   ).toHaveValue('unrated');
   await page
-    .getByRole('dialog')
+    .getByRole('region', { name: 'Réglages du passage' })
     .getByRole('combobox', { name: 'Difficulté', exact: true })
     .selectOption('hard');
-  await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Réglages du passage' })
+    .getByRole('button', { name: 'Enregistrer', exact: true })
+    .click();
   await expect(editor.locator('strong')).toHaveText('cellule');
   for (const [text, priority] of [
     ['Les mitochondries produisent de l’énergie.', 'medium'],
@@ -111,17 +122,26 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   ]) {
     await selectText(page, text);
     await editor.press('ControlOrMeta+Shift+m');
+    await expect(editor).toBeFocused();
+    await editor.locator('[data-memory-id]').filter({ hasText: text }).first().click();
     await expect(
-      page.getByRole('dialog').getByRole('combobox', { name: 'Priorité', exact: true }),
+      page
+        .getByRole('region', { name: 'Réglages du passage' })
+        .getByRole('combobox', { name: 'Priorité', exact: true }),
     ).toHaveValue('medium');
     await expect(
-      page.getByRole('dialog').getByRole('combobox', { name: 'Difficulté', exact: true }),
+      page
+        .getByRole('region', { name: 'Réglages du passage' })
+        .getByRole('combobox', { name: 'Difficulté', exact: true }),
     ).toHaveValue('unrated');
     await page
-      .getByRole('dialog')
+      .getByRole('region', { name: 'Réglages du passage' })
       .getByRole('combobox', { name: 'Priorité', exact: true })
       .selectOption(priority);
-    await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
+    await page
+      .getByRole('region', { name: 'Réglages du passage' })
+      .getByRole('button', { name: 'Enregistrer', exact: true })
+      .click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
   }
   await saved(page);
@@ -155,7 +175,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   // Revealing is entirely optional and never writes an evaluation.
   let passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages.map((p: any) => p.difficulty)).toEqual(['hard', 'unrated', 'unrated']);
-  expect(passages.every((p: any) => p.difficultyRevision === 0)).toBe(true);
+  expect(passages.map((p: any) => p.difficultyRevision)).toEqual([1, 0, 0]);
   await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
   await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
@@ -218,7 +238,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages[0]).toMatchObject({
     difficulty: 'easy',
-    difficultyRevision: 2,
+    difficultyRevision: 3,
     priority: 'high',
   });
   await filterReview(page, 'priority', 'all');
@@ -262,8 +282,14 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
     .toBe('hard');
   await page.getByLabel('Priorité du passage 1', { exact: true }).selectOption('medium');
   await page.getByRole('button', { name: 'Modifier l’indice', exact: true }).first().click();
-  await page.getByRole('dialog').getByLabel('Indice facultatif').fill('Indice amélioré');
-  await page.getByRole('button', { name: 'Enregistrer l’indice', exact: true }).click();
+  await page
+    .getByRole('region', { name: 'Réglages du passage' })
+    .getByLabel('Indice facultatif')
+    .fill('Indice amélioré');
+  await page
+    .getByRole('region', { name: 'Réglages du passage' })
+    .getByRole('button', { name: 'Enregistrer', exact: true })
+    .click();
   await saved(page);
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages[0]).toMatchObject({

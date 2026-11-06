@@ -105,19 +105,23 @@ export async function verifyHostedBrowser(
       throw new Error('Sélection de contrôle introuvable');
     });
     await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).click();
+    await editor.locator('[data-memory-id]').last().click();
     await page
-      .getByRole('dialog')
+      .getByRole('region', { name: 'Réglages du passage' })
       .getByLabel('Indice facultatif')
       .fill('Ajout depuis le navigateur hébergé');
     await page
-      .getByRole('dialog')
+      .getByRole('region', { name: 'Réglages du passage' })
       .getByRole('combobox', { name: 'Priorité', exact: true })
       .selectOption('medium');
     await page
-      .getByRole('dialog')
+      .getByRole('region', { name: 'Réglages du passage' })
       .getByRole('combobox', { name: 'Difficulté', exact: true })
       .selectOption('hard');
-    await page.getByRole('button', { name: 'Créer le passage', exact: true }).click();
+    await page
+      .getByRole('region', { name: 'Réglages du passage' })
+      .getByRole('button', { name: 'Enregistrer', exact: true })
+      .click();
     await expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 30000 });
     const anchors = await (
       await page.request.get(`${origin}/api/documents/${documentId}/anchors`)
@@ -309,6 +313,61 @@ export async function verifyHostedBrowser(
     if (!JSON.stringify(savedLongDocument.content).includes('Saisie sur ordinateur.'))
       throw new Error('Saisie ordinateur non persistée');
     checks.push('hosted-browser-sticky-desktop-toolbar-and-visible-caret');
+    if (process.env.LAB_VERIFY_AI === '1') {
+      // This account is a disposable fixture owned by verifyManagedAuth; its documents
+      // are removed in that caller's finally block. Never open a real user's document.
+      await page.goto(`${origin}/library`);
+      await page.getByRole('button', { name: 'Nouveau document', exact: true }).click();
+      await editor.fill(
+        'La cellule est l’unité du vivant. Son noyau contient le matériel génétique.',
+      );
+      await expect(page.locator('.save-state')).toHaveText('Enregistré');
+      const aiDocumentId = page.url().split('/').pop()!;
+      await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
+      const assistant = page.getByRole('region', { name: 'Assistant IA', exact: true });
+      await assistant.getByText('Options de génération', { exact: true }).click();
+      await assistant.getByLabel('Nombre maximal de trous').fill('1');
+      await assistant.getByRole('button', { name: 'Proposer', exact: true }).click();
+      await expect(assistant).toContainText('Proposition à vérifier', { timeout: 55000 });
+      await expect(editor.locator('[data-memory-id]')).toHaveCount(0);
+      await assistant.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
+      await expect(page.locator('.save-state')).toHaveText('Enregistré');
+      const beforeReload = await (
+        await page.request.get(`${origin}/api/documents/${aiDocumentId}/anchors`)
+      ).json();
+      if (beforeReload.length !== 1 || beforeReload[0].status !== 'active')
+        throw new Error('Annotation IA réelle non persistée');
+      await page.reload();
+      await expect(editor.locator('[data-memory-id]')).toHaveAttribute(
+        'data-memory-id',
+        beforeReload[0].id,
+      );
+      checks.push('hosted-browser-real-openai-proposal-approval-and-stable-neon-identity');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
+      await assistant.getByLabel('Que souhaitez-vous faire ?').selectOption('compose-cloze');
+      await assistant
+        .getByLabel(/Vos consignes/)
+        .fill('Écris une seule phrase sur la membrane cellulaire, avec un trou et un indice.');
+      await assistant.getByText('Options de génération', { exact: true }).click();
+      await assistant.getByLabel('Nombre maximal de trous').fill('1');
+      await assistant.getByRole('button', { name: 'Proposer', exact: true }).click();
+      await expect(assistant).toContainText('Proposition à vérifier', { timeout: 55000 });
+      const panelBounds = await assistant.boundingBox();
+      if (!panelBounds || panelBounds.x < 0 || panelBounds.x + panelBounds.width > 391)
+        throw new Error('Panneau IA mobile hors écran');
+      await assistant.getByRole('button', { name: 'Appliquer', exact: true }).click();
+      await expect(page.locator('.save-state')).toHaveText('Enregistré');
+      const afterGeneration = await (
+        await page.request.get(`${origin}/api/documents/${aiDocumentId}/anchors`)
+      ).json();
+      if (
+        afterGeneration.length !== 2 ||
+        !afterGeneration.some((p: any) => p.id === beforeReload[0].id)
+      )
+        throw new Error('Texte à trous IA ou annotation antérieure non conservés');
+      checks.push('hosted-browser-real-openai-generated-cloze-mobile-and-preservation');
+    }
     await page.setViewportSize({ width: 390, height: 844 });
     if (process.env.LAB_VERIFY_BILLING === '1') {
       await page.goto(`${origin}/billing`);

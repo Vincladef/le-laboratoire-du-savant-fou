@@ -42,6 +42,9 @@ import { editorExtensions, findMatches, searchKey } from './extensions';
 import { useAutosave, type Snapshot } from './useAutosave';
 import { DOCX_LIMITS } from './format-limits';
 import { MemoryTools } from './MemoryTools';
+import { AiAssistant, type AiSnapshot } from './AiAssistant';
+import { annotateTabs, annotateTransaction, generatedDocument } from './ai-document';
+import { aiProposalSchema, type AiProposal } from '../shared/ai';
 const importLimits =
   'L’import conserve le texte, les titres, les listes, les liens, les tableaux simples et les images compatibles. Les styles précis, marges, objets flottants, équations Word, en-têtes et pieds de page peuvent être perdus ou modifiés. Conservez votre original.';
 
@@ -127,6 +130,7 @@ function DocumentEditor({
   const workspace = useRef<HTMLElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const [history, setHistory] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const [find, setFind] = useState(false);
   const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | null>(null);
   const [error, setError] = useState('');
@@ -317,6 +321,40 @@ function DocumentEditor({
       setError((e as Error).message);
     }
   }
+  function applyAI(snapshot: AiSnapshot, proposal: AiProposal) {
+    if (!editor) return;
+    aiProposalSchema.parse(proposal);
+    content(editor.getJSON() as RichNode);
+    if (
+      snapshot.activeId !== activeId ||
+      JSON.stringify(snapshot.tabs) !== JSON.stringify(tabsRef.current)
+    )
+      throw new Error(
+        'Le document a changé depuis la génération. Relancez la proposition sur le texte actuel.',
+      );
+    if (snapshot.mode === 'cloze') {
+      const tr = annotateTransaction(editor.state, activeId, snapshot.sources, proposal.holes);
+      const inactive = annotateTabs(
+        editor.schema,
+        tabsRef.current.filter((t) => t.id !== activeId),
+        snapshot.sources,
+        proposal.holes,
+      );
+      const next = tabsRef.current.map((tab) =>
+        tab.id === activeId
+          ? { ...tab, content: tr.doc.toJSON() as RichNode }
+          : inactive.find((t) => t.id === tab.id)!,
+      );
+      // Update inactive tabs before the active editor emits its autosave transaction.
+      tabsRef.current = next;
+      setTabs(next);
+      editor.view.dispatch(tr);
+      save.change({ ...live.current, content: writeTabs(next) });
+    } else {
+      const generated = generatedDocument(editor.schema, proposal.text, proposal.holes);
+      editor.chain().focus().insertContentAt(snapshot.position, generated.content.toJSON()).run();
+    }
+  }
   if (!editor) return null;
   const stateLabel = {
     saved: 'Enregistré',
@@ -357,6 +395,10 @@ function DocumentEditor({
       status={save.status}
       flush={save.flush}
       hasLocal={() => Boolean(save.getLocal())}
+      onAI={() => {
+        setAiOpen(true);
+        setHistory(false);
+      }}
     >
       {(memory) => (
         <div className="editor-shell">
@@ -686,6 +728,21 @@ function DocumentEditor({
                 l’impression
               </p>
             </main>
+            <AiAssistant
+              editor={editor}
+              documentId={original.id}
+              activeId={activeId}
+              open={aiOpen}
+              onClose={() => {
+                setAiOpen(false);
+                editor.commands.focus();
+              }}
+              getTabs={() => {
+                content(editor.getJSON() as RichNode);
+                return tabsRef.current;
+              }}
+              onApply={applyAI}
+            />
             {memory.panel && (
               <aside className="passages-panel" aria-label="Mes passages">
                 <h2>Mes passages</h2>

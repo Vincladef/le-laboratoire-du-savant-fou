@@ -13,6 +13,7 @@ export type AppConfig = {
   mail: boolean;
   billing?: BillingConfig;
   legal?: LegalConfig;
+  ai?: { key: string; model: string; dailyLimit: number; siteDailyLimit: number };
 };
 export function getConfig(): AppConfig {
   const development =
@@ -26,6 +27,17 @@ export function getConfig(): AppConfig {
   if (!development && (!baseURL.startsWith('https://') || !process.env.DATABASE_URL))
     throw new Error('Production : URL HTTPS et DATABASE_URL requis.');
   const neonAuthURL = development ? undefined : process.env.NEON_AUTH_BASE_URL;
+  const env = (key: string) =>
+    (
+      globalThis as typeof globalThis & {
+        Netlify?: { env: { get: (key: string) => string | undefined } };
+      }
+    ).Netlify?.env.get(key) || process.env[key];
+  const aiKey = env('OPENAI_API_KEY');
+  const boundedLimit = (key: string, fallback: number) => {
+    const n = Number(env(key));
+    return Number.isInteger(n) && n > 0 && n <= 10000 ? n : fallback;
+  };
   if (neonAuthURL) {
     const url = new URL(neonAuthURL);
     if (
@@ -53,5 +65,15 @@ export function getConfig(): AppConfig {
     mail: Boolean(neonAuthURL || (process.env.SMTP_HOST && process.env.MAIL_FROM)),
     billing: readBillingConfig(),
     legal: readLegalConfig(),
+    ...(aiKey
+      ? {
+          ai: {
+            key: aiKey,
+            model: env('OPENAI_MODEL') || 'gpt-6-luna',
+            dailyLimit: boundedLimit('AI_DAILY_LIMIT', 40),
+            siteDailyLimit: boundedLimit('AI_SITE_DAILY_LIMIT', 500),
+          },
+        }
+      : {}),
   };
 }
