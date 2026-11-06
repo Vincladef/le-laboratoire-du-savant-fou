@@ -105,7 +105,7 @@ export async function verifyHostedBrowser(
       throw new Error('Sélection de contrôle introuvable');
     });
     await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).click();
-    await editor.locator('[data-memory-id]').last().click();
+    await editor.locator('[data-memory-id]').filter({ hasText: ' puis ' }).click();
     await page
       .getByRole('region', { name: 'Réglages du passage' })
       .getByLabel('Indice facultatif')
@@ -122,6 +122,7 @@ export async function verifyHostedBrowser(
       .getByRole('region', { name: 'Réglages du passage' })
       .getByRole('button', { name: 'Enregistrer', exact: true })
       .click();
+    await expect(page.getByRole('region', { name: 'Réglages du passage' })).toHaveCount(0);
     await expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 30000 });
     const anchors = await (
       await page.request.get(`${origin}/api/documents/${documentId}/anchors`)
