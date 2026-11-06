@@ -2,6 +2,10 @@ import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import { readdir, readFile } from 'node:fs/promises';
 import { navigation } from './navigation';
+async function ensureAI(page: Page) {
+  if (!(await page.getByRole('region', { name: 'Assistant IA', exact: true }).isVisible()))
+    await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
+}
 const saved = (page: Page) =>
   expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 20000 });
 async function register(page: Page) {
@@ -149,6 +153,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
     .getByRole('textbox', { name: 'Indice du passage 1', exact: true })
     .fill('Une unité élémentaire');
   await ai.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
+  await ensureAI(page);
   await saved(page);
   await expect(editor.locator('strong')).toHaveText('cellule');
   let anchors = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
@@ -180,11 +185,14 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
   await expect(ai).toContainText('Proposition à vérifier');
   await ai.getByRole('button', { name: 'Appliquer (2)', exact: true }).click();
+  await ensureAI(page);
   await saved(page);
   for (const mode of ['write', 'complete', 'compose-cloze']) {
     await ai
       .getByLabel('Que souhaitez-vous faire ?')
       .selectOption(mode === 'complete' ? 'write' : mode);
+    if (mode === 'complete')
+      await ai.getByText('Compléter un passage existant', { exact: true }).click();
     if (mode === 'complete') await ai.getByRole('checkbox', { name: /S’appuyer sur/ }).check();
     await ai.getByLabel(/Vos consignes/).fill('Écris une phrase de cours.');
     await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
@@ -201,6 +209,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
       });
     }
     await ai.getByRole('button', { name: 'Appliquer', exact: true }).click();
+    await ensureAI(page);
     await saved(page);
   }
   await expect(editor).toContainText('La cellule possède une membrane.');
@@ -214,6 +223,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await editor.press('Enter');
   await editor.press('x');
   await ai.getByRole('button', { name: 'Appliquer', exact: true }).click();
+  await ensureAI(page);
   await expect(ai.getByRole('alert')).toContainText('a changé depuis la génération');
   await ai.getByRole('button', { name: 'Rejeter', exact: true }).click();
   await page.screenshot({ path: info.outputPath('assistant-desktop.png'), fullPage: true });
@@ -266,6 +276,7 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
   await expect(ai).toContainText('Proposition à vérifier');
   await page.screenshot({ path: info.outputPath('assistant-mobile.png'), fullPage: true });
   await ai.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
+  await ensureAI(page);
   await saved(page);
 
   await ai.getByLabel('Que souhaitez-vous faire ?').selectOption('write');
@@ -361,7 +372,66 @@ test('un panneau déjà ouvert suit la nouvelle sélection et annote uniquement 
   await expect(ai).toContainText('Proposition à vérifier');
   expect(sourceText).toBe(sentence);
   await ai.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
+  await ensureAI(page);
   await saved(page);
   await expect(editor.locator('[data-memory-id]')).toHaveText('1789');
   await expect(editor).toContainText('La photosynthèse concerne les plantes.');
+});
+
+test('confort : zoom stable, retour à l’écriture, partage à jour et évaluation rapide', async ({
+  page,
+}) => {
+  await mockAI(page);
+  await register(page);
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  await expect(page.getByRole('button', { name: 'Replier le menu', exact: true })).toBeVisible();
+  await editor.fill('La cellule est vivante.');
+  await expect(page.getByLabel('Titre du document')).toHaveValue('La cellule est vivante.');
+  await select(page, 'cellule');
+  const float = await page.locator('.selection-float').boundingBox();
+  const text = await editor.boundingBox();
+  expect(float!.y).toBeLessThan(text!.y + 150);
+  await editor.press('ControlOrMeta+Shift+m');
+  await select(page, 'vivante');
+  await editor.press('ControlOrMeta+Shift+m');
+  await expect(editor.locator('[data-memory-id]')).toHaveCount(2);
+  const paper = page.locator('.document-paper');
+  const width = (await paper.boundingBox())!.width;
+  const scroll = await page.evaluate(() => scrollY);
+  await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
+  const ai = page.getByRole('region', { name: 'Assistant IA', exact: true });
+  expect(Math.abs((await paper.boundingBox())!.width - width)).toBeLessThan(1);
+  expect(Math.abs((await page.evaluate(() => scrollY)) - scroll)).toBeLessThan(2);
+  await ai.getByLabel('Que souhaitez-vous faire ?').selectOption('write');
+  await ai.getByLabel(/Vos consignes/).fill('Ajoute une phrase.');
+  await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
+  await expect(ai).toContainText('Proposition à vérifier');
+  await ai.getByRole('button', { name: 'Appliquer', exact: true }).click();
+  await expect(ai).not.toBeVisible();
+  await expect(editor).toBeFocused();
+  expect(Math.abs((await paper.boundingBox())!.width - width)).toBeLessThan(1);
+  await saved(page);
+  await page.getByRole('button', { name: 'Partager', exact: true }).click();
+  const share = page.getByRole('complementary', { name: 'Partager le document' });
+  await expect(share.getByLabel('Version partagée')).toHaveValue('live');
+  await share.getByRole('button', { name: 'Créer le lien public' }).click();
+  await expect(share.getByRole('link', { name: 'Voir comme un visiteur' })).toHaveAttribute(
+    'href',
+    /\/s\/[a-f0-9]{64}$/,
+  );
+  await share.getByRole('button', { name: 'Fermer le partage' }).click();
+  const id = page.url().split('/').pop();
+  await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
+  await expect(page.locator('.review-secondary')).not.toHaveAttribute('open', '');
+  await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Facile · passage 1', exact: true }).click();
+  await expect
+    .poll(async () => {
+      const rows = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+      return rows[0].difficulty;
+    })
+    .toBe('easy');
+  await page.getByRole('button', { name: 'Révéler le passage 2', exact: true }).click();
+  await page.getByRole('button', { name: 'Moyen · passage 2', exact: true }).click();
+  await expect(page.locator('.review-context')).toContainText('2 / 2 réponses révélées');
 });

@@ -143,7 +143,7 @@ export async function makeDocx(
               } as any
             )[a.textAlign],
             spacing: {
-              line: Math.round(Number(a.lineHeight || 1.5) * 240),
+              line: Math.round(Number(a.lineHeight || 1.15) * 240),
               before: node.type === 'heading' ? 240 : 0,
               after: node.type === 'paragraph' ? 0 : 100,
             },
@@ -270,7 +270,7 @@ export async function makeDocx(
               font: layout.typography?.fontFamily || 'Arial',
               size: (layout.typography?.fontSize || 11) * 2,
             },
-            paragraph: { spacing: { line: 360 } },
+            paragraph: { spacing: { line: 276 } },
           },
         },
       },

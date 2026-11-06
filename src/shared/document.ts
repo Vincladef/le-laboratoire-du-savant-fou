@@ -9,7 +9,7 @@ export type RichNode = {
 };
 export const emptyDocument: RichNode = {
   type: 'doc',
-  content: [{ type: 'paragraph', attrs: { lineHeight: '1.75' } }],
+  content: [{ type: 'paragraph', attrs: { lineHeight: '1.15' } }],
 };
 export const layoutSchema = z.object({
   format: z.enum(['A4', 'Letter']),

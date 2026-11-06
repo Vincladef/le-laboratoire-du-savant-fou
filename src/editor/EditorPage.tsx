@@ -137,8 +137,32 @@ function DocumentEditor({
   const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  useEffect(() => {
+    if (notice !== 'Proposition appliquée.') return;
+    const timer = setTimeout(() => setNotice(''), 3500);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const [busy, setBusy] = useState(false);
-  const [zoom, setZoom] = useState<number | 'fit'>('fit');
+  const [zoom, setZoom] = useState<number | 'fit'>(() => {
+    try {
+      const stored = localStorage.getItem(
+        `bouche-zoom-${ownerId}-${window.matchMedia('(max-width:760px)').matches ? 'mobile' : 'desktop'}`,
+      );
+      if (stored === 'fit') return 'fit';
+      const value = Number(stored);
+      if ([75, 90, 100, 110, 125].includes(value)) return value;
+    } catch {}
+    return window.matchMedia('(max-width:760px)').matches ? 'fit' : 100;
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        `bouche-zoom-${ownerId}-${window.matchMedia('(max-width:760px)').matches ? 'mobile' : 'desktop'}`,
+        String(zoom),
+      );
+    } catch {}
+  }, [zoom, ownerId]);
+  const automaticTitle = useRef(original.title === 'Document sans titre');
   const fileRef = useRef<HTMLInputElement>(null);
   const save = useAutosave(original, ownerId);
   const live = useRef({ title, layout });
@@ -147,6 +171,22 @@ function DocumentEditor({
   useEffect(() => {
     const media = window.matchMedia('(max-width: 760px)');
     const resize = () => {
+      try {
+        const stored = localStorage.getItem(
+          `bouche-zoom-${ownerId}-${media.matches ? 'mobile' : 'desktop'}`,
+        );
+        setZoom(
+          stored === 'fit'
+            ? 'fit'
+            : stored && [75, 90, 100, 110, 125].includes(Number(stored))
+              ? Number(stored)
+              : media.matches
+                ? 'fit'
+                : 100,
+        );
+      } catch {
+        setZoom(media.matches ? 'fit' : 100);
+      }
       try {
         const stored = localStorage.getItem(
           `lab-outline-v2-${ownerId}-${media.matches ? 'mobile' : 'desktop'}`,
@@ -206,8 +246,21 @@ function DocumentEditor({
           return false;
         },
       },
-      onUpdate: ({ editor }) =>
-        save.change({ ...live.current, content: content(editor.getJSON() as RichNode) }),
+      onUpdate: ({ editor }) => {
+        const next = content(editor.getJSON() as RichNode);
+        if (automaticTitle.current) {
+          const suggested = plainText(next)
+            .split('\n')
+            .map((s) => s.trim())
+            .find(Boolean)
+            ?.slice(0, 80);
+          if (suggested) {
+            live.current.title = suggested;
+            setTitle(suggested);
+          }
+        }
+        save.change({ ...live.current, content: next });
+      },
       onSelectionUpdate: ({ editor }) => {
         cursors.current[activeId] = editor.state.selection.from;
         if (positionTimer.current) clearTimeout(positionTimer.current);
@@ -289,6 +342,7 @@ function DocumentEditor({
   }
   function apply(snapshot: Snapshot, persist = true) {
     if (!editor) return;
+    automaticTitle.current = snapshot.title === 'Document sans titre';
     live.current = { title: snapshot.title, layout: snapshot.layout };
     setTitle(snapshot.title);
     setLayout(snapshot.layout);
@@ -356,6 +410,9 @@ function DocumentEditor({
       const generated = generatedDocument(editor.schema, proposal.text, proposal.holes);
       editor.chain().focus().insertContentAt(snapshot.position, generated.content.toJSON()).run();
     }
+    setAiOpen(false);
+    setNotice('Proposition appliquée.');
+    editor.commands.focus();
   }
   if (!editor) return null;
   const stateLabel = {
@@ -426,6 +483,7 @@ function DocumentEditor({
                 maxLength={200}
                 value={title}
                 onChange={(e) => {
+                  automaticTitle.current = false;
                   setTitle(e.target.value);
                   live.current.title = e.target.value.trim() || 'Document sans titre';
                   save.change({

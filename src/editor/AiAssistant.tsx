@@ -100,6 +100,29 @@ export function AiAssistant({
       setBusy(false);
     }
   }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      if (!panel.current) return;
+      if (window.innerWidth <= 760) {
+        panel.current.style.top = 'auto';
+        panel.current.style.maxHeight = '75dvh';
+        return;
+      }
+      const bottom =
+        window.document.querySelector('.writing-tools')?.getBoundingClientRect().bottom || 0;
+      const top = Math.max(12, bottom + 12);
+      panel.current.style.top = `${top}px`;
+      panel.current.style.maxHeight = `calc(100dvh - ${top + 12}px)`;
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [open]);
   async function generate() {
     setError('');
     setNotice('');
@@ -200,7 +223,7 @@ export function AiAssistant({
       <div className="context-heading">
         <h2>
           <Sparkles size={17} />
-          Un coup de pouce
+          Assistant IA
         </h2>
         <button className="icon-button" aria-label="Fermer l’assistant IA" onClick={onClose}>
           <X size={18} />
@@ -274,23 +297,26 @@ export function AiAssistant({
                 </label>
               </details>
             ) : (
-              <label className="checkbox-label">
-                <input
-                  type="checkbox"
-                  checked={scope !== 'none'}
-                  onChange={(e) =>
-                    setScope(
-                      e.target.checked
-                        ? editor.state.selection.empty
-                          ? 'tab'
-                          : 'selection'
-                        : 'none',
-                    )
-                  }
-                />
-                S’appuyer sur {editor.state.selection.empty ? 'l’onglet actuel' : 'la sélection'}{' '}
-                pour poursuivre ou compléter
-              </label>
+              <details>
+                <summary>Compléter un passage existant</summary>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={scope !== 'none'}
+                    onChange={(e) =>
+                      setScope(
+                        e.target.checked
+                          ? editor.state.selection.empty
+                            ? 'tab'
+                            : 'selection'
+                          : 'none',
+                      )
+                    }
+                  />
+                  S’appuyer sur {editor.state.selection.empty ? 'l’onglet actuel' : 'la sélection'}{' '}
+                  pour poursuivre ou compléter
+                </label>
+              </details>
             )}
             <label>
               Vos consignes {mode === 'cloze' && '(facultatif)'}
@@ -322,8 +348,12 @@ export function AiAssistant({
               </label>
             )}
             <p className="muted small">
-              La sélection est utilisée en priorité, sinon l’onglet actif. La rédaction libre
-              utilise uniquement votre consigne. Aucun changement avant votre accord.
+              {mode === 'cloze'
+                ? 'Les trous seront proposés dans l’extrait indiqué.'
+                : scope === 'none'
+                  ? 'Votre consigne suffit pour rédiger.'
+                  : 'Le passage servira de contexte pour poursuivre le texte.'}{' '}
+              Aucun changement avant votre accord.
             </p>
             {config.data && !config.data.enabled && (
               <p className="alert warning" role="status">

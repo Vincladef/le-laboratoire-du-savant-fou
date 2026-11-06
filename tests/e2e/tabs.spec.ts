@@ -18,10 +18,16 @@ test('Bristol : onglets, sous-onglets, renommage, duplication, retour mobile, ex
     .poll(async () => {
       const entries = await Promise.all(
         (await readdir(`${process.env.LAB_E2E_DIR}/mail`).catch(() => [])).map(async (f) =>
-          JSON.parse(await readFile(`${process.env.LAB_E2E_DIR}/mail/${f}`, 'utf8')),
+          readFile(`${process.env.LAB_E2E_DIR}/mail/${f}`, 'utf8').then((s) => {
+            try {
+              return JSON.parse(s);
+            } catch {
+              return null;
+            }
+          }),
         ),
       );
-      mail = entries.find((m) => m.to === email);
+      mail = entries.find((m) => m?.to === email);
       return !!mail;
     })
     .toBe(true);

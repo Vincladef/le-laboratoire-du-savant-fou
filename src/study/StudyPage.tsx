@@ -79,6 +79,7 @@ export function StudyPage({ user }: Props) {
     priority: ['high', 'medium', 'low'],
     difficulty: ['easy', 'medium', 'hard', 'unrated'],
   });
+  const [activeRatingId, setActiveRatingId] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [error, setError] = useState(''),
     [message, setMessage] = useState('');
@@ -123,10 +124,16 @@ export function StudyPage({ user }: Props) {
     setMessage('');
     setPending(null);
   }, [id]);
-  useEffect(() => setRevealed(new Set()), [id, filters.priority, filters.difficulty]);
+  useEffect(() => {
+    setRevealed(new Set());
+    setActiveRatingId(null);
+  }, [id, filters.priority, filters.difficulty]);
   const selected = (query.data?.passages || []).filter((p) => matchesPassage(p, filters));
   const hidden = selected.filter((p) => !revealed.has(p.id)).map((p) => p.id);
-  const reveal = (passageId: string) => setRevealed((s) => new Set([...s, passageId]));
+  const reveal = (passageId: string) => {
+    setRevealed((s) => new Set([...s, passageId]));
+    setActiveRatingId(passageId);
+  };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -173,7 +180,11 @@ export function StudyPage({ user }: Props) {
           },
       );
       setPending(null);
+      setActiveRatingId((current) => (current === change.id ? null : current));
       setMessage('Difficulté enregistrée.');
+      requestAnimationFrame(() =>
+        document.querySelector<HTMLButtonElement>('.review-reveal')?.focus({ preventScroll: true }),
+      );
     } catch (e) {
       setError((e as Error).message);
       if (e instanceof ApiError && [404, 409].includes(e.status)) {
@@ -221,35 +232,42 @@ export function StudyPage({ user }: Props) {
             ))}
           </select>
         </label>
-        {!!folders.data?.length && (
-          <label className="review-folder-picker">
-            Dossier
-            <select
-              aria-label="Dossier des documents"
-              value={folderId}
-              onChange={(e) => setFolderId(e.target.value)}
-            >
-              <option value="">Tous</option>
-              {folders.data.map((f) => (
-                <option value={f.id} key={f.id}>
-                  {f.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <ReviewFilter
-          title="Priorité"
-          labels={priorityLabels}
-          values={filters.priority}
-          onChange={(priority) => setFilters((f) => ({ ...f, priority }))}
-        />
-        <ReviewFilter
-          title="Difficulté"
-          labels={difficultyLabels}
-          values={filters.difficulty}
-          onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
-        />
+        <details className="review-secondary">
+          <summary>
+            Filtres{filters.priority.length < 3 || filters.difficulty.length < 4 ? ' · actifs' : ''}
+          </summary>
+          <div className="review-filter-group">
+            {!!folders.data?.length && (
+              <label className="review-folder-picker">
+                Dossier
+                <select
+                  aria-label="Dossier des documents"
+                  value={folderId}
+                  onChange={(e) => setFolderId(e.target.value)}
+                >
+                  <option value="">Tous</option>
+                  {folders.data.map((f) => (
+                    <option value={f.id} key={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <ReviewFilter
+              title="Priorité"
+              labels={priorityLabels}
+              values={filters.priority}
+              onChange={(priority) => setFilters((f) => ({ ...f, priority }))}
+            />
+            <ReviewFilter
+              title="Difficulté"
+              labels={difficultyLabels}
+              values={filters.difficulty}
+              onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
+            />
+          </div>
+        </details>
       </div>
       {(error || query.error || docs.error || folders.error) && (
         <div className="alert error" role="alert">
@@ -278,7 +296,7 @@ export function StudyPage({ user }: Props) {
           <div className="review-context">
             <span>
               {selected.length
-                ? `${hidden.length} trou${hidden.length > 1 ? 's' : ''} masqué${hidden.length > 1 ? 's' : ''}`
+                ? `${selected.length - hidden.length} / ${selected.length} réponses révélées`
                 : 'Aucun trou ne correspond aux filtres.'}
             </span>
             <span className="review-keyboard-help">
@@ -301,6 +319,7 @@ export function StudyPage({ user }: Props) {
             hidden={hidden}
             onReveal={reveal}
             busyId={busyId}
+            activeRatingId={activeRatingId}
             onDifficulty={(passageId, difficulty) => {
               const p = query.data.passages.find((p) => p.id === passageId);
               if (p)

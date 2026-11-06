@@ -74,7 +74,7 @@ export async function verifyHostedBrowser(
     ).toHaveAttribute('aria-expanded', 'true');
     const paper = page.locator('.document-paper');
     const paperBounds = await paper.boundingBox();
-    if (!paperBounds || paperBounds.width < 1000)
+    if (!paperBounds || paperBounds.width < 740)
       throw new Error('Page trop étroite sur ordinateur');
     await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Plan du document', exact: true })).toHaveText(

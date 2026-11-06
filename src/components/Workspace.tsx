@@ -73,9 +73,10 @@ export function Workspace({ user, children }: { user: User; children: ReactNode 
   }, []);
   const [expanded, setExpanded] = useState(() => {
     try {
-      return localStorage.getItem(`bouche-trou-menu-${user.id}`) === 'true';
+      const stored = localStorage.getItem(`bouche-trou-menu-${user.id}`);
+      return stored === null ? !window.matchMedia('(max-width: 760px)').matches : stored === 'true';
     } catch {
-      return false;
+      return !window.matchMedia('(max-width: 760px)').matches;
     }
   });
   const [mobileOpen, setMobileOpen] = useState(false),

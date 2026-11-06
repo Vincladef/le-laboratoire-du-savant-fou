@@ -1972,3 +1972,91 @@ html:has(.editor-shell) {
   font-family: Georgia, serif;
   overflow-wrap: anywhere;
 }
+/* Tools float above the notebook without changing its measured writing width. */
+.ai-panel {
+  position: fixed;
+  top: calc(var(--editor-toolbar-height, 0px) + 18px);
+  right: 16px;
+  bottom: 18px;
+  width: min(350px, calc(100vw - 28px));
+  max-height: calc(100dvh - var(--editor-toolbar-height, 0px) - 36px);
+}
+.document-paper .memory-anchor {
+  background: #ffe48a;
+  border-bottom: 2px dotted #98621d;
+  border-radius: 4px;
+}
+.document-paper .memory-anchor:hover {
+  background: #ffda61;
+  border-bottom-color: #74460d;
+}
+.document-paper .memory-anchor::selection {
+  background: #edc34e;
+}
+.selection-float.selection-near {
+  bottom: auto;
+  transform: none;
+}
+.review-quick-ratings {
+  display: inline-flex;
+  gap: 3px;
+  margin: 0 5px;
+  vertical-align: middle;
+}
+.review-quick-ratings button {
+  border: 1px solid #d5c7a7;
+  background: #fff8df;
+  color: #67552f;
+  border-radius: 5px;
+  padding: 4px 6px;
+  font: 11px Arial;
+}
+.review-quick-ratings button[aria-pressed='true'] {
+  background: #ead39a;
+}
+.review-secondary {
+  position: relative;
+}
+.review-secondary > summary {
+  cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid #d5c7a7;
+  border-radius: 6px;
+}
+.review-filter-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px;
+}
+@media (max-width: 760px) {
+  .ai-panel {
+    top: auto;
+    bottom: 8px;
+    max-height: 75dvh;
+  }
+  .review-quick-ratings {
+    flex-wrap: wrap;
+  }
+  .review-filter-group {
+    display: block;
+  }
+}
+.editor-alert.info:has(span) {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: calc(100vw - 24px);
+  box-shadow: 0 5px 16px #50483422;
+}
+.review-quick-ratings[hidden] {
+  display: none;
+}
+.editor-alert.info {
+  pointer-events: none;
+}
+.editor-alert.info button {
+  pointer-events: auto;
+}

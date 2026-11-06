@@ -12,6 +12,7 @@ type MaskState = {
   hidden: Set<string>;
   passages: MemoryPassage[];
   busyId: string | null;
+  activeRatingId?: string | null;
 };
 const empty: MaskState = { selected: new Set(), hidden: new Set(), passages: [], busyId: null };
 const maskKey = new PluginKey<MaskState>('review-mask');
@@ -143,6 +144,28 @@ function maskExtension(
                         });
                         label.append(select);
                         panel.append(label);
+                        const quick = document.createElement('span');
+                        quick.className = 'review-quick-ratings';
+                        quick.hidden = value.activeRatingId !== id;
+                        quick.setAttribute('aria-label', `Évaluer le passage ${number}`);
+                        for (const [rating, title] of [
+                          ['easy', 'Facile'],
+                          ['medium', 'Moyen'],
+                          ['hard', 'Difficile'],
+                        ] as const) {
+                          const button = document.createElement('button');
+                          button.type = 'button';
+                          button.textContent = title;
+                          button.disabled = value.busyId !== null;
+                          button.setAttribute('aria-label', `${title} · passage ${number}`);
+                          button.setAttribute(
+                            'aria-pressed',
+                            String(passage.difficulty === rating),
+                          );
+                          button.onclick = () => evaluate(id, rating);
+                          quick.append(button);
+                        }
+                        root.append(quick);
                         const note = document.createElement('small');
                         note.textContent = 'Facultatif · modifiable à tout moment';
                         panel.append(note);
@@ -152,7 +175,7 @@ function maskExtension(
                     },
                     {
                       side: hidden ? -1 : 1,
-                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${number}`,
+                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${number}/${value.activeRatingId === id}`,
                       stopEvent: () => true,
                     },
                   ),
@@ -174,6 +197,7 @@ export function StudyDocument({
   onReveal,
   onDifficulty,
   busyId,
+  activeRatingId,
   readOnly = false,
 }: {
   document: DocumentRecord;
@@ -183,6 +207,7 @@ export function StudyDocument({
   onReveal: (id: string) => void;
   onDifficulty: (id: string, difficulty: Difficulty) => void;
   busyId: string | null;
+  activeRatingId?: string | null;
   readOnly?: boolean;
 }) {
   const callbacks = useRef({ onReveal, onDifficulty });
@@ -214,6 +239,7 @@ export function StudyDocument({
         hidden: new Set(hidden),
         passages,
         busyId,
+        activeRatingId,
       } satisfies MaskState),
     );
     if (focused) {
@@ -226,7 +252,7 @@ export function StudyDocument({
         )
         ?.focus();
     }
-  }, [editor, selected.join(','), hidden.join(','), passages, busyId]);
+  }, [editor, selected.join(','), hidden.join(','), passages, busyId, activeRatingId]);
   useEffect(() => {
     if (!editor) return;
     const close = (event: PointerEvent) => {

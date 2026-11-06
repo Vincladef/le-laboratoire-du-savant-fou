@@ -121,11 +121,11 @@ test('page agrandie, plan persistant utilisable sur mobile, clavier et interface
   await expect(page.getByRole('button', { name: 'Outils', exact: true })).toHaveCount(0);
   await expect(page.getByLabel('Police', { exact: true })).toBeVisible();
   await documentMenu(page);
-  await expect(page.getByLabel('Zoom', { exact: true })).toHaveValue('fit');
+  await expect(page.getByLabel('Zoom', { exact: true })).toHaveValue('100');
   await page.locator('.document-tools > summary').click();
   await expect
     .poll(async () => (await page.locator('.document-paper').boundingBox())?.width || 0)
-    .toBeGreaterThan(1000);
+    .toBeGreaterThan(740);
   await accessible(page);
   await page.screenshot({ path: info.outputPath('carnet-desktop.png'), fullPage: true });
   await expect(page.getByRole('complementary', { name: 'Plan du document' })).toBeVisible();

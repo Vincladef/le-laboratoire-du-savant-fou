@@ -10,7 +10,7 @@ export function SharePanel({
   onClose: () => void;
 }) {
   const [share, setShare] = useState<{ token: string; mode: string } | null>(null),
-    [mode, setMode] = useState('snapshot'),
+    [mode, setMode] = useState('live'),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState('');
@@ -68,6 +68,9 @@ export function SharePanel({
           >
             Copier le lien
           </button>
+          <a className="button subtle" href={link} target="_blank" rel="noopener noreferrer">
+            Voir comme un visiteur
+          </a>
           <button
             className="text-button"
             disabled={busy}
@@ -84,13 +87,16 @@ export function SharePanel({
         </>
       ) : (
         <>
-          <label>
-            Version partagée
-            <select value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="snapshot">Version figée</option>
-              <option value="live">Toujours à jour</option>
-            </select>
-          </label>
+          <details>
+            <summary>Options du lien</summary>
+            <label>
+              Version partagée
+              <select value={mode} onChange={(e) => setMode(e.target.value)}>
+                <option value="snapshot">Version figée</option>
+                <option value="live">Toujours à jour</option>
+              </select>
+            </label>
+          </details>
           <button
             className="button primary"
             disabled={busy}

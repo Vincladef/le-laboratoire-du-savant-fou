@@ -5,6 +5,10 @@ export async function filterReview(
   category: 'priority' | 'difficulty',
   choices: string | string[],
 ) {
+  await page.locator('.review-toolbar').waitFor();
+  const secondary = page.locator('.review-secondary');
+  if ((await secondary.count()) && !(await secondary.evaluate((e) => e.hasAttribute('open'))))
+    await secondary.locator('summary').first().click();
   const values = typeof choices === 'string' ? [choices] : choices;
   const title = category === 'priority' ? 'priorité' : 'difficulté';
   const summary = page.getByLabel(`Filtrer par ${title}`, { exact: true });

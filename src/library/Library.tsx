@@ -350,7 +350,12 @@ export function Library({ user }: { user: User }) {
                     <span className="preview-category">
                       {folders.data?.find((f) => f.id === doc.folderId)?.name || 'DOCUMENT'}
                     </span>
-                    <h3>{doc.title}</h3>
+                    <h3>
+                      {doc.title === 'Document sans titre'
+                        ? doc.excerpt?.trim().split('\n').find(Boolean)?.slice(0, 80) ||
+                          `Carnet du ${new Date(doc.createdAt).toLocaleDateString('fr-FR')}`
+                        : doc.title}
+                    </h3>
                     <p>{doc.excerpt || 'Votre page attend ses premières lignes.'}</p>
                   </div>
                   <div className="document-meta">

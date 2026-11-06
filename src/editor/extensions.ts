@@ -199,8 +199,8 @@ export const BlockLayout = Extension.create({
                 : {},
           },
           lineHeight: {
-            default: '1.5',
-            parseHTML: (el) => el.style.lineHeight || '1.5',
+            default: '1.15',
+            parseHTML: (el) => el.style.lineHeight || '1.15',
             renderHTML: (attrs) => ({ style: `line-height: ${attrs.lineHeight}` }),
           },
         },

@@ -48,9 +48,40 @@ export function MemoryTools({
     editor,
     selector: ({ editor }) => ({
       empty: editor.state.selection.empty,
+      from: editor.state.selection.from,
+      to: editor.state.selection.to,
       anchors: extractAnchors(editor.getJSON() as RichNode),
     }),
   });
+  const [floatPosition, setFloatPosition] = useState<{ top: number; left: number } | undefined>();
+  useEffect(() => {
+    const place = () => {
+      if (live.empty || window.innerWidth <= 760) {
+        setFloatPosition(undefined);
+        return;
+      }
+      if (editor.isDestroyed) return;
+      const current = editor.state.selection;
+      if (current.empty || current.to > editor.state.doc.content.size) {
+        setFloatPosition(undefined);
+        return;
+      }
+      const start = editor.view.coordsAtPos(current.from),
+        end = editor.view.coordsAtPos(current.to);
+      const top = Math.min(window.innerHeight - 60, end.bottom + 8);
+      setFloatPosition({
+        top: Math.max(8, top),
+        left: Math.max(12, Math.min((start.left + end.left) / 2 - 135, window.innerWidth - 292)),
+      });
+    };
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  }, [editor, live.from, live.to, live.empty]);
   const remote = useQuery({
     queryKey: ['anchors', ownerId, documentId],
     queryFn: () => api<MemoryPassage[]>(`/documents/${documentId}/anchors`),
@@ -336,7 +367,10 @@ export function MemoryTools({
         </p>
       )}
       {!live.empty && !active && (
-        <div className="selection-float">
+        <div
+          className={`selection-float ${floatPosition ? 'selection-near' : ''}`}
+          style={floatPosition}
+        >
           <button onMouseDown={(e) => e.preventDefault()} onClick={create}>
             <Plus size={16} />
             Texte à trous
