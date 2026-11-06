@@ -12,6 +12,21 @@ if (process.env.LAB_VERIFY_AI === '1') {
   const generate = openAiGenerator(config.ai);
   const checks: string[] = [];
   try {
+    const catalog = await fetch('https://api.openai.com/v1/models', {
+      headers: { Authorization: `Bearer ${config.ai.key}` },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!catalog.ok)
+      throw new Error(`Le catalogue OpenAI est inaccessible (HTTP ${catalog.status}).`);
+    const models = (await catalog.json()).data.map((m: { id: string }) => m.id) as string[];
+    if (!models.includes(config.ai.model))
+      throw new Error('Le modèle demandé n’est pas proposé par l’API OpenAI de ce compte.', {
+        cause: {
+          availableEconomicModels: models
+            .filter((m) => /^gpt-[\w.-]*(mini|nano|luna)[\w.-]*$/.test(m))
+            .sort(),
+        },
+      });
     for (const mode of ['cloze', 'write', 'complete', 'compose-cloze'] as const) {
       const request: AiRequest = {
         mode,
