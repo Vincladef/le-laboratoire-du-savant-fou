@@ -326,20 +326,19 @@ export async function verifyHostedBrowser(
       const aiDocumentId = page.url().split('/').pop()!;
       await page.getByRole('button', { name: 'Ouvrir l’assistant IA', exact: true }).click();
       const assistant = page.getByRole('region', { name: 'Assistant IA', exact: true });
-      await assistant.getByText('Options de génération', { exact: true }).click();
-      await assistant.getByLabel('Nombre maximal de trous').fill('1');
+
       await assistant.getByRole('button', { name: 'Proposer', exact: true }).click();
       await expect(assistant).toContainText('Proposition à vérifier', { timeout: 55000 });
       await expect(editor.locator('[data-memory-id]')).toHaveCount(0);
-      await assistant.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
+      await assistant.getByRole('button', { name: /^Appliquer \(/ }).click();
       await expect(page.locator('.save-state')).toHaveText('Enregistré');
       const beforeReload = await (
         await page.request.get(`${origin}/api/documents/${aiDocumentId}/anchors`)
       ).json();
-      if (beforeReload.length !== 1 || beforeReload[0].status !== 'active')
+      if (beforeReload.length < 1 || beforeReload[0].status !== 'active')
         throw new Error('Annotation IA réelle non persistée');
       await page.reload();
-      await expect(editor.locator('[data-memory-id]')).toHaveAttribute(
+      await expect(editor.locator('[data-memory-id]').first()).toHaveAttribute(
         'data-memory-id',
         beforeReload[0].id,
       );
@@ -350,8 +349,7 @@ export async function verifyHostedBrowser(
       await assistant
         .getByLabel(/Vos consignes/)
         .fill('Écris une seule phrase sur la membrane cellulaire, avec un trou et un indice.');
-      await assistant.getByText('Options de génération', { exact: true }).click();
-      await assistant.getByLabel('Nombre maximal de trous').fill('1');
+
       await assistant.getByRole('button', { name: 'Proposer', exact: true }).click();
       await expect(assistant).toContainText('Proposition à vérifier', { timeout: 55000 });
       const panelBounds = await assistant.boundingBox();
@@ -363,7 +361,7 @@ export async function verifyHostedBrowser(
         await page.request.get(`${origin}/api/documents/${aiDocumentId}/anchors`)
       ).json();
       if (
-        afterGeneration.length !== 2 ||
+        afterGeneration.length <= beforeReload.length ||
         !afterGeneration.some((p: any) => p.id === beforeReload[0].id)
       )
         throw new Error('Texte à trous IA ou annotation antérieure non conservés');
@@ -397,6 +395,36 @@ export async function verifyHostedBrowser(
       if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 2))
         throw new Error('Débordement mobile des pages commerciales');
       checks.push('hosted-browser-stripe-links-legal-popup-and-mobile');
+    }
+    if (process.env.LAB_VERIFY_SHARING === '1') {
+      await page.goto(`${origin}/document/${documentId}`);
+      await page.getByRole('button', { name: 'Partager', exact: true }).click();
+      const sharing = page.getByRole('complementary', { name: 'Partager le document' });
+      await sharing.getByRole('button', { name: 'Créer le lien public' }).click();
+      const link = await sharing.getByLabel('Lien public').inputValue();
+      const guestContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      try {
+        const guest = await guestContext.newPage();
+        await guest.goto(link);
+        await expect(guest.getByRole('document', { name: 'Document de révision' })).toBeVisible();
+        await expect(guest.locator('[contenteditable=true]')).toHaveCount(0);
+        await guest.getByRole('button', { name: 'Onglet 1', exact: true }).click();
+        await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
+        await guest.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
+        await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(0);
+        await guest.getByRole('link', { name: 'Créer un compte et obtenir ma copie' }).click();
+        await signIn(guest, email, password);
+        await expect(guest).toHaveURL(/\/document\//);
+        await expect(guest.getByRole('textbox', { name: 'Contenu du document' })).toBeVisible();
+        await sharing.getByRole('button', { name: 'Révoquer le lien' }).click();
+        await guest.goto(link);
+        await expect(
+          guest.getByRole('heading', { name: 'Ce lien n’est plus disponible' }),
+        ).toBeVisible();
+        checks.push('public-share-anonymous-mobile-review-copy-login-and-revocation');
+      } finally {
+        await guestContext.close();
+      }
     }
     if (errors.length) throw new Error(`Erreurs JavaScript navigateur : ${errors.length}`);
     return { passed: checks.length, checks, viewport: 'desktop-and-390x844', javascriptErrors: 0 };

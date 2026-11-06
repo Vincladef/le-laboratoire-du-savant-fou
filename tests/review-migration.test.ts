@@ -8,7 +8,7 @@ it('migre la dernière évaluation explicite sans réécrire documents, indices 
   const db = new PGlite();
   try {
     const migrations = readMigrationFiles({ migrationsFolder: 'migrations' });
-    expect(migrations).toHaveLength(13);
+    expect(migrations.length).toBeGreaterThanOrEqual(13);
     for (const migration of migrations.slice(0, 12))
       for (const statement of migration.sql) await db.exec(statement);
     const owner = crypto.randomUUID(),

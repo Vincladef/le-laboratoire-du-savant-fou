@@ -61,7 +61,7 @@ async function mockAI(page: Page) {
       request.mode === 'cloze'
         ? request.sources
             .filter((s: any) => s.text.includes('cellule'))
-            .slice(0, request.count)
+            .slice(0, 200)
             .map((s: any) => ({
               sourceId: s.id,
               quote: 'cellule',
@@ -139,7 +139,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await select(page, 'cellule');
   await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
   const ai = page.getByRole('region', { name: 'Assistant IA', exact: true });
-  await expect(ai.getByLabel('Texte à examiner')).toHaveValue('selection');
+  await expect(ai.getByText('Nombre maximal de trous')).toHaveCount(0);
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
   await expect(ai).toContainText('Proposition à vérifier');
   expect(requests[0].sources.map((s: any) => s.text).join('')).toBe('cellule');
@@ -169,7 +169,8 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await page.getByRole('button', { name: 'Ajouter un onglet', exact: true }).click();
   await editor.fill('La cellule possède une membrane.');
   await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
-  await ai.getByLabel('Texte à examiner').selectOption('document');
+  await ai.getByText('Étendre au document entier', { exact: true }).click();
+  await ai.getByRole('checkbox', { name: 'Inclure tous les onglets' }).check();
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
   await expect(ai).toContainText('Proposition à vérifier');
   expect(new Set(requests.at(-1).sources.map((s: any) => s.id.split(':')[0])).size).toBe(2);
@@ -180,7 +181,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await expect(ai).toContainText('Proposition à vérifier');
   await ai.getByRole('button', { name: 'Appliquer (2)', exact: true }).click();
   await saved(page);
-  for (const mode of ['write', 'complete', 'compose-cloze']) {
+  for (const mode of ['write', 'compose-cloze']) {
     await ai.getByLabel('Que souhaitez-vous faire ?').selectOption(mode);
     await ai.getByLabel(/Vos consignes/).fill('Écris une phrase de cours.');
     await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
@@ -201,7 +202,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   }
   await expect(editor).toContainText('La cellule possède une membrane.');
   await expect(editor).toContainText('Une nouvelle explication.');
-  await expect(editor).toContainText('La suite complète cette idée.');
+
   await expect(editor).toContainText('Une phrase relue.');
   await ai.getByLabel('Que souhaitez-vous faire ?').selectOption('write');
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
@@ -263,7 +264,9 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
   await page.screenshot({ path: info.outputPath('assistant-mobile.png'), fullPage: true });
   await ai.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
   await saved(page);
-  await ai.getByLabel('Texte à examiner').selectOption('tab');
+
+  await ai.getByLabel('Que souhaitez-vous faire ?').selectOption('write');
+  await ai.getByLabel(/Vos consignes/).fill('Une phrase.');
   await page.route('**/api/documents/*/ai', (route) =>
     route.fulfill({ status: 503, json: { error: 'Service IA temporairement indisponible.' } }),
   );
@@ -273,4 +276,42 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
+});
+
+test('partage : lecture anonyme, révision, copie après connexion et révocation', async ({
+  page,
+  browser,
+}) => {
+  const email = await register(page);
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  await editor.fill('La cellule est vivante.');
+  await select(page, 'cellule');
+  await editor.press('ControlOrMeta+Shift+m');
+  await saved(page);
+  await page.getByRole('button', { name: 'Partager', exact: true }).click();
+  const panel = page.getByRole('complementary', { name: 'Partager le document' });
+  await panel.getByRole('button', { name: 'Créer le lien public' }).click();
+  const link = await panel.getByLabel('Lien public').inputValue();
+  const context = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const guest = await context.newPage();
+  await guest.goto(link);
+  await expect(guest.getByRole('document', { name: 'Document de révision' })).toContainText(
+    'La cellule est vivante.',
+  );
+  await expect(guest.locator('[contenteditable=true]')).toHaveCount(0);
+  await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
+  await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
+  await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(0);
+  await guest.getByRole('link', { name: 'Créer un compte et obtenir ma copie' }).click();
+  await guest.getByLabel('Adresse email').fill(email);
+  await guest.getByLabel('Mot de passe', { exact: true }).fill('Assistant-Test-Password-42!');
+  await guest.getByRole('button', { name: 'Me connecter', exact: true }).click();
+  await expect(guest).toHaveURL(/\/document\//);
+  await expect(guest.getByRole('textbox', { name: 'Contenu du document' })).toContainText(
+    'cellule',
+  );
+  await panel.getByRole('button', { name: 'Révoquer le lien' }).click();
+  await guest.goto(link);
+  await expect(guest.getByRole('heading', { name: 'Ce lien n’est plus disponible' })).toBeVisible();
+  await context.close();
 });

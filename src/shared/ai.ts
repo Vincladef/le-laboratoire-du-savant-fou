@@ -10,10 +10,10 @@ export const aiRequestSchema = z
     mode: z.enum(['cloze', 'write', 'complete', 'compose-cloze']),
     instructions: z.string().trim().max(4000),
     sources: z.array(aiSourceSchema).max(500),
-    count: z.number().int().min(1).max(20),
+    count: z.number().int().min(1).max(200).optional(),
     length: z.enum(['short', 'medium', 'long']),
-    difficulty: difficultySchema,
-    priority: prioritySchema,
+    difficulty: difficultySchema.default('unrated'),
+    priority: prioritySchema.default('medium'),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -49,7 +49,7 @@ export const aiHoleSchema = z
   .strict();
 export type AiHole = z.infer<typeof aiHoleSchema>;
 export const aiProposalSchema = z
-  .object({ text: z.string().max(20000), holes: z.array(aiHoleSchema).max(20) })
+  .object({ text: z.string().max(20000), holes: z.array(aiHoleSchema).max(200) })
   .strict();
 export type AiProposal = z.infer<typeof aiProposalSchema>;
 export type AiSource = z.infer<typeof aiSourceSchema>;

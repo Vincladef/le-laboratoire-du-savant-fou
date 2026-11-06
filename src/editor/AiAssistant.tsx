@@ -42,14 +42,11 @@ export function AiAssistant({
   onApply: (snapshot: Snapshot, proposal: AiProposal) => void;
 }) {
   const [mode, setMode] = useState<AiRequest['mode']>('cloze');
-  const [scope, setScope] = useState<'selection' | 'tab' | 'document'>(
+  const [scope, setScope] = useState<'selection' | 'tab' | 'document' | 'none'>(
     editor.state.selection.empty ? 'tab' : 'selection',
   );
   const [instructions, setInstructions] = useState('');
-  const [count, setCount] = useState(5),
-    [length, setLength] = useState<AiRequest['length']>('medium');
-  const [priority, setPriority] = useState<AiRequest['priority']>('medium'),
-    [difficulty, setDifficulty] = useState<AiRequest['difficulty']>('unrated');
+  const [length, setLength] = useState<AiRequest['length']>('medium');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [notice, setNotice] = useState('');
@@ -91,25 +88,23 @@ export function AiAssistant({
       const selected = editor.state.selection;
       if (scope === 'selection' && selected.empty)
         throw new Error('Sélectionnez un passage ou choisissez « Onglet actuel ».');
-      const sources = (scope === 'document' ? tabs : tabs.filter((t) => t.id === activeId)).flatMap(
-        (tab) =>
-          collectSources(
-            editor.schema.nodeFromJSON(tab.content),
-            tab.id,
-            scope === 'selection' ? selected : undefined,
-          ),
+      const sources = (
+        scope === 'none' ? [] : scope === 'document' ? tabs : tabs.filter((t) => t.id === activeId)
+      ).flatMap((tab) =>
+        collectSources(
+          editor.schema.nodeFromJSON(tab.content),
+          tab.id,
+          scope === 'selection' ? selected : undefined,
+        ),
       );
       if (sources.reduce((sum, s) => sum + s.text.length, 0) > AI_MAX_SOURCE)
         throw new Error(
           'Ce contenu dépasse 30 000 caractères. Choisissez une sélection ou un onglet plus court.',
         );
       const request = aiRequestSchema.parse({
-        mode,
+        mode: mode === 'write' && scope !== 'none' ? 'complete' : mode,
         instructions,
-        count,
         length,
-        priority,
-        difficulty,
         sources: sources.map(({ id, text }) => ({ id, text })),
       });
       const captured: Snapshot = { tabs, sources, activeId, position: selected.to, mode };
@@ -203,26 +198,61 @@ export function AiAssistant({
               <select
                 value={mode}
                 disabled={busy}
-                onChange={(e) => setMode(e.target.value as AiRequest['mode'])}
+                onChange={(e) => {
+                  setMode(e.target.value as AiRequest['mode']);
+                  setScope(
+                    e.target.value === 'cloze'
+                      ? editor.state.selection.empty
+                        ? 'tab'
+                        : 'selection'
+                      : 'none',
+                  );
+                }}
               >
                 <option value="cloze">Créer des trous dans le texte</option>
                 <option value="write">Rédiger du texte</option>
-                <option value="complete">Compléter le texte</option>
                 <option value="compose-cloze">Rédiger un texte à trous</option>
               </select>
             </label>
-            <label>
-              {mode === 'cloze' ? 'Texte à examiner' : 'Contexte à utiliser'}
-              <select
-                value={scope}
-                disabled={busy}
-                onChange={(e) => setScope(e.target.value as typeof scope)}
-              >
-                <option value="selection">Sélection</option>
-                <option value="tab">Onglet actuel</option>
-                <option value="document">Document entier · tous les onglets</option>
-              </select>
-            </label>
+            {mode === 'cloze' ? (
+              <details>
+                <summary>Étendre au document entier</summary>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={scope === 'document'}
+                    onChange={(e) =>
+                      setScope(
+                        e.target.checked
+                          ? 'document'
+                          : editor.state.selection.empty
+                            ? 'tab'
+                            : 'selection',
+                      )
+                    }
+                  />
+                  Inclure tous les onglets
+                </label>
+              </details>
+            ) : (
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={scope !== 'none'}
+                  onChange={(e) =>
+                    setScope(
+                      e.target.checked
+                        ? editor.state.selection.empty
+                          ? 'tab'
+                          : 'selection'
+                        : 'none',
+                    )
+                  }
+                />
+                S’appuyer sur {editor.state.selection.empty ? 'l’onglet actuel' : 'la sélection'}{' '}
+                pour poursuivre ou compléter
+              </label>
+            )}
             <label>
               Vos consignes {mode === 'cloze' && '(facultatif)'}
               <textarea
@@ -238,71 +268,23 @@ export function AiAssistant({
                 onChange={(e) => setInstructions(e.target.value)}
               />
             </label>
-            <details className="ai-options">
-              <summary>Options de génération</summary>
-              {isCloze && (
-                <label>
-                  Nombre maximal de trous
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={count}
-                    disabled={busy}
-                    onChange={(e) => setCount(Number(e.target.value))}
-                  />
-                </label>
-              )}
-              {mode !== 'cloze' && (
-                <label>
-                  Longueur
-                  <select
-                    value={length}
-                    disabled={busy}
-                    onChange={(e) => setLength(e.target.value as AiRequest['length'])}
-                  >
-                    <option value="short">Court · environ 150 mots</option>
-                    <option value="medium">Moyen · environ 350 mots</option>
-                    <option value="long">Long · environ 700 mots</option>
-                  </select>
-                </label>
-              )}
-              {isCloze && (
-                <div className="context-fields">
-                  <label>
-                    Priorité
-                    <select
-                      value={priority}
-                      disabled={busy}
-                      onChange={(e) => setPriority(e.target.value as AiRequest['priority'])}
-                    >
-                      {Object.entries(priorityLabels).map(([key, label]) => (
-                        <option key={key} value={key}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Difficulté
-                    <select
-                      value={difficulty}
-                      disabled={busy}
-                      onChange={(e) => setDifficulty(e.target.value as AiRequest['difficulty'])}
-                    >
-                      {Object.entries(difficultyLabels).map(([key, label]) => (
-                        <option key={key} value={key}>
-                          {label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              )}
-            </details>
+            {mode !== 'cloze' && (
+              <label>
+                Longueur
+                <select
+                  value={length}
+                  disabled={busy}
+                  onChange={(e) => setLength(e.target.value as AiRequest['length'])}
+                >
+                  <option value="short">Court</option>
+                  <option value="medium">Moyen</option>
+                  <option value="long">Long</option>
+                </select>
+              </label>
+            )}
             <p className="muted small">
-              Seul le texte du périmètre choisi, hors passages déjà annotés, sera envoyé à OpenAI.
-              Aucun changement avant votre accord.
+              La sélection est utilisée en priorité, sinon l’onglet actif. La rédaction libre
+              utilise uniquement votre consigne. Aucun changement avant votre accord.
             </p>
             {config.data && !config.data.enabled && (
               <p className="alert warning" role="status">

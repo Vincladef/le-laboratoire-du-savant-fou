@@ -6,6 +6,9 @@ import { Library } from './library/Library';
 import { BillingPage, PricingPage } from './billing/BillingPage';
 import { LegalPage } from './billing/LegalPage';
 import { AdminPage } from './billing/AdminPage';
+const PublicDocument = lazy(() =>
+  import('./PublicDocument').then((m) => ({ default: m.PublicDocument })),
+);
 import { Workspace } from './components/Workspace';
 const EditorPage = lazy(() =>
   import('./editor/EditorPage').then((module) => ({ default: module.EditorPage })),
@@ -19,13 +22,25 @@ export function App() {
   const [booted, setBooted] = useState(false);
   useEffect(() => {
     if (!isPending) setBooted(true);
-  }, [isPending]);
+    let target: string | null = null;
+    try {
+      target = sessionStorage.getItem('bouche-copy-return');
+    } catch {}
+    if (data?.user && target && /^\/s\/[a-f0-9]{64}\/copy$/.test(target)) {
+      try {
+        sessionStorage.removeItem('bouche-copy-return');
+      } catch {}
+      if (location.pathname !== target) location.replace(target);
+    }
+  }, [isPending, data?.user?.id]);
   if (isPending && !booted) return <div className="app-loading">Ouverture de Bouche-trou…</div>;
   const user = data?.user;
   return (
     <>
       <Suspense fallback={<div className="app-loading">Ouverture de l’éditeur…</div>}>
         <Routes>
+          <Route path="/s/:token" element={<PublicDocument user={user} />} />
+          <Route path="/s/:token/copy" element={<PublicDocument user={user} copy />} />
           <Route path="/" element={user ? <Navigate to="/library" replace /> : <AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
           <Route

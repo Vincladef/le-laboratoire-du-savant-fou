@@ -39,7 +39,7 @@ it('utilise Luna avec sortie structurée, budget de tokens borné et sans stocka
   expect(body).toMatchObject({
     model: 'gpt-6-luna',
     store: false,
-    max_output_tokens: 5000,
+    max_output_tokens: 10000,
     text: { format: { type: 'json_schema', strict: true } },
   });
   expect(body).not.toHaveProperty('temperature');

@@ -21,7 +21,7 @@ Pour cloze : text doit être vide. Choisis des réponses pertinentes dans les so
 Chaque trou cite exactement une sous-chaîne source, avec sourceId exact et occurrence (1 pour la première occurrence exacte, 2 pour la deuxième). Ne traverse jamais un saut de ligne. Aucun chevauchement.
 Pour write et complete : rédige uniquement le nouveau texte (complete poursuit le contexte, sans le répéter), holes est vide.
 Pour compose-cloze : rédige le texte puis cite ses réponses avec sourceId="generated".
-Les indices aident à retrouver la réponse sans la révéler. Respecte le nombre maximum de trous, la priorité et la difficulté demandés. Tu peux proposer moins de trous si le contenu ne s’y prête pas.`;
+Les indices aident à retrouver la réponse sans la révéler. Détermine automatiquement le nombre pertinent de trous selon la longueur, la densité informative et les notions essentielles. Évite les trous redondants. Utilise la priorité medium et la difficulté unrated. Tu peux proposer moins de trous si le contenu ne s’y prête pas.`;
 const outputSchema = {
   type: 'object',
   additionalProperties: false,
@@ -65,7 +65,7 @@ export function openAiGenerator(
             ...request,
             targetWords: { short: 150, medium: 350, long: 700 }[request.length],
           }),
-          max_output_tokens: 5000,
+          max_output_tokens: 10000,
           reasoning: { effort: 'low' },
           text: {
             format: {
@@ -186,7 +186,7 @@ export function aiRoutes(
         await (generator || openAiGenerator(config.ai))(data),
       );
       try {
-        if (proposal.holes.length > data.count) throw new Error();
+        if (proposal.holes.length > 200) throw new Error();
         if (data.mode === 'cloze' ? Boolean(proposal.text) : !proposal.text.trim())
           throw new Error();
         if (['write', 'complete'].includes(data.mode) && proposal.holes.length) throw new Error();

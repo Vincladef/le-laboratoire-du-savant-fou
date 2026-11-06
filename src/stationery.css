@@ -1875,3 +1875,86 @@ html:has(.editor-shell) {
     display: none !important;
   }
 }
+/* Native passages and uncommitted AI suggestions have separate visual identities. */
+.document-paper .memory-anchor {
+  border-bottom: 2px dotted #a7772c;
+  border-radius: 3px;
+  background: #c89b4212;
+  padding-bottom: 1px;
+}
+.document-paper .memory-anchor:hover {
+  background: #c89b422b;
+  border-bottom-color: #82551d;
+}
+.document-paper .memory-anchor::selection {
+  background: #e9cd91;
+}
+.ai-text-preview mark,
+.ai-hole {
+  border: 1px dashed #a6ae99;
+  background: #edf1e5;
+  border-radius: 5px;
+}
+.document-paper .tiptap p,
+.review-paper .tiptap p {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.share-panel {
+  position: absolute;
+  right: 20px;
+  top: 80px;
+  width: min(370px, calc(100vw - 40px));
+  padding: 18px;
+  z-index: 45;
+  background: #fffdf7;
+  border: 1px solid #d6cbb7;
+  border-radius: 10px;
+  box-shadow: 0 8px 25px #50483420;
+}
+.share-panel label {
+  display: block;
+  margin: 12px 0;
+}
+.share-panel input,
+.share-panel select {
+  width: 100%;
+}
+.public-notebook {
+  max-width: 1100px;
+  margin: auto;
+  padding: 20px;
+}
+.public-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.public-notebook nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 15px 0;
+}
+.public-notebook .review-paper {
+  margin: 20px auto;
+}
+.public-notebook .memory-anchor {
+  border-bottom: 2px dotted #a7772c;
+  border-radius: 3px;
+}
+@media print {
+  .share-panel {
+    display: none;
+  }
+}
+.public-notebook nav button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.public-notebook h1 {
+  overflow-wrap: anywhere;
+}

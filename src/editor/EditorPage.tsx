@@ -41,6 +41,7 @@ import { Toolbar } from './Toolbar';
 import { editorExtensions, findMatches, searchKey } from './extensions';
 import { useAutosave, type Snapshot } from './useAutosave';
 import { DOCX_LIMITS } from './format-limits';
+import { SharePanel } from './SharePanel';
 import { MemoryTools } from './MemoryTools';
 import { AiAssistant, type AiSnapshot } from './AiAssistant';
 import { annotateTabs, annotateTransaction, generatedDocument } from './ai-document';
@@ -130,6 +131,7 @@ function DocumentEditor({
   const workspace = useRef<HTMLElement>(null);
   const [workspaceWidth, setWorkspaceWidth] = useState(0);
   const [history, setHistory] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [find, setFind] = useState(false);
   const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | null>(null);
@@ -448,6 +450,9 @@ function DocumentEditor({
               </span>
             </div>
             <div className="editor-header-actions">
+              <button className="button subtle" onClick={() => setSharing(!sharing)}>
+                Partager
+              </button>
               <button
                 className="button subtle concentration-toggle"
                 aria-label={shell.focusMode ? 'Quitter la concentration' : 'Concentration'}
@@ -497,6 +502,17 @@ function DocumentEditor({
               </details>
             </div>
           </header>
+          {sharing && (
+            <SharePanel
+              id={original.id}
+              flush={async () => {
+                await save.flush();
+                if (save.getLocal())
+                  throw new Error('Synchronisez le document avant de le partager.');
+              }}
+              onClose={() => setSharing(false)}
+            />
+          )}
           <Toolbar
             typography={layout.typography}
             editor={editor}

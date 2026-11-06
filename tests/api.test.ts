@@ -536,7 +536,7 @@ it('protège les générations IA par session, origine, propriété, validation 
         .status,
     ).toBe(403);
     expect(
-      (await alice.request(`/documents/${doc.id}/ai`, 'POST', { ...data, count: 100 })).status,
+      (await alice.request(`/documents/${doc.id}/ai`, 'POST', { ...data, count: 1000 })).status,
     ).toBe(400);
     const results = await Promise.all([
       alice.request(`/documents/${doc.id}/ai`, 'POST', data),
@@ -574,4 +574,89 @@ it('indique la clé manquante sans envoyer de texte au fournisseur', async () =>
   });
   expect(result.status).toBe(503);
   expect((await result.json()).error).toContain('OPENAI_API_KEY');
+});
+
+it('partage public : instantané, mise à jour, révocation, permissions et copie privée idempotente', async () => {
+  const ownerClient = new Client('share-owner@example.test', '192.0.2.231');
+  const reader = new Client('share-reader@example.test', '192.0.2.232');
+  const guest = new Client('guest', '192.0.2.233');
+  await ownerClient.signup();
+  await reader.signup();
+  const mark = crypto.randomUUID();
+  const source = await (
+    await ownerClient.request('/documents', 'POST', {
+      title: 'Cours partagé',
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'cellule',
+                marks: [
+                  { type: 'bold' },
+                  { type: 'memoryAnchor', attrs: { id: mark, hint: 'Unité' } },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    })
+  ).json();
+  expect(source.layout.typography.fontSize).toBe(11);
+  expect((await guest.request(`/documents/${source.id}`)).status).toBe(401);
+  expect(
+    (await reader.request(`/documents/${source.id}/share`, 'POST', { mode: 'live' })).status,
+  ).toBe(404);
+  let share = await (
+    await ownerClient.request(`/documents/${source.id}/share`, 'POST', { mode: 'snapshot' })
+  ).json();
+  let view = await (await guest.request(`/public/${share.token}`)).json();
+  expect(view.title).toBe('Cours partagé');
+  expect(view).not.toHaveProperty('ownerId');
+  expect(view.content).toEqual(source.content);
+  const updated = await (
+    await ownerClient.request(`/documents/${source.id}`, 'PUT', {
+      revision: source.revision,
+      title: 'Cours modifié',
+      layout: source.layout,
+      content: source.content,
+    })
+  ).json();
+  view = await (await guest.request(`/public/${share.token}`)).json();
+  expect(view.title).toBe('Cours partagé');
+  expect((await guest.request(`/public/${share.token}/copy`, 'POST')).status).toBe(401);
+  const copy = await (await reader.request(`/public/${share.token}/copy`, 'POST')).json();
+  expect(copy.id).not.toBe(source.id);
+  expect((await (await reader.request(`/public/${share.token}/copy`, 'POST')).json()).id).toBe(
+    copy.id,
+  );
+  const personal = await (await reader.request(`/documents/${copy.id}`)).json();
+  expect(
+    personal.content.content[0].content[0].marks.find((m: any) => m.type === 'memoryAnchor').attrs
+      .id,
+  ).not.toBe(mark);
+  expect((await ownerClient.request(`/documents/${copy.id}`)).status).toBe(404);
+  expect((await guest.request(`/public/${share.token}`, 'PUT', {})).status).toBe(401);
+  expect((await guest.request(`/public/${share.token}/assets/${crypto.randomUUID()}`)).status).toBe(
+    404,
+  );
+  await ownerClient.request(`/documents/${source.id}/share`, 'DELETE');
+  expect((await guest.request(`/public/${share.token}`)).status).toBe(404);
+  share = await (
+    await ownerClient.request(`/documents/${source.id}/share`, 'POST', { mode: 'live' })
+  ).json();
+  view = await (await guest.request(`/public/${share.token}`)).json();
+  expect(view.title).toBe(updated.title);
+  await ownerClient.request(`/documents/${source.id}`, 'PUT', {
+    revision: updated.revision,
+    title: 'Toujours à jour',
+    layout: source.layout,
+    content: source.content,
+  });
+  view = await (await guest.request(`/public/${share.token}`)).json();
+  expect(view.title).toBe('Toujours à jour');
 });

@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, BookOpen, FileText, ShieldCheck, Mail, FlaskConical } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -9,6 +9,12 @@ import { LegalLinks } from '../billing/LegalPage';
 export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  useEffect(() => {
+    try {
+      if (returnTo.startsWith('/s/')) sessionStorage.setItem('bouche-copy-return', returnTo);
+      else sessionStorage.removeItem('bouche-copy-return');
+    } catch {}
+  }, [returnTo]);
   const [oauthError, setOauthError] = useState(() => {
     const reason = params.get('authError') || params.get('error');
     if (!reason) return '';
@@ -23,7 +29,8 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
         'Cette adresse email n’est pas encore confirmée. Terminez la vérification de votre compte avant de vous connecter.',
       signup_disabled: 'La création de comptes par Google est temporairement indisponible.',
       access_denied: 'Connexion Google annulée. Vous pouvez réessayer.',
-      state_mismatch: 'La connexion Google a expiré ou a été interrompue. Réessayez depuis cette page.',
+      state_mismatch:
+        'La connexion Google a expiré ou a été interrompue. Réessayez depuis cette page.',
       session_missing:
         'Google n’a pas pu ouvrir votre session. Réessayez ; si cela persiste, vérifiez que votre navigateur autorise les cookies.',
       oauth_failed: 'La connexion Google a échoué. Réessayez ou utilisez la connexion par email.',
@@ -68,7 +75,9 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
         redirectTo: `${window.location.origin}/reset-password`,
       });
       if (result.error)
-        throw new Error(result.error.message || 'Impossible de demander la récupération du compte.');
+        throw new Error(
+          result.error.message || 'Impossible de demander la récupération du compte.',
+        );
       changeMode('forgot');
       setEmail(address);
       setNotice(
@@ -96,7 +105,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                 password,
                 callbackURL: config.data?.managed
                   ? `${window.location.origin}/api/auth/complete`
-                  : '/library',
+                  : returnTo,
               })
             : mode === 'forgot'
               ? await authClient.requestPasswordReset({
@@ -234,7 +243,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                       provider: 'google',
                       callbackURL: config.data?.managed
                         ? `${window.location.origin}/api/auth/complete`
-                        : '/library',
+                        : returnTo,
                     });
                     if (result.error)
                       throw new Error(result.error.message || 'Connexion Google indisponible.');
@@ -320,7 +329,9 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                 {error || oauthError}
               </p>
             )}
-            {oauthError && mode === 'signin' && config.data?.managed &&
+            {oauthError &&
+              mode === 'signin' &&
+              config.data?.managed &&
               (params.get('authError') || params.get('error')) === 'account_not_linked' && (
                 <button
                   type="button"
@@ -382,7 +393,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                     })
                   : await authClient.sendVerificationEmail({
                       email,
-                      callbackURL: '/library',
+                      callbackURL: returnTo,
                     });
                 if (result.error) setError(result.error.message || 'Envoi impossible.');
                 else if (config.data?.managed) {

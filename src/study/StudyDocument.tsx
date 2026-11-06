@@ -18,6 +18,7 @@ const maskKey = new PluginKey<MaskState>('review-mask');
 function maskExtension(
   reveal: (id: string) => void,
   evaluate: (id: string, value: Difficulty) => void,
+  readOnly = false,
 ) {
   return Extension.create({
     name: 'reviewMask',
@@ -111,7 +112,7 @@ function maskExtension(
                         hint.setAttribute('role', 'note');
                         details.append(hint);
                       }
-                      if (!hidden) {
+                      if (!hidden && !readOnly) {
                         const { details, summary } = popup(
                           passage.difficulty === 'unrated'
                             ? 'Évaluer'
@@ -173,6 +174,7 @@ export function StudyDocument({
   onReveal,
   onDifficulty,
   busyId,
+  readOnly = false,
 }: {
   document: DocumentRecord;
   passages: MemoryPassage[];
@@ -181,6 +183,7 @@ export function StudyDocument({
   onReveal: (id: string) => void;
   onDifficulty: (id: string, difficulty: Difficulty) => void;
   busyId: string | null;
+  readOnly?: boolean;
 }) {
   const callbacks = useRef({ onReveal, onDifficulty });
   callbacks.current = { onReveal, onDifficulty };
@@ -190,6 +193,7 @@ export function StudyDocument({
       maskExtension(
         (id) => callbacks.current.onReveal(id),
         (id, difficulty) => callbacks.current.onDifficulty(id, difficulty),
+        readOnly,
       ),
     ],
     content: doc.content,

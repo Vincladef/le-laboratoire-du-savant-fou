@@ -25,6 +25,9 @@ import {
   assetIds,
   type RichNode,
 } from '../src/shared/document';
+import { documentShares, sharedCopies } from './db/schema';
+import { randomBytes } from 'node:crypto';
+import { copyWithNewAnchors } from '../src/shared/document';
 import { createStorage } from './storage';
 
 const uuid = z.string().uuid();
@@ -169,6 +172,45 @@ export function createApp(
       );
     return auth!.handler(c.req.raw);
   });
+  async function publicShare(token: string, runner: any = db) {
+    if (!/^[a-f0-9]{64}$/.test(token)) failure(404, 'Lien de partage indisponible.');
+    const [row] = await runner.select().from(documentShares).where(eq(documentShares.token, token));
+    if (!row) failure(404, 'Lien de partage indisponible.');
+    const [source] = await runner.select().from(documents).where(eq(documents.id, row.documentId));
+    if (!source || source.deletedAt) failure(404, 'Lien de partage indisponible.');
+    return {
+      row,
+      source,
+      value:
+        row.mode === 'live'
+          ? { title: source.title, content: source.content as RichNode, layout: source.layout }
+          : row.snapshot,
+    };
+  }
+  app.get('/api/public/:token', async (c) => {
+    const { value } = await publicShare(c.req.param('token'));
+    c.header('X-Robots-Tag', 'noindex, nofollow');
+    return c.json(value);
+  });
+  app.get('/api/public/:token/assets/:id', async (c) => {
+    const { row, value } = await publicShare(c.req.param('token'));
+    const id = uuid.parse(c.req.param('id'));
+    if (!assetIds(value.content).includes(id)) failure(404, 'Image indisponible.');
+    const [asset] = await db
+      .select()
+      .from(assets)
+      .where(and(eq(assets.id, id), eq(assets.ownerId, row.ownerId)));
+    if (!asset) failure(404, 'Image indisponible.');
+    const data = await storage.get(asset.storageKey);
+    if (!data) failure(404, 'Image indisponible.');
+    return new Response(data, {
+      headers: {
+        'Content-Type': asset.mime,
+        'Cache-Control': 'no-store',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    });
+  });
   app.use('/api/*', async (c, next) => {
     const session = managed
       ? await managed.session(c)
@@ -184,8 +226,8 @@ export function createApp(
   });
   const owner = (id: string, userId: string) =>
     and(eq(documents.id, uuid.parse(id)), eq(documents.ownerId, userId));
-  async function ownedDocument(id: string, userId: string) {
-    const [doc] = await db.select().from(documents).where(owner(id, userId));
+  async function ownedDocument(id: string, userId: string, runner: any = db) {
+    const [doc] = await runner.select().from(documents).where(owner(id, userId));
     if (!doc) failure(404, 'Document introuvable.');
     return doc;
   }
@@ -237,6 +279,120 @@ export function createApp(
         `Le quota de ${limit} passages actifs est atteint. Le document distant n’a pas changé ; votre copie locale est conservée.`,
       );
   }
+  app.get('/api/documents/:id/share', async (c) => {
+    await ownedDocument(c.req.param('id'), c.get('userId'));
+    const [share] = await db
+      .select()
+      .from(documentShares)
+      .where(eq(documentShares.documentId, c.req.param('id')));
+    return c.json(share ? { token: share.token, mode: share.mode } : null);
+  });
+  app.post('/api/documents/:id/share', async (c) => {
+    const mode = z.enum(['live', 'snapshot']).parse((await c.req.json()).mode);
+    return c.json(
+      await db.transaction(async (tx) => {
+        await lockProfile(tx, c.get('userId'));
+        const doc = await ownedDocument(c.req.param('id'), c.get('userId'), tx);
+        if (doc.deletedAt) failure(404, 'Document indisponible.');
+        await tx.delete(documentShares).where(eq(documentShares.documentId, doc.id));
+        const token = randomBytes(32).toString('hex');
+        await tx.insert(documentShares).values({
+          token,
+          documentId: doc.id,
+          ownerId: doc.ownerId,
+          mode,
+          snapshot: { title: doc.title, content: doc.content as RichNode, layout: doc.layout },
+        });
+        return { token, mode };
+      }),
+    );
+  });
+  app.delete('/api/documents/:id/share', async (c) => {
+    await db.transaction(async (tx) => {
+      await lockProfile(tx, c.get('userId'));
+      await ownedDocument(c.req.param('id'), c.get('userId'), tx);
+      await tx.delete(documentShares).where(eq(documentShares.documentId, c.req.param('id')));
+    });
+    return c.json({ ok: true });
+  });
+  app.post('/api/public/:token/copy', async (c) => {
+    const uploaded: string[] = [];
+    try {
+      const result = await db.transaction(async (tx) => {
+        const ownerId = c.get('userId');
+        await lockProfile(tx, ownerId);
+        await tx
+          .select()
+          .from(documentShares)
+          .where(eq(documentShares.token, c.req.param('token')))
+          .for('share');
+        const { row, value } = await publicShare(c.req.param('token'), tx);
+        const key = ownerId + ':' + row.token;
+        const [previous] = await tx.select().from(sharedCopies).where(eq(sharedCopies.key, key));
+        if (previous) {
+          const [existing] = await tx
+            .select()
+            .from(documents)
+            .where(eq(documents.id, previous.documentId));
+          if (existing && !existing.deletedAt) return { id: existing.id };
+          await tx.delete(sharedCopies).where(eq(sharedCopies.key, key));
+        }
+        const quota = (await rights(tx, ownerId, config)).quotas;
+        const [{ count }] = await tx
+          .select({ count: sql<number>`count(*)::int` })
+          .from(documents)
+          .where(eq(documents.ownerId, ownerId));
+        if (count >= quota.documents)
+          failure(413, 'La limite de documents de votre formule est atteinte.');
+        const content = copyWithNewAnchors(value.content);
+        const [{ used }] = await tx
+          .select({ used: sql<number>`coalesce(sum(bytes),0)::bigint` })
+          .from(assets)
+          .where(eq(assets.ownerId, ownerId));
+        let bytes = Number(used);
+        const replacements = new Map<string, string>();
+        for (const id of assetIds(content)) {
+          const [asset] = await tx
+            .select()
+            .from(assets)
+            .where(and(eq(assets.id, id), eq(assets.ownerId, row.ownerId)));
+          if (!asset) failure(404, 'Image source indisponible.');
+          bytes += asset.bytes;
+          if (bytes > quota.bytes) failure(413, 'Votre quota de fichiers est atteint.');
+          const data = await storage.get(asset.storageKey);
+          if (!data) failure(404, 'Image source indisponible.');
+          const newId = crypto.randomUUID();
+          await storage.put(newId, data!);
+          uploaded.push(newId);
+          await tx.insert(assets).values({ ...asset, id: newId, ownerId, storageKey: newId });
+          replacements.set('/api/assets/' + id, '/api/assets/' + newId);
+        }
+        const rewrite = (node: RichNode) => {
+          if (node.type === 'image' && node.attrs)
+            node.attrs.src = replacements.get(node.attrs.src) || node.attrs.src;
+          node.content?.forEach(rewrite);
+        };
+        rewrite(content);
+        const [created] = await tx
+          .insert(documents)
+          .values({
+            ownerId,
+            title: value.title,
+            layout: value.layout,
+            content: content as any,
+            plainText: plainText(content),
+          })
+          .returning();
+        await snapshot(tx, created, 'shared-copy');
+        await tx.insert(sharedCopies).values({ key, ownerId, documentId: created.id });
+        return { id: created.id };
+      });
+      return c.json(result, 201);
+    } catch (error) {
+      await Promise.all(uploaded.map((id) => storage.delete(id)));
+      throw error;
+    }
+  });
   app.route('/api', learningRoutes(db));
   app.route('/api', aiRoutes(db, config, ownedDocument, dependencies.ai));
   app.route('/api', billingRoutes(db, config, billing));

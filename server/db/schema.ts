@@ -435,3 +435,31 @@ export const billingAdminAudit = lab.table('billing_admin_audit', {
   action: text('action').notNull(),
   createdAt: created(),
 });
+
+export const documentShares = lab.table('document_shares', {
+  token: text('token').primaryKey(),
+  documentId: uuid('document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  ownerId: text('owner_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  mode: text('mode').notNull(),
+  snapshot: jsonb('snapshot')
+    .$type<{
+      title: string;
+      content: import('../../src/shared/document').RichNode;
+      layout: PageLayout;
+    }>()
+    .notNull(),
+  createdAt: created(),
+});
+export const sharedCopies = lab.table('shared_copies', {
+  key: text('key').primaryKey(),
+  documentId: uuid('document_id')
+    .notNull()
+    .references(() => documents.id, { onDelete: 'cascade' }),
+  ownerId: text('owner_id')
+    .notNull()
+    .references(() => user.id, { onDelete: 'cascade' }),
+});

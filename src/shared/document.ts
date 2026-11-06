@@ -34,7 +34,7 @@ export const defaultLayout: PageLayout = {
   format: 'A4',
   margin: 20,
   landscape: false,
-  typography: { fontFamily: 'Georgia', fontSize: 13 },
+  typography: { fontFamily: 'Georgia', fontSize: 11 },
 };
 export const fonts = [
   'Arial',
