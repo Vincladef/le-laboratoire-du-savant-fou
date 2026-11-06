@@ -2133,3 +2133,11 @@ html:has(.editor-shell) {
 .ai-panel .ai-footnote {
   margin-top: 8px;
 }
+.ai-panel {
+  bottom: auto;
+}
+@media (max-width: 760px) {
+  .ai-panel {
+    bottom: 8px;
+  }
+}

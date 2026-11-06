@@ -218,7 +218,7 @@ export function StudyDocument({
         <EditorContent editor={editor} />
       </article>
       {!readOnly && (
-        <div className="review-evaluations" aria-label="Évaluations des réponses">
+        <div className="review-evaluations" role="group" aria-label="Évaluations des réponses">
           {passages
             .filter((p) => selected.includes(p.id) && !hidden.includes(p.id))
             .map((p) => {
