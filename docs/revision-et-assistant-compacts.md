@@ -17,3 +17,11 @@ Les vérifications ajoutées couvrent le panneau initial sans défilement à 144
 Première publication `6aedffc14bf3e7c4c8c79d10` prête : 15 contrôles Neon Auth et 11 parcours Chromium hébergés passent, sans erreur JavaScript. Aucune migration. Inventaire et empreinte identiques avant/après nettoyage des fixtures : 6 documents, 123 versions, 46 annotations ; empreinte `15bdb95fd82e1af8966b43c9ba18ccd3`.
 
 Recette finale `6aee006a952aa92e20f72bcf`, commit applicatif `83972e883e302b4d9cdab1e3c39e938629f0934c` : **ready**. Sur la nouvelle interface publiée, 15 contrôles Neon Auth et 11 parcours navigateur passent, sans erreur JavaScript. Les inventaires et empreintes restent identiques aux valeurs ci-dessus. Le dernier ajustement réduit aussi la hauteur du panneau IA à son contenu. Les variables temporaires de recette sont retirées après validation ; la clé OpenAI de production est conservée. Aucun appel fournisseur supplémentaire n’a été nécessaire pour cette livraison frontend.
+
+## Retour aux réglages discrets de difficulté
+
+À la demande suivante, le réglage historique « Évaluer » / difficulté courante revient dans un petit menu contextuel près de chaque réponse révélée. Les blocs d’évaluation et la barre sous le document sont retirés. Les évaluations enregistrées et les filtres sont préservés. Le redémarrage utilise une icône de boucle avec libellé accessible et infobulle, dans les vues privée et publique. Le bouton IA est grisé et désactivé lorsqu’une rédaction demande encore une consigne ; la création de trous garde ses consignes facultatives.
+
+Compilation locale et sept parcours IA/partage/révision réussis, puis deux contrôles ciblés supplémentaires (confort et accessibilité) réussis après nettoyage de l’état de l’ancienne barre. Ces tests vérifient notamment les états désactivé/activé de « Proposer », le retour des menus de difficulté et l’absence des blocs sous le document.
+
+Publication du retour aux menus discrets : `6aee041cf826a5cb120c1d30`, commit `c78e133c2c923ee023b1a4ed1c24e3141af39a9f`, **ready**. Recette hébergée : 15 contrôles Neon Auth, 11 parcours navigateur, aucune erreur JavaScript. Aucune migration ; les 6 documents, 124 versions et 46 annotations existants ont les mêmes inventaires et empreinte avant/après (`a713b2889d7ae76ba8cc3af85617da1c`). Les paramètres de recette temporaires sont retirés après vérification.
