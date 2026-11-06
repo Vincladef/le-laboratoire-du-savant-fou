@@ -9,6 +9,27 @@ import { LegalLinks } from '../billing/LegalPage';
 export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const [oauthError, setOauthError] = useState(() => {
+    const reason = params.get('authError') || params.get('error');
+    if (!reason) return '';
+    const messages: Record<string, string> = {
+      account_not_linked:
+        'Cette adresse est déjà associée à un autre mode de connexion. Connectez-vous par email et confirmez votre adresse avant de réessayer Google.',
+      unable_to_link_account:
+        'Google n’a pas pu être associé à ce compte. Essayez la connexion par email ou confirmez votre adresse.',
+      identity_conflict:
+        'Une identité existe déjà pour cette adresse. Connectez-vous avec votre méthode habituelle ; vos documents restent protégés.',
+      email_not_verified:
+        'Cette adresse email n’est pas encore confirmée. Terminez la vérification de votre compte avant de vous connecter.',
+      signup_disabled: 'La création de comptes par Google est temporairement indisponible.',
+      access_denied: 'Connexion Google annulée. Vous pouvez réessayer.',
+      state_mismatch: 'La connexion Google a expiré ou a été interrompue. Réessayez depuis cette page.',
+      session_missing:
+        'Google n’a pas pu ouvrir votre session. Réessayez ; si cela persiste, vérifiez que votre navigateur autorise les cookies.',
+      oauth_failed: 'La connexion Google a échoué. Réessayez ou utilisez la connexion par email.',
+    };
+    return messages[reason] || messages.oauth_failed;
+  });
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot' | 'reset' | 'verify'>(
     params.has('token') ? 'reset' : 'signin',
   );
@@ -28,6 +49,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
   function changeMode(value: typeof mode) {
     setMode(value);
     setError('');
+    setOauthError('');
     setNotice('');
     setPassword('');
     setOtp('');
@@ -174,15 +196,21 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                 className="button google-button"
                 disabled={busy}
                 onClick={async () => {
+                  setError('');
+                  setOauthError('');
                   setBusy(true);
-                  const result = await authClient.signIn.social({
-                    provider: 'google',
-                    callbackURL: config.data?.managed
-                      ? `${window.location.origin}/api/auth/complete`
-                      : '/library',
-                  });
-                  if (result.error) {
-                    setError(result.error.message || 'Connexion Google indisponible.');
+                  try {
+                    const result = await authClient.signIn.social({
+                      provider: 'google',
+                      callbackURL: config.data?.managed
+                        ? `${window.location.origin}/api/auth/complete`
+                        : '/library',
+                    });
+                    if (result.error)
+                      throw new Error(result.error.message || 'Connexion Google indisponible.');
+                  } catch (error) {
+                    setError((error as Error).message || 'Connexion Google indisponible.');
+                  } finally {
                     setBusy(false);
                   }
                 }}
@@ -257,9 +285,9 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                 Mot de passe oublié ?
               </button>
             )}
-            {error && (
+            {(error || oauthError) && (
               <p className="alert error" role="alert">
-                {error}
+                {error || oauthError}
               </p>
             )}
             {notice && (
