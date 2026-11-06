@@ -11,7 +11,16 @@ import {
 } from './shared/document';
 import { StudyDocument } from './study/StudyDocument';
 import { AuthPage } from './components/AuthPage';
-import type { MemoryPassage } from './shared/learning';
+import {
+  priorityLabels,
+  difficultyLabels,
+  matchesPassage,
+  type MemoryPassage,
+  type Priority,
+  type Difficulty,
+  type ReviewFilters,
+} from './shared/learning';
+import { ReviewFilter } from './study/StudyPage';
 import './study/review.css';
 export function PublicDocument({ user, copy = false }: { user?: { id: string }; copy?: boolean }) {
   const { token = '' } = useParams();
@@ -20,6 +29,54 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
     [review, setReview] = useState(false),
     [revealed, setRevealed] = useState<string[]>([]),
     [copyError, setCopyError] = useState('');
+  const preferenceKey = `bouche-public-review-${token}-${user?.id || 'guest'}`;
+  const [personal, setPersonal] = useState<
+    Record<string, { priority: Priority; difficulty: Difficulty }>
+  >({});
+  const [activeRating, setActiveRating] = useState<string | null>(null);
+  const [filters, setFilters] = useState<ReviewFilters>({
+    priority: ['high', 'medium', 'low'],
+    difficulty: ['easy', 'medium', 'hard', 'unrated'],
+  });
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(preferenceKey) || '{}');
+      const valid = Object.fromEntries(
+        Object.entries(stored).filter(
+          ([, value]: [string, any]) =>
+            value &&
+            Object.hasOwn(priorityLabels, value.priority) &&
+            Object.hasOwn(difficultyLabels, value.difficulty),
+        ),
+      );
+      setPersonal(valid as typeof personal);
+    } catch {
+      setPersonal({});
+    }
+    setRevealed([]);
+    setActiveRating(null);
+  }, [preferenceKey]);
+  function updatePersonal(
+    id: string,
+    change: Partial<{ priority: Priority; difficulty: Difficulty }>,
+  ) {
+    setPersonal((current) => {
+      const next = {
+        ...current,
+        [id]: {
+          ...(current[id] || {
+            priority: 'medium' as Priority,
+            difficulty: 'unrated' as Difficulty,
+          }),
+          ...change,
+        },
+      };
+      try {
+        localStorage.setItem(preferenceKey, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
   const started = useRef(false);
   const query = useQuery({
     queryKey: ['public', token],
@@ -78,8 +135,8 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         id: a.id,
         quote: a.quote,
         hint: a.hint || '',
-        priority: a.priority || 'medium',
-        difficulty: 'unrated',
+        priority: personal[a.id]?.priority || 'medium',
+        difficulty: personal[a.id]?.difficulty || 'unrated',
         difficultyRevision: 0,
         status: 'active',
         revision: 1,
@@ -87,6 +144,7 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         documentId: 'public',
       }) as MemoryPassage,
   );
+  const selected = passages.filter((p) => matchesPassage(p, filters));
   return (
     <main className="public-notebook">
       <header className="public-header">
@@ -106,6 +164,7 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
             onClick={() => {
               setTab(i);
               setRevealed([]);
+              setActiveRating(null);
             }}
           >
             {t.title}
@@ -117,18 +176,102 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         aria-pressed={review}
         onClick={() => {
           setReview(!review);
+          setActiveRating(null);
           setRevealed([]);
         }}
       >
         {review ? 'Lire le document' : 'Réviser'}
       </button>
+      {review && (
+        <>
+          <div className="review-toolbar">
+            <ReviewFilter
+              title="Priorité"
+              labels={priorityLabels}
+              values={filters.priority}
+              onChange={(priority) => setFilters((f) => ({ ...f, priority }))}
+            />
+            <ReviewFilter
+              title="Difficulté"
+              labels={difficultyLabels}
+              values={filters.difficulty}
+              onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
+            />
+            <button
+              className="button subtle"
+              onClick={() => {
+                setRevealed([]);
+                setActiveRating(null);
+              }}
+            >
+              Recommencer la révision
+            </button>
+            <details>
+              <summary>Mes réglages</summary>
+              <p>Enregistrés dans ce navigateur, sans modifier ceux de l’auteur.</p>
+              <button
+                className="button subtle"
+                onClick={() => {
+                  setPersonal({});
+                  setActiveRating(null);
+                  try {
+                    localStorage.removeItem(preferenceKey);
+                  } catch {}
+                }}
+              >
+                Réinitialiser mes évaluations et priorités
+              </button>
+            </details>
+          </div>
+          {activeRating && selected.some((p) => p.id === activeRating) && (
+            <aside className="review-rating-bar" aria-label="Mes réglages du passage">
+              <span>{passages.find((p) => p.id === activeRating)?.quote}</span>
+              <label>
+                Ma priorité
+                <select
+                  aria-label="Ma priorité"
+                  value={personal[activeRating]?.priority || 'medium'}
+                  onChange={(e) =>
+                    updatePersonal(activeRating, { priority: e.target.value as Priority })
+                  }
+                >
+                  {Object.entries(priorityLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Ma difficulté
+                <select
+                  aria-label="Ma difficulté"
+                  value={personal[activeRating]?.difficulty || 'unrated'}
+                  onChange={(e) =>
+                    updatePersonal(activeRating, { difficulty: e.target.value as Difficulty })
+                  }
+                >
+                  {Object.entries(difficultyLabels).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </aside>
+          )}
+        </>
+      )}
       <StudyDocument
         key={active.id + JSON.stringify(content)}
         document={{ ...data, content } as DocumentRecord}
         passages={passages}
-        selected={review ? anchors.map((a) => a.id) : []}
-        hidden={review ? anchors.filter((a) => !revealed.includes(a.id)).map((a) => a.id) : []}
-        onReveal={(id) => setRevealed((r) => [...r, id])}
+        selected={review ? selected.map((a) => a.id) : []}
+        hidden={review ? selected.filter((a) => !revealed.includes(a.id)).map((a) => a.id) : []}
+        onReveal={(id) => {
+          setRevealed((r) => [...r, id]);
+          setActiveRating(id);
+        }}
         onDifficulty={() => {}}
         busyId={null}
         readOnly

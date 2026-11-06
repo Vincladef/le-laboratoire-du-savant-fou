@@ -2060,3 +2060,76 @@ html:has(.editor-shell) {
 .editor-alert.info button {
   pointer-events: auto;
 }
+/* Compact initial assistant; scrolling is reserved for long proposals. */
+.ai-panel-body {
+  padding: 12px 16px;
+}
+.ai-panel-body form {
+  gap: 10px;
+}
+.ai-panel-body form textarea {
+  min-height: 72px;
+}
+.ai-panel > .muted {
+  margin: 0;
+  padding: 6px 16px;
+}
+.review-rating-bar {
+  position: sticky;
+  bottom: 10px;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 12px auto;
+  border: 1px solid #d5c7a7;
+  border-radius: 10px;
+  background: #fffaf0;
+  box-shadow: 0 3px 12px #50483422;
+  max-width: 800px;
+}
+.review-rating-bar > span {
+  flex: 1;
+  min-width: 120px;
+  max-height: 3em;
+  overflow: auto;
+}
+.review-rating-bar label {
+  font-size: 12px;
+}
+.review-rating-bar select {
+  width: auto;
+}
+.review-evaluations {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.review-evaluations > details {
+  border: 1px solid #ddd0bb;
+  border-radius: 7px;
+  padding: 8px 12px;
+  background: #fffaf3;
+  font-size: 12px;
+}
+.review-evaluations summary {
+  cursor: pointer;
+}
+.review-evaluations label {
+  display: grid;
+  max-width: 300px;
+  gap: 6px;
+}
+.review-rating-bar label {
+  margin: 0;
+}
+.review-rating-bar select {
+  margin: 4px 0 0;
+  height: 34px;
+}
+.ai-panel .ai-footnote {
+  margin-top: 8px;
+}

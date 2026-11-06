@@ -18,7 +18,7 @@ import './review.css';
 type Props = { user: { id: string } };
 type ReviewDocument = { document: DocumentRecord; passages: MemoryPassage[] };
 type Pending = { id: string; difficulty: Difficulty; difficultyRevision: number };
-function ReviewFilter<T extends string>({
+export function ReviewFilter<T extends string>({
   title,
   labels,
   values,
@@ -232,42 +232,44 @@ export function StudyPage({ user }: Props) {
             ))}
           </select>
         </label>
-        <details className="review-secondary">
-          <summary>
-            Filtres{filters.priority.length < 3 || filters.difficulty.length < 4 ? ' · actifs' : ''}
-          </summary>
-          <div className="review-filter-group">
-            {!!folders.data?.length && (
-              <label className="review-folder-picker">
-                Dossier
-                <select
-                  aria-label="Dossier des documents"
-                  value={folderId}
-                  onChange={(e) => setFolderId(e.target.value)}
-                >
-                  <option value="">Tous</option>
-                  {folders.data.map((f) => (
-                    <option value={f.id} key={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <ReviewFilter
-              title="Priorité"
-              labels={priorityLabels}
-              values={filters.priority}
-              onChange={(priority) => setFilters((f) => ({ ...f, priority }))}
-            />
-            <ReviewFilter
-              title="Difficulté"
-              labels={difficultyLabels}
-              values={filters.difficulty}
-              onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
-            />
-          </div>
-        </details>
+        {!!folders.data?.length && (
+          <label className="review-folder-picker">
+            Dossier
+            <select
+              aria-label="Dossier des documents"
+              value={folderId}
+              onChange={(e) => setFolderId(e.target.value)}
+            >
+              <option value="">Tous</option>
+              {folders.data.map((f) => (
+                <option value={f.id} key={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <ReviewFilter
+          title="Priorité"
+          labels={priorityLabels}
+          values={filters.priority}
+          onChange={(priority) => setFilters((f) => ({ ...f, priority }))}
+        />
+        <ReviewFilter
+          title="Difficulté"
+          labels={difficultyLabels}
+          values={filters.difficulty}
+          onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
+        />
+        <button
+          className="button subtle"
+          onClick={() => {
+            setRevealed(new Set());
+            setActiveRatingId(null);
+          }}
+        >
+          Recommencer la révision
+        </button>
       </div>
       {(error || query.error || docs.error || folders.error) && (
         <div className="alert error" role="alert">

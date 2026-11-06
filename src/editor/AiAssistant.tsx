@@ -42,7 +42,7 @@ export function AiAssistant({
   onApply: (snapshot: Snapshot, proposal: AiProposal) => void;
 }) {
   const [mode, setMode] = useState<AiRequest['mode']>('cloze');
-  const [scope, setScope] = useState<'selection' | 'tab' | 'document' | 'none'>(
+  const [scope, setScope] = useState<'selection' | 'tab' | 'none'>(
     editor.state.selection.empty ? 'tab' : 'selection',
   );
   const selection = useEditorState({
@@ -131,16 +131,11 @@ export function AiAssistant({
     try {
       const tabs = structuredClone(getTabs());
       const selected = editor.state.selection;
-      const effectiveScope =
-        mode === 'cloze' && scope !== 'document' ? (selected.empty ? 'tab' : 'selection') : scope;
+      const effectiveScope = mode === 'cloze' ? (selected.empty ? 'tab' : 'selection') : scope;
       if (effectiveScope === 'selection' && selected.empty)
         throw new Error('Sélectionnez un passage ou choisissez « Onglet actuel ».');
       const sources = (
-        effectiveScope === 'none'
-          ? []
-          : effectiveScope === 'document'
-            ? tabs
-            : tabs.filter((t) => t.id === activeId)
+        effectiveScope === 'none' ? [] : tabs.filter((t) => t.id === activeId)
       ).flatMap((tab) =>
         collectSources(
           editor.schema.nodeFromJSON(tab.content),
@@ -230,9 +225,6 @@ export function AiAssistant({
         </button>
       </div>
       <div className="ai-panel-body">
-        <p className="muted small">
-          Des idées pour votre carnet. Vous gardez la main sur chaque proposition.
-        </p>
         {notice && (
           <p className="alert info" role="status">
             {notice}
@@ -266,37 +258,7 @@ export function AiAssistant({
                 <option value="compose-cloze">Rédiger un texte à trous</option>
               </select>
             </label>
-            {mode === 'cloze' && (
-              <p className="ai-target" role="status">
-                {scope === 'document'
-                  ? 'Document entier'
-                  : selection.empty
-                    ? 'Onglet actuel'
-                    : `Sélection · ${selection.to - selection.from} caractères`}
-                {scope !== 'document' && !selection.empty && <q>{selection.text.slice(0, 160)}</q>}
-              </p>
-            )}
-            {mode === 'cloze' ? (
-              <details>
-                <summary>Étendre au document entier</summary>
-                <label className="checkbox-label">
-                  <input
-                    type="checkbox"
-                    checked={scope === 'document'}
-                    onChange={(e) =>
-                      setScope(
-                        e.target.checked
-                          ? 'document'
-                          : editor.state.selection.empty
-                            ? 'tab'
-                            : 'selection',
-                      )
-                    }
-                  />
-                  Inclure tous les onglets
-                </label>
-              </details>
-            ) : (
+            {mode !== 'cloze' && (
               <details>
                 <summary>Compléter un passage existant</summary>
                 <label className="checkbox-label">
@@ -324,7 +286,7 @@ export function AiAssistant({
                 value={instructions}
                 disabled={busy}
                 maxLength={4000}
-                rows={4}
+                rows={3}
                 placeholder={
                   mode === 'cloze'
                     ? 'Ex. : masquer les notions essentielles, avec des indices courts…'
@@ -347,14 +309,6 @@ export function AiAssistant({
                 </select>
               </label>
             )}
-            <p className="muted small">
-              {mode === 'cloze'
-                ? 'Les trous seront proposés dans l’extrait indiqué.'
-                : scope === 'none'
-                  ? 'Votre consigne suffit pour rédiger.'
-                  : 'Le passage servira de contexte pour poursuivre le texte.'}{' '}
-              Aucun changement avant votre accord.
-            </p>
             {config.data && !config.data.enabled && (
               <p className="alert warning" role="status">
                 La clé OpenAI doit être disponible dans les fonctions Netlify, puis le site

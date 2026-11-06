@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import { readdir, readFile } from 'node:fs/promises';
-import { navigation } from './navigation';
+import { navigation, filterReview } from './navigation';
 async function ensureAI(page: Page) {
   if (!(await page.getByRole('region', { name: 'Assistant IA', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
@@ -175,17 +175,15 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await page.getByRole('button', { name: 'Ajouter un onglet', exact: true }).click();
   await editor.fill('La cellule possède une membrane.');
   await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
-  await ai.getByText('Étendre au document entier', { exact: true }).click();
-  await ai.getByRole('checkbox', { name: 'Inclure tous les onglets' }).check();
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
   await expect(ai).toContainText('Proposition à vérifier');
-  expect(new Set(requests.at(-1).sources.map((s: any) => s.id.split(':')[0])).size).toBe(2);
+  expect(new Set(requests.at(-1).sources.map((s: any) => s.id.split(':')[0])).size).toBe(1);
   expect(requests.at(-1).sources.some((s: any) => s.text.includes('noyau'))).toBe(false);
   await ai.getByRole('button', { name: 'Rejeter', exact: true }).click();
   await expect(editor.locator('[data-memory-id]')).toHaveCount(0);
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
   await expect(ai).toContainText('Proposition à vérifier');
-  await ai.getByRole('button', { name: 'Appliquer (2)', exact: true }).click();
+  await ai.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
   await ensureAI(page);
   await saved(page);
   for (const mode of ['write', 'complete', 'compose-cloze']) {
@@ -241,7 +239,7 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await page.goto(`/document/${id}`);
   await expect(editor).toContainText('Une phrase relue.');
   anchors = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
-  expect(anchors).toHaveLength(5);
+  expect(anchors).toHaveLength(4);
   expect(anchors.every((a: any) => a.status === 'active')).toBe(true);
   expect(anchors.some((a: any) => a.id === firstAiId)).toBe(true);
   expect(errors).toEqual([]);
@@ -317,6 +315,32 @@ test('partage : lecture anonyme, révision, copie après connexion ou inscriptio
   await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
   await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
   await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(0);
+  await guest.getByLabel('Ma difficulté', { exact: true }).selectOption('hard');
+  await guest.getByLabel('Ma priorité', { exact: true }).selectOption('high');
+  await guest.getByRole('button', { name: 'Recommencer la révision' }).click();
+  await expect(guest.getByRole('button', { name: 'Révéler le passage 1' })).toBeVisible();
+  await guest.reload();
+  await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
+  await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
+  await expect(guest.getByLabel('Ma difficulté', { exact: true })).toHaveValue('hard');
+  await expect(guest.getByLabel('Ma priorité', { exact: true })).toHaveValue('high');
+  await filterReview(guest, 'difficulty', ['easy']);
+  await expect(guest.locator('.review-revealed')).toHaveCount(0);
+  await expect(guest.getByRole('document', { name: 'Document de révision' })).toContainText(
+    'cellule',
+  );
+  await filterReview(guest, 'difficulty', ['all']);
+  await guest.getByText('Mes réglages', { exact: true }).click();
+  await guest.getByRole('button', { name: 'Réinitialiser mes évaluations et priorités' }).click();
+  await guest.getByRole('button', { name: 'Recommencer la révision' }).click();
+  await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
+  await expect(guest.getByLabel('Ma difficulté', { exact: true })).toHaveValue('unrated');
+  await expect(guest.getByLabel('Ma priorité', { exact: true })).toHaveValue('medium');
+
+  const ownerId = page.url().split('/').pop();
+  const ownerAnchors = await (await page.request.get(`/api/documents/${ownerId}/anchors`)).json();
+  expect(ownerAnchors[0]).toMatchObject({ difficulty: 'unrated', priority: 'medium' });
+
   await guest.getByRole('link', { name: 'Créer un compte et obtenir ma copie' }).click();
   await guest.getByLabel('Adresse email').fill(email);
   await guest.getByLabel('Mot de passe', { exact: true }).fill('Assistant-Test-Password-42!');
@@ -357,11 +381,9 @@ test('un panneau déjà ouvert suit la nouvelle sélection et annote uniquement 
   await editor.fill('La photosynthèse concerne les plantes.\n' + sentence);
   await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
   const ai = page.getByRole('region', { name: 'Assistant IA', exact: true });
-  await expect(ai.locator('.ai-target')).toContainText('Onglet actuel');
-  await ai.getByText('Étendre au document entier', { exact: true }).click();
-  await ai.getByRole('checkbox', { name: 'Inclure tous les onglets' }).check();
+  await expect(ai.getByText('Onglet actuel', { exact: true })).toHaveCount(0);
   await select(page, sentence);
-  await expect(ai.locator('.ai-target')).toContainText(sentence);
+
   await ai.getByLabel(/Vos consignes/).fill('Masquer la date.');
   let sourceText = '';
   await page.route('**/api/documents/*/ai', async (route) => {
@@ -417,6 +439,14 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   const ai = page.getByRole('region', { name: 'Assistant IA', exact: true });
   expect(Math.abs((await paper.boundingBox())!.width - width)).toBeLessThan(1);
   expect(Math.abs((await page.evaluate(() => scrollY)) - scroll)).toBeLessThan(2);
+  await page.setViewportSize({ width: 1440, height: 650 });
+  await expect
+    .poll(() =>
+      ai.locator('.ai-panel-body').evaluate((el) => el.scrollHeight <= el.clientHeight + 1),
+    )
+    .toBe(true);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+
   await ai.getByLabel('Que souhaitez-vous faire ?').selectOption('write');
   await ai.getByLabel(/Vos consignes/).fill('Ajoute une phrase.');
   await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
@@ -437,7 +467,8 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await share.getByRole('button', { name: 'Fermer le partage' }).click();
   const id = page.url().split('/').pop();
   await page.getByRole('button', { name: 'Réviser ce document', exact: true }).click();
-  await expect(page.locator('.review-secondary')).not.toHaveAttribute('open', '');
+  await expect(page.locator('.review-secondary')).toHaveCount(0);
+  await expect(page.getByLabel('Filtrer par priorité')).toBeVisible();
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
   await page.getByRole('button', { name: 'Facile · passage 1', exact: true }).click();
   await expect
@@ -449,4 +480,7 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await page.getByRole('button', { name: 'Révéler le passage 2', exact: true }).click();
   await page.getByRole('button', { name: 'Moyen · passage 2', exact: true }).click();
   await expect(page.locator('.review-context')).toContainText('2 / 2 réponses révélées');
+  await page.getByRole('button', { name: 'Recommencer la révision' }).click();
+  await expect(page.locator('.review-reveal')).toHaveCount(2);
+  await expect(page.locator('.review-paper .review-quick-ratings')).toHaveCount(0);
 });
