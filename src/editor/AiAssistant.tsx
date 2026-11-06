@@ -95,6 +95,7 @@ export function AiAssistant({
           editor.schema.nodeFromJSON(tab.content),
           tab.id,
           scope === 'selection' ? selected : undefined,
+          mode !== 'cloze',
         ),
       );
       if (sources.reduce((sum, s) => sum + s.text.length, 0) > AI_MAX_SOURCE)

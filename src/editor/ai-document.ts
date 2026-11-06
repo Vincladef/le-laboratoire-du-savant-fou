@@ -11,6 +11,7 @@ export function collectSources(
   doc: ProseMirrorNode,
   tabId: string,
   selection?: { from: number; to: number },
+  includeAnnotated = false,
 ): SourceRange[] {
   const result: SourceRange[] = [];
   doc.descendants((block, blockPos) => {
@@ -20,7 +21,11 @@ export function collectSources(
       const start = blockPos + 1 + offset;
       const from = Math.max(start, selection?.from ?? 0);
       const to = Math.min(start + node.nodeSize, selection?.to ?? doc.content.size);
-      if (!node.isText || node.marks.some((m) => m.type.name === 'memoryAnchor') || to <= from) {
+      if (
+        !node.isText ||
+        (!includeAnnotated && node.marks.some((m) => m.type.name === 'memoryAnchor')) ||
+        to <= from
+      ) {
         current = null;
         return;
       }
@@ -80,12 +85,10 @@ export function generatedDocument(schema: Schema, text: string, holes: AiHole[])
   validateHoles(holes, [{ id: 'generated', text }]);
   const doc = schema.nodeFromJSON({
     type: 'doc',
-    content: text
-      .split('\n')
-      .map((line) => ({
-        type: 'paragraph',
-        ...(line ? { content: [{ type: 'text', text: line }] } : {}),
-      })),
+    content: text.split('\n').map((line) => ({
+      type: 'paragraph',
+      ...(line ? { content: [{ type: 'text', text: line }] } : {}),
+    })),
   });
   const tr = EditorState.create({ schema, doc }).tr;
   const ranges = validateHoles(holes, [{ id: 'generated', text }]);

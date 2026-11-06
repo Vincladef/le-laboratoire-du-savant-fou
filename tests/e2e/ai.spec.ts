@@ -181,8 +181,11 @@ test('création immédiate, réglages, propositions IA modifiables, rejet, inser
   await expect(ai).toContainText('Proposition à vérifier');
   await ai.getByRole('button', { name: 'Appliquer (2)', exact: true }).click();
   await saved(page);
-  for (const mode of ['write', 'compose-cloze']) {
-    await ai.getByLabel('Que souhaitez-vous faire ?').selectOption(mode);
+  for (const mode of ['write', 'complete', 'compose-cloze']) {
+    await ai
+      .getByLabel('Que souhaitez-vous faire ?')
+      .selectOption(mode === 'complete' ? 'write' : mode);
+    if (mode === 'complete') await ai.getByRole('checkbox', { name: /S’appuyer sur/ }).check();
     await ai.getByLabel(/Vos consignes/).fill('Écris une phrase de cours.');
     await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
     await expect(ai).toContainText('Proposition à vérifier');

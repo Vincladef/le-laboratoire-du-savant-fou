@@ -660,3 +660,57 @@ it('partage public : instantané, mise à jour, révocation, permissions et copi
   view = await (await guest.request(`/public/${share.token}`)).json();
   expect(view.title).toBe('Toujours à jour');
 });
+
+it('partage les seules images autorisées et duplique leurs fichiers dans la copie privée', async () => {
+  const ownerClient = new Client('image-owner@example.test', '192.0.2.234');
+  const reader = new Client('image-reader@example.test', '192.0.2.235');
+  const guest = new Client('guest', '192.0.2.236');
+  await ownerClient.signup();
+  await reader.signup();
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jD1sAAAAASUVORK5CYII=',
+    'base64',
+  );
+  const form = new FormData();
+  form.append('file', new File([png], 'partage.png', { type: 'image/png' }));
+  const upload = await runtime.app.fetch(
+    new Request(`${origin}/api/assets`, {
+      method: 'POST',
+      body: form,
+      headers: {
+        Origin: origin,
+        Cookie: [...ownerClient.cookies].map(([k, v]) => `${k}=${v}`).join('; '),
+      },
+    }),
+  );
+  expect(upload.status).toBe(201);
+  const image = await upload.json();
+  const doc = await (
+    await ownerClient.request('/documents', 'POST', {
+      title: 'Image partagée',
+      content: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Photo' }] },
+          { type: 'image', attrs: { src: image.src } },
+        ],
+      },
+    })
+  ).json();
+  const share = await (
+    await ownerClient.request(`/documents/${doc.id}/share`, 'POST', { mode: 'snapshot' })
+  ).json();
+  const publicImage = await guest.request(`/public/${share.token}/assets/${image.id}`);
+  expect(publicImage.status).toBe(200);
+  expect(Buffer.from(await publicImage.arrayBuffer())).toEqual(png);
+  expect((await guest.request(`/assets/${image.id}`)).status).toBe(401);
+  const copy = await (await reader.request(`/public/${share.token}/copy`, 'POST')).json();
+  const personal = await (await reader.request(`/documents/${copy.id}`)).json();
+  const copiedSrc = personal.content.content[1].attrs.src;
+  expect(copiedSrc).not.toBe(image.src);
+  expect((await reader.request(copiedSrc.replace('/api', ''))).status).toBe(200);
+  expect((await reader.request(`/assets/${image.id}`)).status).toBe(404);
+  await ownerClient.request(`/documents/${doc.id}/share`, 'DELETE');
+  expect((await guest.request(`/public/${share.token}/assets/${image.id}`)).status).toBe(404);
+  expect((await reader.request(copiedSrc.replace('/api', ''))).status).toBe(200);
+});
