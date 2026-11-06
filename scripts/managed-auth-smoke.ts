@@ -415,6 +415,9 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     }
     throw error;
   } finally {
+    await client.query('delete from lab.rate_limit where key = any($1::text[])', [
+      [`ai:hour:${legacyId}`, `ai:day:${legacyId}`],
+    ]);
     await client.query(
       'delete from lab."user" where id in (select user_id from lab.auth_identities where subject=$1) and email=$2',
       [foreignId, foreignEmail],

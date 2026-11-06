@@ -23,6 +23,8 @@ Au démarrage local, seules les migrations de la base locale sont appliquées. L
 
 ## Vérifier
 
+L’éditeur crée les textes à trous immédiatement. Les réglages se modifient au clic sur un passage. L’assistant OpenAI propose des trous ou du texte à relire avant application ; voir [configuration et limites IA](docs/assistant-ia.md).
+
 ```sh
 npm run typecheck
 npm test
