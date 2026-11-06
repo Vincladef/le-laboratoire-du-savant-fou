@@ -100,6 +100,20 @@ export function managedAuth(config: AppConfig, db: Database) {
     async handler(c: Context) {
       const path = c.req.path.replace(/^\/api\/auth\//, '');
       if (path === 'complete') {
+        // An OAuth failure arrives on the callback URL; do not silently discard it.
+        const providerError = new URL(c.req.url).searchParams.get('error');
+        if (providerError) {
+          const knownErrors = new Set([
+            'account_not_linked',
+            'unable_to_link_account',
+            'email_not_verified',
+            'signup_disabled',
+            'access_denied',
+            'state_mismatch',
+          ]);
+          const code = knownErrors.has(providerError) ? providerError : 'oauth_failed';
+          return c.redirect(`/?authError=${code}`, 302);
+        }
         const result = await processAuthMiddleware({
           ...proxy,
           request: c.req.raw,
@@ -110,7 +124,23 @@ export function managedAuth(config: AppConfig, db: Database) {
         for (const cookie of result.cookies || []) c.header('Set-Cookie', cookie, { append: true });
         if (result.action === 'redirect_oauth')
           return c.redirect(result.redirectUrl.toString(), 302);
-        if (result.action === 'redirect_login') return c.redirect('/', 302);
+        if (result.action === 'redirect_login')
+          return c.redirect('/?authError=session_missing', 302);
+
+        // Only enter the library once Neon has confirmed a usable session and
+        // the verified Google identity is linked to an isolated app account.
+        const session = await forRequest(c).getSession({ query: { disableCookieCache: 'true' } });
+        if (session.error || !session.data?.user)
+          return c.redirect('/?authError=session_missing', 302);
+        try {
+          await resolveManagedIdentity(db, session.data.user, config.ownerNeonSubject);
+        } catch (error) {
+          if (error instanceof HTTPException && error.status === 403)
+            return c.redirect('/?authError=email_not_verified', 302);
+          if (error instanceof HTTPException && error.status === 409)
+            return c.redirect('/?authError=identity_conflict', 302);
+          throw error;
+        }
         return c.redirect('/library', 302);
       }
       // No admin/organization/billing proxy surface. Application roles are never Neon org roles.
