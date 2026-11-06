@@ -262,6 +262,7 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
   const paletteBounds = await mobilePalette.boundingBox();
   expect(paletteBounds!.x).toBeGreaterThanOrEqual(0);
   expect(paletteBounds!.x + paletteBounds!.width).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: info.outputPath('palette-mobile.png') });
   await mobilePalette.getByRole('button', { name: 'Bleu · nuance 1', exact: true }).click();
   await editor.press('ControlOrMeta+Shift+m');
   await expect(editor).toBeFocused();
@@ -303,7 +304,7 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
 test('partage : lecture anonyme, révision, copie après connexion ou inscription et révocation', async ({
   page,
   browser,
-}) => {
+}, info) => {
   const email = await register(page);
   const editor = page.getByRole('textbox', { name: 'Contenu du document' });
   await editor.fill('La cellule est vivante.');

@@ -215,6 +215,7 @@ export async function verifyHostedBrowser(
     if (persistedDifficulty.filter((p: any) => p.difficulty === 'easy').length !== 1)
       throw new Error('Difficulté perdue après reconnexion navigateur');
     checks.push('hosted-browser-relogin-persistence');
+    await navigation(page);
     await page.getByRole('button', { name: 'Réglages', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
     await expect(page.getByLabel('Fuseau horaire')).toHaveCount(0);
@@ -224,6 +225,7 @@ export async function verifyHostedBrowser(
       .getByRole('button', { name: 'Enregistrer', exact: true })
       .click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+    await navigation(page);
     await page.getByRole('button', { name: 'Réglages', exact: true }).click();
     await expect(page.getByLabel('Nom affiché', { exact: true })).toHaveValue(
       'Recette Bouche-trou simplifié',
