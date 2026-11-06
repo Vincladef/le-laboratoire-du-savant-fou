@@ -56,7 +56,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
   }
   async function sendGoogleLinkVerification() {
     const address = email.trim();
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(address)) {
+    if (!/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(address)) {
       setError('Saisissez d’abord l’adresse du compte Google dans le champ email.');
       return;
     }
