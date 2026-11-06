@@ -1896,6 +1896,7 @@ html:has(.editor-shell) {
   border-radius: 5px;
 }
 .document-paper .tiptap p,
+.print-document .tiptap p,
 .review-paper .tiptap p {
   margin-top: 0;
   margin-bottom: 0;

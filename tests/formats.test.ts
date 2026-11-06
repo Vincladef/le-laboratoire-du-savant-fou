@@ -62,6 +62,9 @@ it('génère un DOCX réel avec titres, styles, tableaux, liens et sauts de page
   inspectDocxArchive(bytes);
   const archive = unzipSync(bytes);
   const xml = strFromU8(archive['word/document.xml']);
+  expect(xml).toContain('w:before="0"');
+  expect(xml).toContain('w:after="0"');
+  expect(strFromU8(archive['word/styles.xml'])).toContain('w:sz w:val="22"');
   expect(xml).toContain('Recherche');
   expect(xml).toContain('w:tbl');
   expect(xml).toContain('w:type="page"');

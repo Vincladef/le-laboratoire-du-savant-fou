@@ -144,7 +144,7 @@ export async function makeDocx(
             )[a.textAlign],
             spacing: {
               line: Math.round(Number(a.lineHeight || 1.5) * 240),
-              before: 0,
+              before: node.type === 'heading' ? 240 : 0,
               after: node.type === 'paragraph' ? 0 : 100,
             },
             indent: a.indent ? { left: a.indent * 360 } : undefined,
