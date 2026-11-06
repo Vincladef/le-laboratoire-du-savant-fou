@@ -83,13 +83,23 @@ export function openAiGenerator(
       });
     }
     if (!response.ok) {
+      const details = await response.json().catch(() => null);
+      const identifier = (value: unknown) =>
+        typeof value === 'string' && /^[a-zA-Z0-9_.-]{1,100}$/.test(value) ? value : undefined;
+      const cause = {
+        providerStatus: response.status,
+        providerCode: identifier(details?.error?.code),
+        providerParameter: identifier(details?.error?.param),
+      };
       if (response.status === 429)
         throw new HTTPException(429, {
           message: 'Le fournisseur IA a atteint sa limite. Réessayez plus tard.',
+          cause,
         });
       throw new HTTPException(502, {
         message:
           'Le fournisseur IA est indisponible. Vérifiez la clé OpenAI et le modèle configurés côté serveur.',
+        cause,
       });
     }
     try {

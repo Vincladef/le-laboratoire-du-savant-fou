@@ -19,6 +19,15 @@ export async function onPostBuild({ utils }) {
   });
 }
 export async function onError({ utils }) {
+  const ai = await readFile('.netlify/ai-provider-report.json', 'utf8')
+    .then(JSON.parse)
+    .catch(() => null);
+  if (process.env.LAB_VERIFY_AI === '1' && ai?.success === false)
+    utils.status.show({
+      title: 'Échec de la recette OpenAI',
+      summary: ai.failure,
+      text: JSON.stringify(ai),
+    });
   const report = await readFile('.netlify/deployment-failure.json', 'utf8')
     .then(JSON.parse)
     .catch(() => null);

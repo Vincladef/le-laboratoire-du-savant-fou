@@ -57,6 +57,16 @@ if (process.env.LAB_VERIFY_AI === '1') {
   } catch (error) {
     // Do not log raw provider bodies, request text or credentials.
     console.error('AI_PROVIDER_CHECK_FAILED', error instanceof Error ? error.message : 'Unknown');
+    const report = {
+      model: config.ai.model,
+      passed: checks.length,
+      checks,
+      success: false,
+      failure: error instanceof Error ? error.message : 'Unknown',
+      provider: error instanceof Error ? error.cause : undefined,
+    };
+    await mkdir('.netlify', { recursive: true });
+    await writeFile('.netlify/ai-provider-report.json', JSON.stringify(report));
     process.exitCode = 1;
   }
 }
