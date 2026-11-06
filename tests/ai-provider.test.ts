@@ -72,3 +72,45 @@ it('récupère une source mal identifiée seulement si la citation exacte est un
     validateHoles(repairCitations([{ ...hole, quote: '1800' }], sources), sources),
   ).toThrow();
 });
+
+it('rattache les trous générés au seul texte généré et refuse les réponses absentes ou ambiguës', async () => {
+  const { normalizeAiProposal, validateHoles } = await import('../src/shared/ai');
+  const input: AiRequest = {
+    ...request,
+    mode: 'compose-cloze',
+    sources: [{ id: 'context', text: 'noyau' }],
+  };
+  const hole = {
+    sourceId: 'context',
+    quote: 'noyau',
+    occurrence: 8,
+    hint: '',
+    priority: 'medium' as const,
+    difficulty: 'unrated' as const,
+  };
+  const proposal = normalizeAiProposal(input, {
+    text: 'La cellule contient un noyau.',
+    holes: [hole],
+  });
+  expect(proposal.holes[0]).toMatchObject({ sourceId: 'generated', occurrence: 1 });
+  expect(() =>
+    validateHoles(proposal.holes, [{ id: 'generated', text: proposal.text }]),
+  ).not.toThrow();
+  for (const text of ['Une cellule.', 'noyau et noyau']) {
+    const invalid = normalizeAiProposal(input, { text, holes: [hole] });
+    expect(() => validateHoles(invalid.holes, [{ id: 'generated', text }])).toThrow();
+  }
+  const fetcher = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(
+      Response.json({
+        status: 'completed',
+        output: [{ content: [{ type: 'output_text', text: JSON.stringify(proposal) }] }],
+      }),
+    );
+  await openAiGenerator(config, fetcher)(input);
+  const body = JSON.parse(fetcher.mock.calls[0][1]!.body as string);
+  expect(body.text.format.schema.properties.holes.items.properties.sourceId.enum).toEqual([
+    'generated',
+  ]);
+});

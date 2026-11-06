@@ -7,7 +7,7 @@ import type { Database } from './db';
 import type { AppConfig } from './config';
 import {
   aiRequestSchema,
-  repairCitations,
+  normalizeAiProposal,
   aiProposalSchema,
   validateHoles,
   type AiRequest,
@@ -21,7 +21,7 @@ Retourne uniquement l’objet JSON du schéma demandé. Aucun HTML, aucun Markdo
 Pour cloze : text doit être vide. Choisis des réponses pertinentes dans les sources, sans réécrire le texte.
 Chaque trou cite exactement une sous-chaîne source, avec sourceId exact et occurrence (1 pour la première occurrence exacte, 2 pour la deuxième). Ne traverse jamais un saut de ligne. Aucun chevauchement.
 Pour write et complete : rédige uniquement le nouveau texte (complete poursuit le contexte, sans le répéter), holes est vide.
-Pour compose-cloze : rédige le texte puis cite ses réponses avec sourceId="generated".
+Pour compose-cloze : rédige le texte puis cite ses réponses avec sourceId="generated", jamais une source de contexte. Chaque quote doit être copiée caractère pour caractère depuis le texte que tu viens de rédiger, accents, casse, apostrophes et espaces compris. Vérifie ces citations avant de répondre.
 Les indices aident à retrouver la réponse sans la révéler. Détermine automatiquement le nombre pertinent de trous selon la longueur, la densité informative et les notions essentielles. Évite les trous redondants. Utilise la priorité medium et la difficulté unrated. Tu peux proposer moins de trous si le contenu ne s’y prête pas.`;
 const outputSchema = {
   type: 'object',
@@ -73,7 +73,25 @@ export function openAiGenerator(
               type: 'json_schema',
               name: 'bouche_trou_proposal',
               strict: true,
-              schema: outputSchema,
+              schema:
+                request.mode === 'compose-cloze'
+                  ? {
+                      ...outputSchema,
+                      properties: {
+                        ...outputSchema.properties,
+                        holes: {
+                          ...outputSchema.properties.holes,
+                          items: {
+                            ...outputSchema.properties.holes.items,
+                            properties: {
+                              ...outputSchema.properties.holes.items.properties,
+                              sourceId: { type: 'string', enum: ['generated'] },
+                            },
+                          },
+                        },
+                      },
+                    }
+                  : outputSchema,
             },
           },
         }),
@@ -183,13 +201,10 @@ export function aiRoutes(
             'L’assistant IA nécessite OPENAI_API_KEY dans les variables serveur Netlify (Functions), puis un redéploiement.',
         });
       await reserveAiRequest(db, c.get('userId'), config.ai.dailyLimit, config.ai.siteDailyLimit);
-      const proposal = aiProposalSchema.parse(
-        await (generator || openAiGenerator(config.ai))(data),
+      const proposal = normalizeAiProposal(
+        data,
+        aiProposalSchema.parse(await (generator || openAiGenerator(config.ai))(data)),
       );
-      if (data.mode === 'cloze') {
-        proposal.text = '';
-        proposal.holes = repairCitations(proposal.holes, data.sources);
-      }
       try {
         if (proposal.holes.length > 200) throw new Error();
         if (data.mode === 'cloze' ? Boolean(proposal.text) : !proposal.text.trim())

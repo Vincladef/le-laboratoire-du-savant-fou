@@ -103,3 +103,15 @@ export function repairCitations(holes: AiHole[], sources: AiSource[]): AiHole[] 
     return matches.length === 1 ? matches[0] : hole;
   });
 }
+
+/** Apply the same exact-citation recovery to provider checks and API responses. */
+export function normalizeAiProposal(request: AiRequest, proposal: AiProposal): AiProposal {
+  if (request.mode === 'cloze')
+    return { text: '', holes: repairCitations(proposal.holes, request.sources) };
+  if (request.mode === 'compose-cloze')
+    return {
+      ...proposal,
+      holes: repairCitations(proposal.holes, [{ id: 'generated', text: proposal.text }]),
+    };
+  return proposal;
+}

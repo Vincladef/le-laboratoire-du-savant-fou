@@ -576,6 +576,62 @@ it('indique la clé manquante sans envoyer de texte au fournisseur', async () =>
   expect((await result.json()).error).toContain('OPENAI_API_KEY');
 });
 
+it('répare une citation générée uniquement dans le nouveau texte sans toucher au document', async () => {
+  const previousRuntime = runtime;
+  let text = 'La cellule contient un noyau.';
+  runtime = createApp(
+    connection.db,
+    {
+      development: true,
+      baseURL: origin,
+      secret: 'integration-test-secret-longer-than-thirty-two-characters',
+      localDir,
+      google: false,
+      mail: false,
+      ai: { key: 'test-only-key', model: 'gpt-6-luna', dailyLimit: 40, siteDailyLimit: 500 },
+    },
+    {
+      ai: async () => ({
+        text,
+        holes: [
+          {
+            sourceId: 'context',
+            quote: 'noyau',
+            occurrence: 8,
+            hint: '',
+            priority: 'medium',
+            difficulty: 'unrated',
+          },
+        ],
+      }),
+    },
+  );
+  try {
+    const doc = await (
+      await bob.request('/documents', 'POST', { title: 'Rédaction isolée' })
+    ).json();
+    const data = {
+      mode: 'compose-cloze',
+      instructions: 'Rédige une phrase.',
+      length: 'short',
+      sources: [{ id: 'context', text: 'noyau' }],
+    };
+    const response = await bob.request(`/documents/${doc.id}/ai`, 'POST', data);
+    expect(response.status).toBe(200);
+    expect((await response.json()).holes[0]).toMatchObject({
+      sourceId: 'generated',
+      occurrence: 1,
+    });
+    text = 'Une autre phrase.';
+    expect((await bob.request(`/documents/${doc.id}/ai`, 'POST', data)).status).toBe(502);
+    const after = await (await bob.request(`/documents/${doc.id}`)).json();
+    expect(after.content).toEqual(doc.content);
+    expect(after.revision).toBe(doc.revision);
+  } finally {
+    runtime = previousRuntime;
+  }
+});
+
 it('partage public : instantané, mise à jour, révocation, permissions et copie privée idempotente', async () => {
   const ownerClient = new Client('share-owner@example.test', '192.0.2.231');
   const reader = new Client('share-reader@example.test', '192.0.2.232');

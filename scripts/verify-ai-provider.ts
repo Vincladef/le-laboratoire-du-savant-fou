@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { getConfig } from '../server/config';
 import { openAiGenerator } from '../server/ai';
-import { validateHoles, type AiRequest } from '../src/shared/ai';
+import { normalizeAiProposal, validateHoles, type AiRequest } from '../src/shared/ai';
 
 // Explicit opt-in: ordinary builds never spend OpenAI tokens.
 if (process.env.LAB_VERIFY_AI === '1') {
@@ -45,7 +45,7 @@ if (process.env.LAB_VERIFY_AI === '1') {
           },
         ],
       };
-      const result = await generate(request);
+      const result = normalizeAiProposal(request, await generate(request));
       if (mode === 'cloze' && (result.text || !result.holes.length))
         throw new Error('Proposition de trous absente.');
       if (mode !== 'cloze' && !result.text.trim()) throw new Error('Texte généré absent.');
@@ -53,10 +53,23 @@ if (process.env.LAB_VERIFY_AI === '1') {
         throw new Error('Texte à trous généré sans annotation.');
       if (['write', 'complete'].includes(mode) && result.holes.length)
         throw new Error('Annotations inattendues.');
-      validateHoles(
-        result.holes,
-        mode === 'cloze' ? request.sources : [{ id: 'generated', text: result.text }],
-      );
+      const sources = mode === 'cloze' ? request.sources : [{ id: 'generated', text: result.text }];
+      try {
+        validateHoles(result.holes, sources);
+      } catch {
+        throw new Error('Citations IA invalides dans le parcours ' + mode, {
+          cause: {
+            citations: result.holes.map((hole) => {
+              const source = sources.find((source) => source.id === hole.sourceId);
+              return {
+                sourceKnown: Boolean(source),
+                quotePresent: Boolean(source?.text.includes(hole.quote)),
+                occurrence: hole.occurrence,
+              };
+            }),
+          },
+        });
+      }
       checks.push(mode);
     }
     const report = {
