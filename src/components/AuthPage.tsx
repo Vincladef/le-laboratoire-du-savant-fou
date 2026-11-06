@@ -14,7 +14,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
     if (!reason) return '';
     const messages: Record<string, string> = {
       account_not_linked:
-        'Cette adresse est déjà associée à un autre mode de connexion. Connectez-vous par email et confirmez votre adresse avant de réessayer Google.',
+        'Cette adresse est déjà utilisée par un compte Bouche-Trou. Si votre inscription par email n’a pas été terminée, confirmez cette adresse avec un code, puis réessayez Google.',
       unable_to_link_account:
         'Google n’a pas pu être associé à ce compte. Essayez la connexion par email ou confirmez votre adresse.',
       identity_conflict:
@@ -53,6 +53,30 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
     setNotice('');
     setPassword('');
     setOtp('');
+  }
+  async function sendGoogleLinkVerification() {
+    const address = email.trim();
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(address)) {
+      setError('Saisissez d’abord l’adresse du compte Google dans le champ email.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const result = await authClient.emailOtp.sendVerificationOtp({
+        email: address,
+        type: 'email-verification',
+      });
+      if (result.error)
+        throw new Error(result.error.message || 'Impossible d’envoyer un code de confirmation.');
+      changeMode('verify');
+      setEmail(address);
+      setNotice('Si cette adresse doit encore être vérifiée, un code vient de lui être envoyé.');
+    } catch (cause) {
+      setError((cause as Error).message || 'Impossible d’envoyer un code de confirmation.');
+    } finally {
+      setBusy(false);
+    }
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -169,7 +193,9 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
             <p className="muted">
               {mode === 'signup'
                 ? 'Créez votre compte et donnez une place à vos idées.'
-                : 'Nous vous aidons à retrouver votre espace.'}
+                : mode === 'verify'
+                  ? 'Saisissez le code reçu pour confirmer que cette adresse vous appartient.'
+                  : 'Nous vous aidons à retrouver votre espace.'}
             </p>
           )}
           {config.isError && (
@@ -290,6 +316,19 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
                 {error || oauthError}
               </p>
             )}
+            {oauthError && mode === 'signin' && config.data?.managed &&
+              ['account_not_linked', 'email_not_verified', 'unable_to_link_account'].includes(
+                params.get('authError') || params.get('error') || '',
+              ) && (
+                <button
+                  type="button"
+                  className="button subtle full"
+                  disabled={busy}
+                  onClick={() => void sendGoogleLinkVerification()}
+                >
+                  <Mail size={18} /> Recevoir un code pour confirmer mon email
+                </button>
+              )}
             {notice && (
               <p className="alert success" role="status">
                 <Mail size={18} />
