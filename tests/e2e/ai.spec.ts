@@ -318,3 +318,50 @@ test('partage : lecture anonyme, révision, copie après connexion et révocatio
   await expect(guest.getByRole('heading', { name: 'Ce lien n’est plus disponible' })).toBeVisible();
   await context.close();
 });
+
+test('un panneau déjà ouvert suit la nouvelle sélection et annote uniquement 1789', async ({
+  page,
+}) => {
+  await page.route('**/api/ai/config', (route) =>
+    route.fulfill({ json: { enabled: true, model: 'gpt-6-luna' } }),
+  );
+  await register(page);
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  const sentence = 'La révolution française a eu lieu en 1789';
+  await editor.fill('La photosynthèse concerne les plantes.\n' + sentence);
+  await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
+  const ai = page.getByRole('region', { name: 'Assistant IA', exact: true });
+  await expect(ai.locator('.ai-target')).toContainText('Onglet actuel');
+  await ai.getByText('Étendre au document entier', { exact: true }).click();
+  await ai.getByRole('checkbox', { name: 'Inclure tous les onglets' }).check();
+  await select(page, sentence);
+  await expect(ai.locator('.ai-target')).toContainText(sentence);
+  await ai.getByLabel(/Vos consignes/).fill('Masquer la date.');
+  let sourceText = '';
+  await page.route('**/api/documents/*/ai', async (route) => {
+    const body = route.request().postDataJSON();
+    sourceText = body.sources.map((s: any) => s.text).join('');
+    await route.fulfill({
+      json: {
+        text: '',
+        holes: [
+          {
+            sourceId: body.sources[0].id,
+            quote: '1789',
+            occurrence: 1,
+            hint: 'Année',
+            priority: 'medium',
+            difficulty: 'unrated',
+          },
+        ],
+      },
+    });
+  });
+  await ai.getByRole('button', { name: 'Proposer', exact: true }).click();
+  await expect(ai).toContainText('Proposition à vérifier');
+  expect(sourceText).toBe(sentence);
+  await ai.getByRole('button', { name: 'Appliquer (1)', exact: true }).click();
+  await saved(page);
+  await expect(editor.locator('[data-memory-id]')).toHaveText('1789');
+  await expect(editor).toContainText('La photosynthèse concerne les plantes.');
+});

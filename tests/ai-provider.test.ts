@@ -17,20 +17,18 @@ const request: AiRequest = {
   sources: [],
 };
 it('utilise Luna avec sortie structurée, budget de tokens borné et sans stockage de réponse', async () => {
-  const fetcher = vi
-    .fn<typeof fetch>()
-    .mockResolvedValue(
-      Response.json({
-        status: 'completed',
-        output: [
-          {
-            content: [
-              { type: 'output_text', text: JSON.stringify({ text: 'Une cellule.', holes: [] }) },
-            ],
-          },
-        ],
-      }),
-    );
+  const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+    Response.json({
+      status: 'completed',
+      output: [
+        {
+          content: [
+            { type: 'output_text', text: JSON.stringify({ text: 'Une cellule.', holes: [] }) },
+          ],
+        },
+      ],
+    }),
+  );
   const generate = openAiGenerator(config, fetcher);
   expect(await generate(request)).toEqual({ text: 'Une cellule.', holes: [] });
   const [url, options] = fetcher.mock.calls[0];
@@ -52,4 +50,25 @@ it('rend les erreurs fournisseur sans clé ni message sensible et refuse les sor
     const generate = openAiGenerator(config, vi.fn<typeof fetch>().mockResolvedValue(response));
     await expect(generate(request)).rejects.not.toThrow('test-secret-never-shipped');
   }
+});
+
+it('récupère une source mal identifiée seulement si la citation exacte est unique', async () => {
+  const { repairCitations, validateHoles } = await import('../src/shared/ai');
+  const hole = {
+    sourceId: 'wrong',
+    quote: '1789',
+    occurrence: 1,
+    hint: 'Année',
+    priority: 'medium' as const,
+    difficulty: 'unrated' as const,
+  };
+  const sources = [{ id: 'selection:0', text: 'La révolution française a eu lieu en 1789' }];
+  const repaired = repairCitations([hole], sources);
+  expect(repaired[0].sourceId).toBe('selection:0');
+  expect(() => validateHoles(repaired, sources)).not.toThrow();
+  const ambiguous = [...sources, { id: 'other', text: '1789' }];
+  expect(() => validateHoles(repairCitations([hole], ambiguous), ambiguous)).toThrow();
+  expect(() =>
+    validateHoles(repairCitations([{ ...hole, quote: '1800' }], sources), sources),
+  ).toThrow();
 });

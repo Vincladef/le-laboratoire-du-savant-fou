@@ -81,3 +81,25 @@ export function validateHoles(holes: AiHole[], sources: AiSource[]) {
         throw new Error('Deux propositions se chevauchent. Désélectionnez l’une d’elles.');
   return ranges;
 }
+
+/** Recover an incorrect model source identifier only when the exact quote has
+ * one unambiguous occurrence inside the submitted scope. Never search the document. */
+export function repairCitations(holes: AiHole[], sources: AiSource[]): AiHole[] {
+  return holes.map((hole) => {
+    try {
+      holeRange(hole, sources);
+      return hole;
+    } catch {}
+    const matches: AiHole[] = [];
+    for (const source of sources) {
+      let at = 0,
+        occurrence = 0;
+      while ((at = source.text.indexOf(hole.quote, at)) >= 0) {
+        matches.push({ ...hole, sourceId: source.id, occurrence: ++occurrence });
+        at += hole.quote.length;
+        if (!hole.quote.length) break;
+      }
+    }
+    return matches.length === 1 ? matches[0] : hole;
+  });
+}

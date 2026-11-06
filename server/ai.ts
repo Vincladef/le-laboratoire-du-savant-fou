@@ -7,6 +7,7 @@ import type { Database } from './db';
 import type { AppConfig } from './config';
 import {
   aiRequestSchema,
+  repairCitations,
   aiProposalSchema,
   validateHoles,
   type AiRequest,
@@ -185,6 +186,10 @@ export function aiRoutes(
       const proposal = aiProposalSchema.parse(
         await (generator || openAiGenerator(config.ai))(data),
       );
+      if (data.mode === 'cloze') {
+        proposal.text = '';
+        proposal.holes = repairCitations(proposal.holes, data.sources);
+      }
       try {
         if (proposal.holes.length > 200) throw new Error();
         if (data.mode === 'cloze' ? Boolean(proposal.text) : !proposal.text.trim())

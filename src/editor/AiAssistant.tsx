@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import type { Editor } from '@tiptap/react';
+import { useEditorState, type Editor } from '@tiptap/react';
 import { Sparkles, X, LoaderCircle, ArrowLeft } from 'lucide-react';
 import { api, json } from '../lib/api';
 import {
@@ -45,6 +45,28 @@ export function AiAssistant({
   const [scope, setScope] = useState<'selection' | 'tab' | 'document' | 'none'>(
     editor.state.selection.empty ? 'tab' : 'selection',
   );
+  const selection = useEditorState({
+    editor,
+    selector: ({ editor }) => ({
+      from: editor.state.selection.from,
+      to: editor.state.selection.to,
+      empty: editor.state.selection.empty,
+      text: editor.state.doc.textBetween(
+        editor.state.selection.from,
+        editor.state.selection.to,
+        '\n',
+      ),
+    }),
+  });
+  useEffect(() => {
+    const refresh = () => {
+      if (mode === 'cloze' && !editor.state.selection.empty) setScope('selection');
+    };
+    editor.on('selectionUpdate', refresh);
+    return () => {
+      editor.off('selectionUpdate', refresh);
+    };
+  }, [editor, mode]);
   const [instructions, setInstructions] = useState('');
   const [length, setLength] = useState<AiRequest['length']>('medium');
   const [busy, setBusy] = useState(false),
@@ -86,15 +108,21 @@ export function AiAssistant({
     try {
       const tabs = structuredClone(getTabs());
       const selected = editor.state.selection;
-      if (scope === 'selection' && selected.empty)
+      const effectiveScope =
+        mode === 'cloze' && scope !== 'document' ? (selected.empty ? 'tab' : 'selection') : scope;
+      if (effectiveScope === 'selection' && selected.empty)
         throw new Error('Sélectionnez un passage ou choisissez « Onglet actuel ».');
       const sources = (
-        scope === 'none' ? [] : scope === 'document' ? tabs : tabs.filter((t) => t.id === activeId)
+        effectiveScope === 'none'
+          ? []
+          : effectiveScope === 'document'
+            ? tabs
+            : tabs.filter((t) => t.id === activeId)
       ).flatMap((tab) =>
         collectSources(
           editor.schema.nodeFromJSON(tab.content),
           tab.id,
-          scope === 'selection' ? selected : undefined,
+          effectiveScope === 'selection' ? selected : undefined,
           mode !== 'cloze',
         ),
       );
@@ -215,6 +243,16 @@ export function AiAssistant({
                 <option value="compose-cloze">Rédiger un texte à trous</option>
               </select>
             </label>
+            {mode === 'cloze' && (
+              <p className="ai-target" role="status">
+                {scope === 'document'
+                  ? 'Document entier'
+                  : selection.empty
+                    ? 'Onglet actuel'
+                    : `Sélection · ${selection.to - selection.from} caractères`}
+                {scope !== 'document' && !selection.empty && <q>{selection.text.slice(0, 160)}</q>}
+              </p>
+            )}
             {mode === 'cloze' ? (
               <details>
                 <summary>Étendre au document entier</summary>
