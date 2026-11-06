@@ -14,7 +14,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
     if (!reason) return '';
     const messages: Record<string, string> = {
       account_not_linked:
-        'Cette adresse est déjà utilisée par un compte Bouche-Trou. Si votre inscription par email n’a pas été terminée, confirmez cette adresse avec un code, puis réessayez Google.',
+        'Un compte utilise déjà cette adresse, mais Google ne peut pas encore y être associé. Si c’est votre compte, récupérez-le par email pour sécuriser son mot de passe, puis confirmez votre adresse avant de réessayer Google.',
       unable_to_link_account:
         'Google n’a pas pu être associé à ce compte. Essayez la connexion par email ou confirmez votre adresse.',
       identity_conflict:
@@ -54,7 +54,7 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
     setPassword('');
     setOtp('');
   }
-  async function sendGoogleLinkVerification() {
+  async function recoverGoogleAccount() {
     const address = email.trim();
     if (!/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(address)) {
       setError('Saisissez d’abord l’adresse du compte Google dans le champ email.');
@@ -63,17 +63,19 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
     setBusy(true);
     setError('');
     try {
-      const result = await authClient.emailOtp.sendVerificationOtp({
+      const result = await authClient.requestPasswordReset({
         email: address,
-        type: 'email-verification',
+        redirectTo: `${window.location.origin}/reset-password`,
       });
       if (result.error)
-        throw new Error(result.error.message || 'Impossible d’envoyer un code de confirmation.');
-      changeMode('verify');
+        throw new Error(result.error.message || 'Impossible de demander la récupération du compte.');
+      changeMode('forgot');
       setEmail(address);
-      setNotice('Si cette adresse doit encore être vérifiée, un code vient de lui être envoyé.');
+      setNotice(
+        'Si ce compte existe, un email de récupération a été envoyé. Choisissez un nouveau mot de passe, puis confirmez votre adresse si nécessaire avant de réessayer Google.',
+      );
     } catch (cause) {
-      setError((cause as Error).message || 'Impossible d’envoyer un code de confirmation.');
+      setError((cause as Error).message || 'Impossible de demander la récupération du compte.');
     } finally {
       setBusy(false);
     }
@@ -130,7 +132,9 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
       else {
         if (config.data?.managed) await authClient.signOut();
         changeMode('signin');
-        setNotice('Votre mot de passe a été modifié. Vous pouvez vous connecter.');
+        setNotice(
+          'Votre mot de passe a été modifié. Si votre adresse reste non confirmée, saisissez-la ci-dessous puis choisissez « Renvoyer le code de confirmation ». Après vérification, vous pourrez vous connecter avec Google.',
+        );
       }
     } catch (e) {
       setError((e as Error).message);
@@ -317,16 +321,14 @@ export function AuthPage({ returnTo = '/library' }: { returnTo?: string }) {
               </p>
             )}
             {oauthError && mode === 'signin' && config.data?.managed &&
-              ['account_not_linked', 'email_not_verified', 'unable_to_link_account'].includes(
-                params.get('authError') || params.get('error') || '',
-              ) && (
+              (params.get('authError') || params.get('error')) === 'account_not_linked' && (
                 <button
                   type="button"
                   className="button subtle full"
                   disabled={busy}
-                  onClick={() => void sendGoogleLinkVerification()}
+                  onClick={() => void recoverGoogleAccount()}
                 >
-                  <Mail size={18} /> Recevoir un code pour confirmer mon email
+                  <Mail size={18} /> Récupérer ce compte par email
                 </button>
               )}
             {notice && (
