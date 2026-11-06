@@ -415,19 +415,29 @@ export async function verifyManagedAuth(client: PoolClient, db: Database) {
     }
     throw error;
   } finally {
-    await client.query('delete from lab.rate_limit where key = any($1::text[])', [
+    const cleanup = async (query: string, params: unknown[]) => {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          return await client.query(query, params);
+        } catch (error) {
+          if ((error as { code?: string }).code !== '40P01' || attempt >= 3) throw error;
+          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      }
+    };
+    await cleanup('delete from lab.rate_limit where key = any($1::text[])', [
       [`ai:hour:${legacyId}`, `ai:day:${legacyId}`],
     ]);
-    await client.query(
+    await cleanup(
       'delete from lab."user" where id in (select user_id from lab.auth_identities where subject=$1) and email=$2',
       [foreignId, foreignEmail],
     );
-    await client.query('delete from neon_auth."user" where id=$1 and email=$2', [
+    await cleanup('delete from neon_auth."user" where id=$1 and email=$2', [
       foreignId,
       foreignEmail,
     ]);
-    await client.query('delete from neon_auth."user" where id=$1 and email=$2', [id, email]);
-    await client.query('delete from lab."user" where id=$1 and email=$2', [legacyId, email]);
+    await cleanup('delete from neon_auth."user" where id=$1 and email=$2', [id, email]);
+    await cleanup('delete from lab."user" where id=$1 and email=$2', [legacyId, email]);
   }
   const after = await counts();
   const preservedAfter = await reviewDataFingerprint(client);

@@ -134,7 +134,9 @@ export async function reserveAiRequest(
       [`ai:day:${userId}`, 86400000, dailyLimit],
       ['ai:site:day', 86400000, siteDailyLimit],
     ] as const) {
-      const since = Math.floor(now / windowMs) * windowMs;
+      // Auth also prunes old rows from this shared table. Store our window's end
+      // so its housekeeping cannot erase an active daily/hourly AI counter.
+      const since = (Math.floor(now / windowMs) + 1) * windowMs;
       const rows = await tx
         .insert(rateLimit)
         .values({ id: key, key, count: 1, lastRequest: since })

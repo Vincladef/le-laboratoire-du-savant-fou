@@ -6,6 +6,7 @@ import { openLocalDatabase as openDatabase } from '../scripts/local-database';
 import { createApp } from '../server/app';
 import { getConfig } from '../server/config';
 import { defaultLayout } from '../src/shared/document';
+import { sql } from 'drizzle-orm';
 const origin = 'http://localhost:5173';
 let connection: Awaited<ReturnType<typeof openDatabase>>;
 let runtime: ReturnType<typeof createApp>;
@@ -543,6 +544,11 @@ it('protège les générations IA par session, origine, propriété, validation 
       alice.request(`/documents/${doc.id}/ai`, 'POST', data),
     ]);
     expect(results.map((r) => r.status).sort()).toEqual([200, 200, 429]);
+    expect(calls).toBe(2);
+    await connection.db.execute(
+      sql`delete from lab.rate_limit where last_request < ${Date.now() - 60000}`,
+    );
+    expect((await alice.request(`/documents/${doc.id}/ai`, 'POST', data)).status).toBe(429);
     expect(calls).toBe(2);
     const after = await (await alice.request(`/documents/${doc.id}`)).json();
     expect(after.content).toEqual(before.content);
