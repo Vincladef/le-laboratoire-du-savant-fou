@@ -20,7 +20,6 @@ import {
   X,
   CreditCard,
   LogOut,
-  LockKeyhole,
 } from 'lucide-react';
 import { Brand } from './Brand';
 import { Modal } from './Modal';
@@ -247,17 +246,6 @@ export function Workspace({ user, children }: { user: User; children: ReactNode 
                 <Brand />
               </button>
               <span className="workspace-header-spacer" />
-              <span className="workspace-private">
-                <LockKeyhole size={13} /> Espace privé
-              </span>
-              <button
-                className="workspace-avatar"
-                aria-label="Mon compte"
-                title="Mon compte"
-                onClick={() => setProfile(true)}
-              >
-                {user.name.slice(0, 1).toUpperCase()}
-              </button>
             </header>
           )}
           {error && (

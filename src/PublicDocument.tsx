@@ -34,7 +34,6 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
   const [personal, setPersonal] = useState<
     Record<string, { priority: Priority; difficulty: Difficulty }>
   >({});
-  const [activeRating, setActiveRating] = useState<string | null>(null);
   const [filters, setFilters] = useState<ReviewFilters>({
     priority: ['high', 'medium', 'low'],
     difficulty: ['easy', 'medium', 'hard', 'unrated'],
@@ -55,7 +54,6 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
       setPersonal({});
     }
     setRevealed([]);
-    setActiveRating(null);
   }, [preferenceKey]);
   function updatePersonal(
     id: string,
@@ -165,7 +163,6 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
             onClick={() => {
               setTab(i);
               setRevealed([]);
-              setActiveRating(null);
             }}
           >
             {t.title}
@@ -177,7 +174,6 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         aria-pressed={review}
         onClick={() => {
           setReview(!review);
-          setActiveRating(null);
           setRevealed([]);
         }}
       >
@@ -204,65 +200,11 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
               title="Recommencer la révision"
               onClick={() => {
                 setRevealed([]);
-                setActiveRating(null);
               }}
             >
               <RotateCcw size={18} />
             </button>
-            <details>
-              <summary>Mes réglages</summary>
-              <p>Enregistrés dans ce navigateur, sans modifier ceux de l’auteur.</p>
-              <button
-                className="button subtle"
-                onClick={() => {
-                  setPersonal({});
-                  setActiveRating(null);
-                  try {
-                    localStorage.removeItem(preferenceKey);
-                  } catch {}
-                }}
-              >
-                Réinitialiser mes évaluations et priorités
-              </button>
-            </details>
           </div>
-          {activeRating && selected.some((p) => p.id === activeRating) && (
-            <aside className="review-rating-bar" aria-label="Mes réglages du passage">
-              <span>{passages.find((p) => p.id === activeRating)?.quote}</span>
-              <label>
-                Ma priorité
-                <select
-                  aria-label="Ma priorité"
-                  value={personal[activeRating]?.priority || 'medium'}
-                  onChange={(e) =>
-                    updatePersonal(activeRating, { priority: e.target.value as Priority })
-                  }
-                >
-                  {Object.entries(priorityLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Ma difficulté
-                <select
-                  aria-label="Ma difficulté"
-                  value={personal[activeRating]?.difficulty || 'unrated'}
-                  onChange={(e) =>
-                    updatePersonal(activeRating, { difficulty: e.target.value as Difficulty })
-                  }
-                >
-                  {Object.entries(difficultyLabels).map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </aside>
-          )}
         </>
       )}
       <StudyDocument
@@ -273,9 +215,9 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         hidden={review ? selected.filter((a) => !revealed.includes(a.id)).map((a) => a.id) : []}
         onReveal={(id) => {
           setRevealed((r) => [...r, id]);
-          setActiveRating(id);
         }}
-        onDifficulty={() => {}}
+        onDifficulty={(id, difficulty) => updatePersonal(id, { difficulty })}
+        onPriority={(id, priority) => updatePersonal(id, { priority })}
         busyId={null}
         readOnly
       />

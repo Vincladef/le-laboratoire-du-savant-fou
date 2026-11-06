@@ -90,7 +90,7 @@ test('compte simplifié : aucun réglage de calendrier, nom modifiable et préf�
       })
     ).status(),
   ).toBe(200);
-  await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
   await expect(page.getByLabel('Fuseau horaire')).toHaveCount(0);
   await page.getByLabel('Nom affiché', { exact: true }).fill('Camille Bouche-trou');
@@ -100,7 +100,7 @@ test('compte simplifié : aucun réglage de calendrier, nom modifiable et préf�
   const profile = await (await page.request.get('/api/profile')).json();
   expect(profile.preferences.timezone).toBe('Pacific/Tahiti');
   expect(profile.role).toBe('free');
-  await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+  await page.getByRole('button', { name: 'Réglages', exact: true }).click();
   await expect(page.getByLabel('Nom affiché', { exact: true })).toHaveValue('Camille Bouche-trou');
 });
 test('page agrandie, plan persistant utilisable sur mobile, clavier et interface accessible', async ({

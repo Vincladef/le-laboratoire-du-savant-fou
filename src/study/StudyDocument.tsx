@@ -5,7 +5,28 @@ import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { editorExtensions } from '../editor/extensions';
 import type { DocumentRecord } from '../shared/document';
-import { difficultyLabels, type Difficulty, type MemoryPassage } from '../shared/learning';
+import {
+  difficultyLabels,
+  priorityLabels,
+  type Priority,
+  type Difficulty,
+  type MemoryPassage,
+} from '../shared/learning';
+
+function placeReviewPopup(details: HTMLDetailsElement) {
+  const panel = details.querySelector<HTMLElement>('.review-inline-popover');
+  const summary = details.querySelector('summary');
+  if (!details.open || !panel || !summary) return;
+  const anchor = summary.getBoundingClientRect(),
+    box = panel.getBoundingClientRect();
+  Object.assign(panel.style, {
+    position: 'fixed',
+    marginTop: '0',
+    right: 'auto',
+    left: `${Math.max(8, Math.min(anchor.left, innerWidth - box.width - 8))}px`,
+    top: `${Math.max(8, Math.min(anchor.bottom + 6, innerHeight - box.height - 8))}px`,
+  });
+}
 
 type MaskState = {
   selected: Set<string>;
@@ -19,6 +40,7 @@ function maskExtension(
   reveal: (id: string) => void,
   evaluate: (id: string, value: Difficulty) => void,
   readOnly = false,
+  setPriority?: (id: string, value: Priority) => void,
 ) {
   return Extension.create({
     name: 'reviewMask',
@@ -87,6 +109,7 @@ function maskExtension(
                         const details = document.createElement('details');
                         details.className = className;
                         details.name = 'review-inline-popup';
+                        details.addEventListener('toggle', () => placeReviewPopup(details));
                         const summary = document.createElement('summary');
                         summary.textContent = label;
                         details.append(summary);
@@ -148,11 +171,38 @@ function maskExtension(
                         panel.append(note);
                         details.append(panel);
                       }
+                      if (!hidden && setPriority) {
+                        const { details, summary } = popup('Priorité', 'review-priority');
+                        summary.setAttribute(
+                          'aria-label',
+                          `Régler la priorité du passage ${number}`,
+                        );
+                        const panel = document.createElement('span');
+                        panel.className = 'review-inline-popover';
+                        const label = document.createElement('label');
+                        label.append('Priorité ');
+                        const select = document.createElement('select');
+                        select.setAttribute('aria-label', `Priorité du passage ${number}`);
+                        for (const [value, title] of Object.entries(priorityLabels)) {
+                          const option = document.createElement('option');
+                          option.value = value;
+                          option.textContent = title;
+                          select.append(option);
+                        }
+                        select.value = passage.priority;
+                        select.onchange = () => {
+                          details.open = false;
+                          setPriority(id, select.value as Priority);
+                        };
+                        label.append(select);
+                        panel.append(label);
+                        details.append(panel);
+                      }
                       return root;
                     },
                     {
                       side: hidden ? -1 : 1,
-                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${number}`,
+                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${passage.priority}/${number}`,
                       stopEvent: () => true,
                     },
                   ),
@@ -175,6 +225,7 @@ export function StudyDocument({
   onDifficulty,
   busyId,
   readOnly = false,
+  onPriority,
 }: {
   document: DocumentRecord;
   passages: MemoryPassage[];
@@ -184,16 +235,18 @@ export function StudyDocument({
   onDifficulty: (id: string, difficulty: Difficulty) => void;
   busyId: string | null;
   readOnly?: boolean;
+  onPriority?: (id: string, value: Priority) => void;
 }) {
-  const callbacks = useRef({ onReveal, onDifficulty });
-  callbacks.current = { onReveal, onDifficulty };
+  const callbacks = useRef({ onReveal, onDifficulty, onPriority });
+  callbacks.current = { onReveal, onDifficulty, onPriority };
   const editor = useEditor({
     extensions: [
       ...editorExtensions(),
       maskExtension(
         (id) => callbacks.current.onReveal(id),
         (id, difficulty) => callbacks.current.onDifficulty(id, difficulty),
-        readOnly,
+        readOnly && !onPriority,
+        onPriority ? (id, value) => callbacks.current.onPriority?.(id, value) : undefined,
       ),
     ],
     content: doc.content,
@@ -208,6 +261,8 @@ export function StudyDocument({
         ? active.closest<HTMLElement>('[data-passage-id]')
         : null;
     const hintFocused = active instanceof HTMLElement && Boolean(active.closest('.review-hint'));
+    const priorityFocused =
+      active instanceof HTMLElement && Boolean(active.closest('.review-priority'));
     editor.view.dispatch(
       editor.state.tr.setMeta(maskKey, {
         selected: new Set(selected),
@@ -222,7 +277,11 @@ export function StudyDocument({
       );
       root
         ?.querySelector<HTMLElement>(
-          hintFocused ? '.review-hint summary' : '.review-evaluation summary',
+          hintFocused
+            ? '.review-hint summary'
+            : priorityFocused
+              ? '.review-priority summary'
+              : '.review-evaluation summary',
         )
         ?.focus();
     }
@@ -233,8 +292,18 @@ export function StudyDocument({
       for (const popup of editor.view.dom.querySelectorAll<HTMLDetailsElement>('details[open]'))
         if (!popup.contains(event.target as Node)) popup.open = false;
     };
+    const place = () => {
+      for (const popup of editor.view.dom.querySelectorAll<HTMLDetailsElement>('details[open]'))
+        placeReviewPopup(popup);
+    };
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
     window.document.addEventListener('pointerdown', close);
-    return () => window.document.removeEventListener('pointerdown', close);
+    return () => {
+      window.document.removeEventListener('pointerdown', close);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
   }, [editor]);
   return (
     <article

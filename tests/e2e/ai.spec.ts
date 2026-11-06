@@ -254,6 +254,15 @@ test('mobile : raccourci immédiat, panneau discret, erreurs IA et aucune sortie
   const editor = page.getByRole('textbox', { name: 'Contenu du document' });
   await editor.fill('La cellule est vivante.');
   await select(page, 'vivante');
+  await page.getByRole('button', { name: 'Couleur du texte', exact: true }).click();
+  const mobilePalette = page.getByRole('group', {
+    name: 'Palette · Couleur du texte',
+    exact: true,
+  });
+  const paletteBounds = await mobilePalette.boundingBox();
+  expect(paletteBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(paletteBounds!.x + paletteBounds!.width).toBeLessThanOrEqual(390);
+  await mobilePalette.getByRole('button', { name: 'Bleu · nuance 1', exact: true }).click();
   await editor.press('ControlOrMeta+Shift+m');
   await expect(editor).toBeFocused();
   await expect(editor.locator('[data-memory-id]')).toHaveText('vivante');
@@ -305,7 +314,10 @@ test('partage : lecture anonyme, révision, copie après connexion ou inscriptio
   const panel = page.getByRole('complementary', { name: 'Partager le document' });
   await panel.getByRole('button', { name: 'Créer le lien public' }).click();
   const link = await panel.getByLabel('Lien public').inputValue();
-  const context = await browser.newContext({ baseURL: 'http://localhost:5174' });
+  const context = await browser.newContext({
+    baseURL: 'http://localhost:5174',
+    viewport: { width: 390, height: 844 },
+  });
   const guest = await context.newPage();
   await guest.goto(link);
   await expect(guest.getByRole('document', { name: 'Document de révision' })).toContainText(
@@ -314,29 +326,35 @@ test('partage : lecture anonyme, révision, copie après connexion ou inscriptio
   await expect(guest.locator('[contenteditable=true]')).toHaveCount(0);
   await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
   await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
-  await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(0);
-  await guest.getByLabel('Ma difficulté', { exact: true }).selectOption('hard');
-  await guest.getByLabel('Ma priorité', { exact: true }).selectOption('high');
+  await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(1);
+  await guest.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+  await guest.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
+  await guest.getByLabel('Régler la priorité du passage 1', { exact: true }).click();
+  await expect
+    .poll(async () => {
+      const bounds = await guest
+        .locator('.review-priority[open] .review-inline-popover')
+        .boundingBox();
+      return Boolean(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
+    })
+    .toBe(true);
+
+  await guest.getByLabel('Priorité du passage 1', { exact: true }).selectOption('high');
   await guest.getByRole('button', { name: 'Recommencer la révision' }).click();
   await expect(guest.getByRole('button', { name: 'Révéler le passage 1' })).toBeVisible();
   await guest.reload();
   await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
   await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
-  await expect(guest.getByLabel('Ma difficulté', { exact: true })).toHaveValue('hard');
-  await expect(guest.getByLabel('Ma priorité', { exact: true })).toHaveValue('high');
+  await expect(guest.getByLabel('Difficulté du passage 1', { exact: true })).toHaveValue('hard');
+  await expect(guest.getByLabel('Priorité du passage 1', { exact: true })).toHaveValue('high');
   await filterReview(guest, 'difficulty', ['easy']);
   await expect(guest.locator('.review-revealed')).toHaveCount(0);
   await expect(guest.getByRole('document', { name: 'Document de révision' })).toContainText(
     'cellule',
   );
   await filterReview(guest, 'difficulty', ['all']);
-  await guest.getByText('Mes réglages', { exact: true }).click();
-  await guest.getByRole('button', { name: 'Réinitialiser mes évaluations et priorités' }).click();
-  await guest.getByRole('button', { name: 'Recommencer la révision' }).click();
-  await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
-  await expect(guest.getByLabel('Ma difficulté', { exact: true })).toHaveValue('unrated');
-  await expect(guest.getByLabel('Ma priorité', { exact: true })).toHaveValue('medium');
-
+  await expect(guest.getByText('Mes réglages', { exact: true })).toHaveCount(0);
+  await expect(guest.locator('.review-rating-bar')).toHaveCount(0);
   const ownerId = page.url().split('/').pop();
   const ownerAnchors = await (await page.request.get(`/api/documents/${ownerId}/anchors`)).json();
   expect(ownerAnchors[0]).toMatchObject({ difficulty: 'unrated', priority: 'medium' });
@@ -424,6 +442,24 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await expect(page.getByRole('button', { name: 'Replier le menu', exact: true })).toBeVisible();
   await editor.fill('La cellule est vivante.');
   await expect(page.getByLabel('Titre du document')).toHaveValue('La cellule est vivante.');
+  await expect(page.getByText('Espace privé', { exact: true })).toHaveCount(0);
+  await expect(page.locator('.workspace-avatar')).toHaveCount(0);
+  await select(page, 'cellule');
+  await page.getByRole('button', { name: 'Couleur du texte', exact: true }).click();
+  const palette = page.getByRole('group', { name: 'Palette · Couleur du texte', exact: true });
+  await expect(palette).toBeVisible();
+  await palette.getByRole('button', { name: 'Rouge · nuance 1', exact: true }).click();
+  await expect(editor.locator('span').filter({ hasText: 'cellule' }).first()).toHaveCSS(
+    'color',
+    'rgb(255, 0, 0)',
+  );
+  await page.getByRole('button', { name: 'Surlignage', exact: true }).click();
+  await page
+    .getByRole('group', { name: 'Palette · Surlignage', exact: true })
+    .getByRole('button', { name: 'Jaune · nuance 3', exact: true })
+    .click();
+  await expect(editor.locator('mark').filter({ hasText: 'cellule' })).toHaveCount(1);
+
   await select(page, 'cellule');
   const float = await page.locator('.selection-float').boundingBox();
   const text = await editor.boundingBox();

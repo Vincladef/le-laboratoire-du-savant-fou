@@ -215,7 +215,7 @@ export async function verifyHostedBrowser(
     if (persistedDifficulty.filter((p: any) => p.difficulty === 'easy').length !== 1)
       throw new Error('Difficulté perdue après reconnexion navigateur');
     checks.push('hosted-browser-relogin-persistence');
-    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('button', { name: 'Réglages', exact: true }).click();
     await expect(page.getByRole('dialog', { name: 'Mon compte' })).toBeVisible();
     await expect(page.getByLabel('Fuseau horaire')).toHaveCount(0);
     await page.getByLabel('Nom affiché', { exact: true }).fill('Recette Bouche-trou simplifié');
@@ -224,7 +224,7 @@ export async function verifyHostedBrowser(
       .getByRole('button', { name: 'Enregistrer', exact: true })
       .click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Mon compte', exact: true }).click();
+    await page.getByRole('button', { name: 'Réglages', exact: true }).click();
     await expect(page.getByLabel('Nom affiché', { exact: true })).toHaveValue(
       'Recette Bouche-trou simplifié',
     );
@@ -411,7 +411,7 @@ export async function verifyHostedBrowser(
         await guest.getByRole('button', { name: 'Onglet 1', exact: true }).click();
         await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
         await guest.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
-        await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(0);
+        await expect(guest.locator('[contenteditable=true]')).toHaveCount(0);
         await guest.getByRole('link', { name: 'Créer un compte et obtenir ma copie' }).click();
         await signIn(guest, email, password);
         await expect(guest).toHaveURL(/\/document\//);

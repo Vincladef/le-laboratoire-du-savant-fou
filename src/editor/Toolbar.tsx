@@ -1,3 +1,4 @@
+import { ColorPalette } from './ColorPalette';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useEditorState, type Editor } from '@tiptap/react';
 import {
@@ -23,7 +24,6 @@ import {
   Search,
   Eraser,
   Highlighter,
-  Type,
   ScissorsLineDashed,
 } from 'lucide-react';
 import katex from 'katex';
@@ -242,26 +242,17 @@ export function Toolbar({
             >
               <Highlighter />
             </Tool>
-            <label className="color-tool" title="Couleur du texte">
-              <Type size={18} />
-              <input
-                type="color"
-                aria-label="Couleur du texte"
-                defaultValue="#202927"
-                onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
-              />
-            </label>
-            <label className="color-tool" title="Surlignage">
-              <Highlighter size={18} />
-              <input
-                type="color"
-                aria-label="Surlignage"
-                defaultValue="#ffe999"
-                onChange={(e) =>
-                  editor.chain().focus().setHighlight({ color: e.target.value }).run()
-                }
-              />
-            </label>
+            <ColorPalette
+              value={editor.getAttributes('textStyle').color}
+              onChange={(color) => editor.chain().focus().setColor(color).run()}
+              onReset={() => editor.chain().focus().unsetColor().run()}
+            />
+            <ColorPalette
+              highlight
+              value={editor.getAttributes('highlight').color}
+              onChange={(color) => editor.chain().focus().setHighlight({ color }).run()}
+              onReset={() => editor.chain().focus().unsetHighlight().run()}
+            />
             <Tool
               label="Effacer la mise en forme"
               onClick={() => {

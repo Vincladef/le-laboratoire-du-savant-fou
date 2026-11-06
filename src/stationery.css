@@ -2149,3 +2149,60 @@ html:has(.editor-shell) {
   cursor: not-allowed;
   box-shadow: none;
 }
+.palette-trigger {
+  position: relative;
+}
+.palette-trigger > span {
+  position: absolute;
+  height: 3px;
+  bottom: 4px;
+  left: 7px;
+  right: 7px;
+  border-radius: 2px;
+}
+.color-palette {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: 266px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+  border: 1px solid #d5c7b4;
+  border-radius: 9px;
+  background: #fffdf7;
+  padding: 12px;
+  box-shadow: 0 6px 24px #50483433;
+}
+.palette-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.palette-swatch {
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  border-radius: 50%;
+  border: 1px solid #0002;
+  padding: 0;
+}
+.palette-swatch:hover,
+.palette-swatch[aria-pressed='true'] {
+  outline: 2px solid #4e788c;
+  outline-offset: 1px;
+}
+.palette-custom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.palette-custom input {
+  width: 36px;
+  height: 28px;
+  padding: 2px;
+  margin: 0;
+}

@@ -216,14 +216,16 @@
   border-color: #705721;
 }
 .review-hint,
-.review-evaluation {
+.review-evaluation,
+.review-priority {
   position: relative;
   display: inline-block;
   vertical-align: baseline;
   margin: 0 3px;
 }
 .review-hint summary,
-.review-evaluation summary {
+.review-evaluation summary,
+.review-priority summary {
   list-style: none;
   cursor: pointer;
   display: inline-flex;
@@ -243,11 +245,13 @@
   background: #eee5cd;
 }
 .review-hint summary::-webkit-details-marker,
-.review-evaluation summary::-webkit-details-marker {
+.review-evaluation summary::-webkit-details-marker,
+.review-priority summary::-webkit-details-marker {
   display: none;
 }
 .review-hint[open] summary,
-.review-evaluation[open] summary {
+.review-evaluation[open] summary,
+.review-priority[open] summary {
   background: #dfebf2;
 }
 .review-inline-popover {
@@ -271,7 +275,8 @@
     12px/1.5 system-ui,
     sans-serif;
 }
-.review-evaluation .review-inline-popover {
+.review-evaluation .review-inline-popover,
+.review-priority .review-inline-popover {
   left: auto;
   right: 0;
   background: #fffdf7;
@@ -396,7 +401,8 @@
     min-width: 60px;
   }
   .review-hint summary,
-  .review-evaluation summary {
+  .review-evaluation summary,
+  .review-priority summary {
     min-height: 34px;
   }
 }
