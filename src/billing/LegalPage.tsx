@@ -205,9 +205,9 @@ export function LegalPage() {
             <Link to="/billing">Résilier en ligne</Link> : connectez-vous, ouvrez le portail et
             confirmez la résiliation. L’accès payé reste disponible jusqu’à l’échéance affichée. Un
             impayé, une suspension ou une expiration suspend les droits payants après
-            synchronisation. Les documents et révisions ne sont pas supprimés ; au-delà du quota
-            gratuit, seuls les ajouts sont bloqués, pas la lecture, l’édition ou l’export des
-            données conservées.
+            synchronisation. Les documents, les passages à mémoriser et leurs archives restent
+            accessibles sans plafond de nombre. Les capacités de stockage des images continuent de
+            dépendre de la formule souscrite.
           </p>
           <h2>Rétractation, réclamations et garanties</h2>
           <p>
