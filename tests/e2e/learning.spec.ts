@@ -181,7 +181,8 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   expect(passages.map((p: any) => p.difficulty)).toEqual(['hard', 'unrated', 'unrated']);
   expect(passages.map((p: any) => p.difficultyRevision)).toEqual([1, 0, 0]);
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
-  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  // Choosing the current value is a no-op, not an extra evaluation or save.
+  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toHaveValue('hard');
   await filterReview(page, 'priority', 'all');
   await revealIndividually(page);
   for (const [number, difficulty] of [
@@ -239,7 +240,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages[0]).toMatchObject({
     difficulty: 'easy',
-    difficultyRevision: 3,
+    difficultyRevision: 2,
     priority: 'high',
   });
   await filterReview(page, 'priority', 'all');
