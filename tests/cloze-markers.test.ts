@@ -39,7 +39,7 @@ describe('balises des trous', () => {
     const from = editor.state.selection.from;
     const plugin = editor.state.plugins.find((p) => p.props.handleTextInput && p.spec.appendTransaction);
     expect(plugin).toBeDefined();
-    const handled = plugin!.props.handleTextInput!.call(plugin!, editor.view, from, from, '>');
+    const handled = plugin!.props.handleTextInput!.call(plugin!, editor.view, from, from, '>', () => editor.state.tr);
     expect(handled).toBe(true);
     expect(editor.getText()).toBe('Les chats');
     expect(extractAnchors(editor.getJSON() as RichNode)).toMatchObject([
