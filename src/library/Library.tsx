@@ -414,7 +414,15 @@ export function Library({ user }: { user: User }) {
                   <summary aria-label={`Options de ${doc.title}`}>
                     <MoreHorizontal size={20} />
                   </summary>
-                  <div className="menu-popover">
+                  <div
+                    className="menu-popover"
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest('button')) {
+                        const details = event.currentTarget.closest('details');
+                        if (details) details.open = false;
+                      }
+                    }}
+                  >
                     {view === 'trash' ? (
                       <button onClick={() => trash(doc, false)}>
                         <RotateCcw size={16} /> Restaurer
