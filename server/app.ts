@@ -253,14 +253,6 @@ export function createApp(
     await tx.select().from(profiles).where(eq(profiles.userId, userId)).for('update');
   }
   async function snapshot(tx: any, doc: typeof documents.$inferSelect, reason: string) {
-    const countPassages = async () =>
-      (
-        await tx
-          .select({ count: sql<number>`count(*)::int` })
-          .from(memoryAnchors)
-          .where(and(eq(memoryAnchors.ownerId, doc.ownerId), ne(memoryAnchors.status, 'deleted')))
-      )[0].count;
-    const before = await countPassages();
     await tx.insert(versions).values({
       documentId: doc.id,
       ownerId: doc.ownerId,
@@ -271,13 +263,6 @@ export function createApp(
       reason,
     });
     await syncAnchors(tx, doc);
-    const after = await countPassages();
-    const limit = (await rights(tx, doc.ownerId, config)).quotas.clozes;
-    if (after > before && after > limit)
-      failure(
-        413,
-        `Le quota de ${limit} passages actifs est atteint. Le document distant n’a pas changé ; votre copie locale est conservée.`,
-      );
   }
   app.get('/api/documents/:id/share', async (c) => {
     await ownedDocument(c.req.param('id'), c.get('userId'));
@@ -338,12 +323,6 @@ export function createApp(
           await tx.delete(sharedCopies).where(eq(sharedCopies.key, key));
         }
         const quota = (await rights(tx, ownerId, config)).quotas;
-        const [{ count }] = await tx
-          .select({ count: sql<number>`count(*)::int` })
-          .from(documents)
-          .where(eq(documents.ownerId, ownerId));
-        if (count >= quota.documents)
-          failure(413, 'La limite de documents de votre formule est atteinte.');
         const content = copyWithNewAnchors(value.content);
         const [{ used }] = await tx
           .select({ used: sql<number>`coalesce(sum(bytes),0)::bigint` })
@@ -567,8 +546,7 @@ export function createApp(
         })
         .from(documents)
         .where(and(...conditions))
-        .orderBy(desc(documents.updatedAt))
-        .limit(1000),
+        .orderBy(desc(documents.updatedAt)),
     );
   });
   app.post('/api/documents', async (c) => {
@@ -585,16 +563,6 @@ export function createApp(
     const doc = await db.transaction(async (tx) => {
       await lockProfile(tx, c.get('userId'));
       await validFolder(data.folderId, c.get('userId'), tx);
-      const [{ count }] = await tx
-        .select({ count: sql<number>`count(*)::int` })
-        .from(documents)
-        .where(eq(documents.ownerId, c.get('userId')));
-      const quota = (await rights(tx, c.get('userId'), config)).quotas;
-      if (count >= quota.documents)
-        failure(
-          413,
-          `La limite de ${quota.documents} documents de votre formule est atteinte (corbeille incluse).`,
-        );
       const [created] = await tx
         .insert(documents)
         .values({
@@ -745,8 +713,7 @@ export function createApp(
         .where(
           and(eq(versions.documentId, c.req.param('id')), eq(versions.ownerId, c.get('userId'))),
         )
-        .orderBy(desc(versions.revision))
-        .limit((await rights(db, c.get('userId'), config)).quotas.versions),
+        .orderBy(desc(versions.revision)),
     );
   });
   app.get('/api/documents/:id/versions/:versionId', async (c) => {
@@ -762,18 +729,6 @@ export function createApp(
         ),
       );
     if (!version) failure(404, 'Version introuvable.');
-    const limit = (await rights(db, c.get('userId'), config)).quotas.versions;
-    const window = await db
-      .select({ id: versions.id })
-      .from(versions)
-      .where(and(eq(versions.documentId, c.req.param('id')), eq(versions.ownerId, c.get('userId'))))
-      .orderBy(desc(versions.revision))
-      .limit(limit);
-    if (!window.some((v) => v.id === version.id))
-      failure(
-        403,
-        `Cette formule donne accès aux ${limit} dernières versions. Les archives ne sont pas supprimées.`,
-      );
     return c.json(version);
   });
   app.post('/api/assets', async (c) => {
