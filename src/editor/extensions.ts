@@ -12,6 +12,7 @@ import Mathematics from '@tiptap/extension-mathematics';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { clozeMarkerExtension, DEFAULT_CLOZE_MARKERS, type ClozeMarkerSettings } from './cloze-markers';
 
 export function reidentifyPastedSlice(slice: Slice): Slice {
   const ids = new Map<string, string>();
@@ -278,7 +279,10 @@ export function setBlockStyle(editor: Editor, attrs: { indent?: number; lineHeig
   editor.view.dispatch(tr);
   editor.commands.focus();
 }
-export const editorExtensions = (clipboard?: MemoryClipboard) => [
+export const editorExtensions = (
+  clipboard?: MemoryClipboard,
+  markerSettings: { current: ClozeMarkerSettings } = { current: DEFAULT_CLOZE_MARKERS },
+) => [
   StarterKit.configure({
     document: false,
     link: { openOnClick: false, defaultProtocol: 'https', protocols: ['https', 'http', 'mailto'] },
@@ -299,5 +303,6 @@ export const editorExtensions = (clipboard?: MemoryClipboard) => [
   BlockLayout,
   PageBreak,
   MemoryAnchor.configure({ clipboard }),
+  clozeMarkerExtension(markerSettings),
   SearchHighlight,
 ];

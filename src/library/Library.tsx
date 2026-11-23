@@ -62,6 +62,27 @@ export function Library({ user }: { user: User }) {
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
   }, []);
+  useEffect(() => {
+    const closeOnOutside = (event: PointerEvent) => {
+      const target = event.target as Node;
+      document.querySelectorAll<HTMLDetailsElement>('.document-menu[open]').forEach((menu) => {
+        if (!menu.contains(target)) menu.open = false;
+      });
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      document.querySelectorAll<HTMLDetailsElement>('.document-menu[open]').forEach((menu) => {
+        menu.open = false;
+        menu.querySelector<HTMLElement>('summary')?.focus();
+      });
+    };
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, []);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<{
@@ -367,11 +388,41 @@ export function Library({ user }: { user: User }) {
                     <small>{date(doc.updatedAt)}</small>
                   </div>
                 </button>
-                <details className="menu document-menu">
+                <details
+                  className="menu document-menu"
+                  onToggle={(event) => {
+                    const menu = event.currentTarget;
+                    if (!menu.open) {
+                      menu.classList.remove('menu-open-down');
+                      return;
+                    }
+                    document.querySelectorAll<HTMLDetailsElement>('.document-menu[open]').forEach((other) => {
+                      if (other !== menu) other.open = false;
+                    });
+                    const trigger = menu.querySelector('summary');
+                    const popover = menu.querySelector<HTMLElement>('.menu-popover');
+                    if (!trigger || !popover) return;
+                    const bounds = trigger.getBoundingClientRect();
+                    const roomAbove = bounds.top;
+                    const roomBelow = window.innerHeight - bounds.bottom;
+                    menu.classList.toggle(
+                      'menu-open-down',
+                      roomAbove < popover.offsetHeight + 12 && roomBelow > roomAbove,
+                    );
+                  }}
+                >
                   <summary aria-label={`Options de ${doc.title}`}>
                     <MoreHorizontal size={20} />
                   </summary>
-                  <div className="menu-popover">
+                  <div
+                    className="menu-popover"
+                    onClick={(event) => {
+                      if ((event.target as HTMLElement).closest('button')) {
+                        const details = event.currentTarget.closest('details');
+                        if (details) details.open = false;
+                      }
+                    }}
+                  >
                     {view === 'trash' ? (
                       <button onClick={() => trash(doc, false)}>
                         <RotateCcw size={16} /> Restaurer

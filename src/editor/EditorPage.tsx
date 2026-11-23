@@ -39,6 +39,13 @@ import { flushSync } from 'react-dom';
 import { Modal } from '../components/Modal';
 import { Toolbar } from './Toolbar';
 import { editorExtensions, findMatches, searchKey } from './extensions';
+import {
+  DEFAULT_CLOZE_MARKERS,
+  readClozeMarkers,
+  saveClozeMarkers,
+  validateClozeMarkers,
+  type ClozeMarkerSettings,
+} from './cloze-markers';
 import { useAutosave, type Snapshot } from './useAutosave';
 import { DOCX_LIMITS } from './format-limits';
 import { SharePanel } from './SharePanel';
@@ -104,6 +111,13 @@ function DocumentEditor({
       extractAnchors(writeTabs(tabsRef.current)).some((a) => ids.has(a.id)),
   });
   activeRef.current = activeId;
+  const [clozeSettings, setClozeSettings] = useState<ClozeMarkerSettings>(() =>
+    readClozeMarkers(ownerId),
+  );
+  const clozeSettingsRef = useRef(clozeSettings);
+  clozeSettingsRef.current = clozeSettings;
+  const [clozeDraft, setClozeDraft] = useState<ClozeMarkerSettings>(clozeSettings);
+  const [clozeError, setClozeError] = useState('');
   const [restoreEpoch, setRestoreEpoch] = useState(0);
   const [printing, setPrinting] = useState<RichNode | null>(null);
   const cursors = useRef(original.viewState?.cursors || ({} as Record<string, number>));
@@ -134,7 +148,7 @@ function DocumentEditor({
   const [sharing, setSharing] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [find, setFind] = useState(false);
-  const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | null>(null);
+  const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | 'cloze-markers' | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   useEffect(() => {
@@ -201,7 +215,7 @@ function DocumentEditor({
   }, [ownerId]);
   const editor = useEditor(
     {
-      extensions: editorExtensions(clipboard.current),
+      extensions: editorExtensions(clipboard.current, clozeSettingsRef),
       content: tabsRef.current.find((t) => t.id === activeId)!.content,
       editorProps: {
         attributes: {
@@ -538,6 +552,15 @@ function DocumentEditor({
                   <button onClick={() => setModal('page')}>
                     <Settings2 size={16} /> Mise en page
                   </button>
+                  <button
+                    onClick={() => {
+                      setClozeDraft({ ...clozeSettings });
+                      setClozeError('');
+                      setModal('cloze-markers');
+                    }}
+                  >
+                    <Settings2 size={16} /> Balises des trous
+                  </button>
                   <button onClick={() => setModal('help')}>Aide et raccourcis</button>
                   <label className="zoom-control">
                     Zoom
@@ -847,6 +870,81 @@ function DocumentEditor({
           <EditorFooter editor={editor} layout={layout} />
           {printing && <PrintDocument content={printing} layout={layout} />}
           <style>{`@media print { @page { size: ${layout.format} ${layout.landscape ? 'landscape' : 'portrait'}; margin: ${layout.margin}mm; } }`}</style>
+          {modal === 'cloze-markers' && (
+            <Modal title="Balises des textes à trous" onClose={() => setModal(null)}>
+              <p className="muted small">
+                Entourez un passage avec ces caractères pour créer automatiquement un trou.
+                Le texte reste modifiable et ses paramètres de mémorisation sont conservés.
+              </p>
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const error = validateClozeMarkers(clozeDraft);
+                  if (error) {
+                    setClozeError(error);
+                    return;
+                  }
+                  try {
+                    saveClozeMarkers(ownerId, clozeDraft);
+                    clozeSettingsRef.current = { ...clozeDraft };
+                    setClozeSettings({ ...clozeDraft });
+                    setClozeError('');
+                    setModal(null);
+                  } catch (error) {
+                    setClozeError((error as Error).message);
+                  }
+                }}
+              >
+                <div className="cloze-marker-fields">
+                  <label>
+                    Balise d’ouverture
+                    <input
+                      type="text"
+                      maxLength={8}
+                      value={clozeDraft.opening}
+                      onChange={(event) => {
+                        setClozeDraft((previous) => ({ ...previous, opening: event.target.value }));
+                        setClozeError('');
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Balise de fermeture
+                    <input
+                      type="text"
+                      maxLength={8}
+                      value={clozeDraft.closing}
+                      onChange={(event) => {
+                        setClozeDraft((previous) => ({ ...previous, closing: event.target.value }));
+                        setClozeError('');
+                      }}
+                    />
+                  </label>
+                </div>
+                <p className="muted small">
+                  Exemple : <code>{clozeDraft.opening}photosynthèse{clozeDraft.closing}</code>
+                </p>
+                <p className="muted small">
+                  Les balises sont retirées après la conversion. Les trous existants ne changent pas.
+                  Pour conserver des balises littérales, précédez la balise d’ouverture d’un antislash.
+                </p>
+                {clozeError && <p className="alert error" role="alert">{clozeError}</p>}
+                <div className="modal-actions">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => {
+                      setClozeDraft({ ...DEFAULT_CLOZE_MARKERS });
+                      setClozeError('');
+                    }}
+                  >
+                    Réinitialiser
+                  </button>
+                  <button className="button primary" type="submit">Enregistrer</button>
+                </div>
+              </form>
+            </Modal>
+          )}
           {modal === 'page' && (
             <Modal title="Mise en page" onClose={() => setModal(null)}>
               <label>
@@ -1048,6 +1146,9 @@ function DocumentEditor({
           {modal === 'help' && (
             <Modal title="Écrire dans Bouche-trou" onClose={() => setModal(null)}>
               <ul className="help-list">
+                <li>
+                  <code>{clozeSettings.opening}texte{clozeSettings.closing}</code> Créer un trou directement en écrivant
+                </li>
                 <li>
                   <kbd>Ctrl / ⌘ + B</kbd> Gras ; <kbd>I</kbd> italique ; <kbd>U</kbd> souligné
                 </li>
