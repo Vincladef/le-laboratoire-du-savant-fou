@@ -127,10 +127,11 @@ function maskExtension(
                       if (passage.hint || (!readOnly && setHint)) {
                         const canEdit = !readOnly && Boolean(setHint);
                         const { details, summary } = popup(passage.hint ? '?' : '+ Indice', 'review-hint');
+                        if (!passage.hint) details.classList.add('review-hint-empty');
                         summary.setAttribute(
                           'aria-label',
                           passage.hint
-                            ? `Afficher ou modifier l’indice du passage ${number}`
+                            ? `Afficher l’indice du passage ${number}`
                             : `Ajouter un indice au passage ${number}`,
                         );
                         const panel = document.createElement('span');
