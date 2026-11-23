@@ -1,0 +1,79 @@
+name: Publish Bouche-trou to Netlify (external build)
+
+# GitHub runs the build. Netlify receives prebuilt assets and its API function;
+# no Netlify build minutes are consumed.
+on:
+  workflow_run:
+    workflows: ["Validate application"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: bouche-trou-netlify-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      NETLIFY_SITE_ID: 449cbaf7-eaaa-43ce-8b27-50460f3d036c
+      NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+    steps:
+      - name: Check deploy credentials
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ]; then
+            echo "::error::Missing NETLIFY_AUTH_TOKEN. Create this encrypted secret in repository Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Checkout verified source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify TypeScript, unit tests, and frontend build
+        run: npm run check
+
+      - name: Verify and package API function
+        run: npm run build:functions
+
+      - name: Deploy prebuilt site and API without a Netlify build
+        run: |
+          npx --yes netlify-cli@27.20.1 deploy \
+            --no-build \
+            --prod \
+            --dir=dist \
+            --functions=netlify/functions \
+            --site="$NETLIFY_SITE_ID" \
+            --message="GitHub Actions verified commit $GITHUB_SHA" \
+            --timeout=120
+
+      - name: Smoke-test the public application
+        run: |
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 \
+            https://bouche-trou.netlify.app/ -o /dev/null
+          curl --fail --silent --show-error --retry 4 --retry-delay 3 \
+            https://bouche-trou.netlify.app/api/health \
+            | grep -q '"status":"ok"'
