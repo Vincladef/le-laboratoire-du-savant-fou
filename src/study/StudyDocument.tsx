@@ -136,68 +136,48 @@ function maskExtension(
                         details.append(hint);
                       }
                       if (!hidden && !readOnly) {
-                        const { details, summary } = popup(
-                          passage.difficulty === 'unrated'
-                            ? 'Évaluer'
-                            : difficultyLabels[passage.difficulty],
-                          'review-evaluation',
-                        );
-                        summary.setAttribute(
-                          'aria-label',
-                          `Évaluer la difficulté du passage ${number}`,
-                        );
-                        const panel = document.createElement('span');
-                        panel.className = 'review-inline-popover';
                         const label = document.createElement('label');
-                        label.append('Difficulté ');
+                        label.className = 'review-inline-select review-evaluation';
+                        const caption = document.createElement('span');
+                        caption.textContent = 'Difficulté';
                         const select = document.createElement('select');
                         select.setAttribute('aria-label', `Difficulté du passage ${number}`);
                         select.disabled = value.busyId !== null;
                         for (const [key, text] of Object.entries(difficultyLabels)) {
                           const option = document.createElement('option');
                           option.value = key;
-                          option.textContent = text;
+                          option.textContent = key === 'unrated' ? 'Évaluer' : text;
                           select.append(option);
                         }
                         select.value = passage.difficulty;
                         select.addEventListener('change', () => {
-                          details.open = false;
-                          evaluate(id, select.value as Difficulty);
+                          if (select.value !== passage.difficulty)
+                            evaluate(id, select.value as Difficulty);
                         });
-                        label.append(select);
-                        panel.append(label);
-                        const note = document.createElement('small');
-                        note.textContent = 'Facultatif · modifiable à tout moment';
-                        panel.append(note);
-                        details.append(panel);
+                        label.append(caption, select);
+                        root.append(label);
                       }
                       if (!hidden && setPriority) {
-                        const { details, summary } = popup(`Priorité : ${priorityLabels[passage.priority]}`, 'review-priority');
-                        summary.setAttribute(
-                          'aria-label',
-                          `Régler la priorité du passage ${number}`,
-                        );
-                        const panel = document.createElement('span');
-                        panel.className = 'review-inline-popover';
                         const label = document.createElement('label');
-                        label.append('Priorité ');
+                        label.className = 'review-inline-select review-priority';
+                        const caption = document.createElement('span');
+                        caption.textContent = 'Priorité';
                         const select = document.createElement('select');
                         select.setAttribute('aria-label', `Priorité du passage ${number}`);
                         select.disabled = value.busyId !== null;
-                        for (const [value, title] of Object.entries(priorityLabels)) {
+                        for (const [key, text] of Object.entries(priorityLabels)) {
                           const option = document.createElement('option');
-                          option.value = value;
-                          option.textContent = title;
+                          option.value = key;
+                          option.textContent = text;
                           select.append(option);
                         }
                         select.value = passage.priority;
-                        select.onchange = () => {
-                          details.open = false;
-                          setPriority(id, select.value as Priority);
-                        };
-                        label.append(select);
-                        panel.append(label);
-                        details.append(panel);
+                        select.addEventListener('change', () => {
+                          if (select.value !== passage.priority)
+                            setPriority(id, select.value as Priority);
+                        });
+                        label.append(caption, select);
+                        root.append(label);
                       }
                       return root;
                     },
@@ -281,8 +261,8 @@ export function StudyDocument({
           hintFocused
             ? '.review-hint summary'
             : priorityFocused
-              ? '.review-priority summary'
-              : '.review-evaluation summary',
+              ? '.review-priority select'
+              : '.review-evaluation select',
         )
         ?.focus();
     }

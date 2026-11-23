@@ -168,24 +168,27 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
   await expect(
-    page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }),
+    page.getByLabel('Difficulté du passage 1', { exact: true }),
   ).toBeFocused();
+  // The visible controls are native dropdowns: one interaction selects a value.
+  await expect(page.locator('.review-evaluation select')).toHaveCount(1);
+  await expect(page.locator('.review-priority select')).toHaveCount(1);
+  await expect(page.locator('.review-evaluation details, .review-priority details')).toHaveCount(0);
   await expect(page.locator('.review-reveal')).toHaveCount(0);
   await expect(paper.locator('strong')).toHaveText('cellule');
   // Revealing is entirely optional and never writes an evaluation.
   let passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages.map((p: any) => p.difficulty)).toEqual(['hard', 'unrated', 'unrated']);
   expect(passages.map((p: any) => p.difficultyRevision)).toEqual([1, 0, 0]);
-  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
-  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  // Choosing the current value is a no-op, not an extra evaluation or save.
+  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toHaveValue('hard');
   await filterReview(page, 'priority', 'all');
   await revealIndividually(page);
   for (const [number, difficulty] of [
     [2, 'medium'],
     [3, 'easy'],
   ] as const) {
-    await page.getByLabel(`Évaluer la difficulté du passage ${number}`, { exact: true }).click();
     await page
       .getByLabel(`Difficulté du passage ${number}`, { exact: true })
       .selectOption(difficulty);
@@ -224,7 +227,6 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
     },
     { times: 1 },
   );
-  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
   await filterReview(page, 'priority', 'all');
@@ -238,18 +240,17 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages[0]).toMatchObject({
     difficulty: 'easy',
-    difficultyRevision: 3,
+    difficultyRevision: 2,
     priority: 'high',
   });
   await filterReview(page, 'priority', 'all');
   await filterReview(page, 'difficulty', 'all');
   await revealIndividually(page);
-  await page.getByLabel('Régler la priorité du passage 3', { exact: true }).click();
   await expect(page.getByLabel('Priorité du passage 3', { exact: true })).toHaveValue('low');
   await page.getByLabel('Priorité du passage 3', { exact: true }).selectOption('high');
   await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
-  await expect(page.getByLabel('Régler la priorité du passage 3', { exact: true }))
-    .toContainText('Haute');
+  await expect(page.getByLabel('Priorité du passage 3', { exact: true }))
+    .toHaveValue('high');
   const afterPriority = await (await page.request.get(`/api/documents/${id}`)).json();
   expect(afterPriority.revision).toBe(original.revision + 1);
   expect(afterPriority.content.content[0].content
@@ -262,7 +263,6 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await page.reload();
   await expect(page.locator('.review-reveal')).toHaveCount(3);
   await revealIndividually(page);
-  await page.getByLabel('Évaluer la difficulté du passage 2', { exact: true }).click();
   await page.context().setOffline(true);
   await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('hard');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
