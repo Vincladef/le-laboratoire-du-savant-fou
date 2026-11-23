@@ -1339,8 +1339,8 @@ function VersionHistory({
         </button>
       </header>
       <p className="muted small">
-        Les dernières versions accessibles avec votre formule sont affichées. Restaurer crée une
-        nouvelle version ; les archives ne sont pas effacées lors d’un changement d’offre.
+        Toutes les versions du document restent disponibles, quelle que soit votre formule.
+        Restaurer une archive crée une nouvelle version sans effacer les précédentes.
       </p>
       {error || versions.error ? (
         <p role="alert" className="alert error">
