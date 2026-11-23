@@ -28,7 +28,12 @@ function inDocumentOrder<T extends { id: string }>(content: RichNode, passages: 
   );
 }
 /** Update every fragment of an annotation, including passages spanning styled text runs. */
-function withPassagePriority(content: RichNode, id: string, priority: Priority) {
+function withPassageAttribute(
+  content: RichNode,
+  id: string,
+  attribute: 'priority' | 'hint',
+  value: Priority | string,
+) {
   let found = false;
   function visit(node: RichNode): RichNode {
     return {
@@ -37,7 +42,7 @@ function withPassagePriority(content: RichNode, id: string, priority: Priority) 
         marks: node.marks.map((mark) => {
           if (mark.type !== 'memoryAnchor' || mark.attrs?.id !== id) return mark;
           found = true;
-          return { ...mark, attrs: { ...mark.attrs, priority } };
+          return { ...mark, attrs: { ...mark.attrs, [attribute]: value } };
         }),
       }),
       ...(node.content && { content: node.content.map(visit) }),
@@ -170,7 +175,7 @@ export function learningRoutes(db: Database) {
             document,
             passage: { id: anchor.id, priority: anchor.priority, revision: anchor.revision },
           };
-        const content = withPassagePriority(document.content as RichNode, anchor.id, data.priority);
+        const content = withPassageAttribute(document.content as RichNode, anchor.id, 'priority', data.priority);
         if (!content) fail(409, 'Ce passage ne figure plus dans le document. Rechargez-le.');
         const [updatedDoc] = await tx
           .update(documents)
@@ -189,6 +194,60 @@ export function learningRoutes(db: Database) {
         await syncAnchors(tx, updatedDoc);
         const [updatedAnchor] = await tx
           .select({ id: memoryAnchors.id, priority: memoryAnchors.priority, revision: memoryAnchors.revision })
+          .from(memoryAnchors)
+          .where(own(memoryAnchors, anchor.id, userId));
+        return { document: updatedDoc, passage: updatedAnchor };
+      }),
+    );
+  });
+  // Hints are part of document annotations, not a transient revision setting.
+  // Update styled fragments, document history and the indexed passage in one transaction.
+  app.patch('/anchors/:id/hint', async (c) => {
+    const userId = c.get('userId');
+    const data = z
+      .object({ hint: z.string().trim().max(1000), revision: z.number().int().positive() })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await db.transaction(async (tx) => {
+        await lock(tx, userId);
+        const { anchor, document } = await passage(tx, c.req.param('id'), userId);
+        if (anchor.revision !== data.revision) {
+          if (anchor.revision !== data.revision + 1 || anchor.hint !== data.hint)
+            fail(409, 'L’indice a changé. Rechargez le passage avant de le modifier.');
+          return {
+            document,
+            passage: { id: anchor.id, hint: anchor.hint, revision: anchor.revision },
+          };
+        }
+        if (anchor.hint === data.hint)
+          return {
+            document,
+            passage: { id: anchor.id, hint: anchor.hint, revision: anchor.revision },
+          };
+        const content = withPassageAttribute(document.content as RichNode, anchor.id, 'hint', data.hint);
+        if (!content) fail(409, 'Ce passage ne figure plus dans le document. Rechargez-le.');
+        const [updatedDoc] = await tx
+          .update(documents)
+          .set({
+            content: content as Record<string, unknown>,
+            revision: document.revision + 1,
+            updatedAt: new Date(),
+          })
+          .where(own(documents, document.id, userId))
+          .returning();
+        await tx.insert(versions).values({
+          documentId: updatedDoc.id,
+          ownerId: userId,
+          revision: updatedDoc.revision,
+          title: updatedDoc.title,
+          content: updatedDoc.content,
+          layout: updatedDoc.layout,
+          reason: 'hint',
+        });
+        await syncAnchors(tx, updatedDoc);
+        const [updatedAnchor] = await tx
+          .select({ id: memoryAnchors.id, hint: memoryAnchors.hint, revision: memoryAnchors.revision })
           .from(memoryAnchors)
           .where(own(memoryAnchors, anchor.id, userId));
         return { document: updatedDoc, passage: updatedAnchor };
