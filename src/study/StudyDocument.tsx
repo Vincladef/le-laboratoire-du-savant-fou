@@ -41,6 +41,7 @@ function maskExtension(
   evaluate: (id: string, value: Difficulty) => void,
   readOnly = false,
   setPriority?: (id: string, value: Priority) => void,
+  setHint?: (id: string, hint: string) => void,
 ) {
   return Extension.create({
     name: 'reviewMask',
@@ -123,17 +124,71 @@ function maskExtension(
                         root.append(details);
                         return { details, summary };
                       }
-                      if (passage.hint) {
-                        const { details, summary } = popup('?', 'review-hint');
+                      if (passage.hint || (!readOnly && setHint)) {
+                        const canEdit = !readOnly && Boolean(setHint);
+                        const { details, summary } = popup(passage.hint ? '?' : '+ Indice', 'review-hint');
                         summary.setAttribute(
                           'aria-label',
-                          `Afficher l’indice du passage ${number}`,
+                          passage.hint
+                            ? `Afficher ou modifier l’indice du passage ${number}`
+                            : `Ajouter un indice au passage ${number}`,
                         );
-                        const hint = document.createElement('span');
-                        hint.className = 'review-inline-popover';
-                        hint.textContent = passage.hint;
-                        hint.setAttribute('role', 'note');
-                        details.append(hint);
+                        const panel = document.createElement('span');
+                        panel.className = 'review-inline-popover review-hint-panel';
+                        if (canEdit) {
+                          const label = document.createElement('label');
+                          label.textContent = 'Indice';
+                          const textarea = document.createElement('textarea');
+                          textarea.rows = 2;
+                          textarea.maxLength = 1000;
+                          textarea.value = passage.hint;
+                          textarea.placeholder = 'Un mot-clé ou une piste pour retrouver la réponse';
+                          textarea.setAttribute('aria-label', `Indice du passage ${number}`);
+                          textarea.disabled = value.busyId !== null;
+                          label.append(textarea);
+                          panel.append(label);
+                          const actions = document.createElement('span');
+                          actions.className = 'review-hint-actions';
+                          const save = document.createElement('button');
+                          save.type = 'button';
+                          save.className = 'review-hint-save';
+                          save.textContent = 'Enregistrer';
+                          save.disabled = value.busyId !== null;
+                          save.addEventListener('click', () => {
+                            const hint = textarea.value.trim();
+                            details.open = false;
+                            if (hint !== passage.hint) setHint?.(id, hint);
+                          });
+                          textarea.addEventListener('keydown', (event) => {
+                            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                              event.preventDefault();
+                              save.click();
+                            }
+                          });
+                          actions.append(save);
+                          if (passage.hint) {
+                            const remove = document.createElement('button');
+                            remove.type = 'button';
+                            remove.className = 'review-hint-delete';
+                            remove.textContent = 'Supprimer';
+                            remove.disabled = value.busyId !== null;
+                            remove.addEventListener('click', () => {
+                              details.open = false;
+                              setHint?.(id, '');
+                            });
+                            actions.append(remove);
+                          }
+                          panel.append(actions);
+                          details.addEventListener('toggle', () => {
+                            if (details.open) textarea.focus({ preventScroll: true });
+                          });
+                        } else {
+                          const hint = document.createElement('span');
+                          hint.textContent = passage.hint;
+                          hint.setAttribute('role', 'note');
+                          panel.append(hint);
+                        }
+                        details.append(panel);
                       }
                       if (!hidden && !readOnly) {
                         const label = document.createElement('label');
@@ -207,6 +262,7 @@ export function StudyDocument({
   busyId,
   readOnly = false,
   onPriority,
+  onHint,
 }: {
   document: DocumentRecord;
   passages: MemoryPassage[];
@@ -217,9 +273,10 @@ export function StudyDocument({
   busyId: string | null;
   readOnly?: boolean;
   onPriority?: (id: string, value: Priority) => void;
+  onHint?: (id: string, hint: string) => void;
 }) {
-  const callbacks = useRef({ onReveal, onDifficulty, onPriority });
-  callbacks.current = { onReveal, onDifficulty, onPriority };
+  const callbacks = useRef({ onReveal, onDifficulty, onPriority, onHint });
+  callbacks.current = { onReveal, onDifficulty, onPriority, onHint };
   const editor = useEditor({
     extensions: [
       ...editorExtensions(),
@@ -228,6 +285,7 @@ export function StudyDocument({
         (id, difficulty) => callbacks.current.onDifficulty(id, difficulty),
         readOnly && !onPriority,
         onPriority ? (id, value) => callbacks.current.onPriority?.(id, value) : undefined,
+        onHint ? (id, hint) => callbacks.current.onHint?.(id, hint) : undefined,
       ),
     ],
     content: doc.content,
