@@ -3,9 +3,10 @@ import { HTTPException } from 'hono/http-exception';
 import { and, asc, eq, getTableColumns } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Database } from './db';
-import { documents, memoryAnchors, profiles } from './db/schema';
+import { documents, memoryAnchors, profiles, versions } from './db/schema';
+import { syncAnchors } from './anchors';
 import { extractAnchors, type RichNode } from '../src/shared/document';
-import { difficultySchema } from '../src/shared/learning';
+import { difficultySchema, prioritySchema, type Priority } from '../src/shared/learning';
 
 const uuid = z.string().uuid();
 const {
@@ -25,6 +26,25 @@ function inDocumentOrder<T extends { id: string }>(content: RichNode, passages: 
       (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER) ||
       a.id.localeCompare(b.id),
   );
+}
+/** Update every fragment of an annotation, including passages spanning styled text runs. */
+function withPassagePriority(content: RichNode, id: string, priority: Priority) {
+  let found = false;
+  function visit(node: RichNode): RichNode {
+    return {
+      ...node,
+      ...(node.marks && {
+        marks: node.marks.map((mark) => {
+          if (mark.type !== 'memoryAnchor' || mark.attrs?.id !== id) return mark;
+          found = true;
+          return { ...mark, attrs: { ...mark.attrs, priority } };
+        }),
+      }),
+      ...(node.content && { content: node.content.map(visit) }),
+    };
+  }
+  const next = visit(content);
+  return found ? next : null;
 }
 export function learningRoutes(db: Database) {
   const app = new Hono<{ Variables: { userId: string } }>();
@@ -121,6 +141,57 @@ export function learningRoutes(db: Database) {
             difficultyRevision: memoryAnchors.difficultyRevision,
           });
         return updated;
+      }),
+    );
+  });
+  // Priority is saved to the document's annotation AND its indexed row atomically.
+  // Incrementing the document revision prevents another editor tab from silently overwriting it.
+  app.patch('/anchors/:id/priority', async (c) => {
+    const userId = c.get('userId');
+    const data = z
+      .object({ priority: prioritySchema, revision: z.number().int().positive() })
+      .strict()
+      .parse(await c.req.json());
+    return c.json(
+      await db.transaction(async (tx) => {
+        await lock(tx, userId);
+        const { anchor, document } = await passage(tx, c.req.param('id'), userId);
+        if (anchor.revision !== data.revision) {
+          // A response can be lost after the first request was committed.
+          if (anchor.revision !== data.revision + 1 || anchor.priority !== data.priority)
+            fail(409, 'La priorité a changé. Rechargez le passage avant de la modifier.');
+          return {
+            document,
+            passage: { id: anchor.id, priority: anchor.priority, revision: anchor.revision },
+          };
+        }
+        if (anchor.priority === data.priority)
+          return {
+            document,
+            passage: { id: anchor.id, priority: anchor.priority, revision: anchor.revision },
+          };
+        const content = withPassagePriority(document.content as RichNode, anchor.id, data.priority);
+        if (!content) fail(409, 'Ce passage ne figure plus dans le document. Rechargez-le.');
+        const [updatedDoc] = await tx
+          .update(documents)
+          .set({ content: content as Record<string, unknown>, revision: document.revision + 1, updatedAt: new Date() })
+          .where(own(documents, document.id, userId))
+          .returning();
+        await tx.insert(versions).values({
+          documentId: updatedDoc.id,
+          ownerId: userId,
+          revision: updatedDoc.revision,
+          title: updatedDoc.title,
+          content: updatedDoc.content,
+          layout: updatedDoc.layout,
+          reason: 'priority',
+        });
+        await syncAnchors(tx, updatedDoc);
+        const [updatedAnchor] = await tx
+          .select({ id: memoryAnchors.id, priority: memoryAnchors.priority, revision: memoryAnchors.revision })
+          .from(memoryAnchors)
+          .where(own(memoryAnchors, anchor.id, userId));
+        return { document: updatedDoc, passage: updatedAnchor };
       }),
     );
   });
