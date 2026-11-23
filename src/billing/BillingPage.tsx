@@ -13,7 +13,7 @@ type State = {
     role: string;
     permanent: boolean;
     billingExempt: boolean;
-    quotas: { documents: number; bytes: number; clozes: number; versions: number };
+    quotas: { documents: null; bytes: number; clozes: null; versions: null };
   };
   usage: { documents: number; bytes: number; clozes: number };
   manageReady: boolean;
@@ -56,10 +56,10 @@ function PlanCards({ current, exempt = false }: { current?: Plan; exempt?: boole
           </p>
           <ul className="plan-features">
             {[
-              `${plans[id].documents.toLocaleString('fr')} documents`,
-              `${plans[id].clozes.toLocaleString('fr')} passages à mémoriser`,
+              'Documents sans limite de nombre',
+              'Passages à mémoriser sans limite de nombre',
               `${plans[id].bytes / 1024 / 1024} Mo d’images privées`,
-              `${plans[id].versions} dernières versions par document`,
+              'Historique des versions accessible en entier',
             ].map((text) => (
               <li key={text}>
                 <Check size={15} aria-hidden="true" />
@@ -97,7 +97,7 @@ function OfferNote() {
     <div className="offer-note">
       <p>
         Éditeur complet, textes à trous et révisions dans toutes les formules. Images : 4 Mo
-        maximum par fichier. Les limites de la formule gratuite restent provisoires.
+        maximum par fichier. Le nombre de documents, de passages et de versions n’est pas plafonné.
       </p>
       <p>
         Les boutons ouvrent vos liens de paiement Stripe. Le rattachement automatique du paiement à
@@ -182,14 +182,14 @@ export function BillingPage({ userId }: { userId: string }) {
             </div>
           </div>
           <p className="usage-line">
-            {s.usage.documents} / {s.rights.quotas.documents} documents <span>·</span>{' '}
-            {s.usage.clozes} / {s.rights.quotas.clozes.toLocaleString('fr')} passages <span>·</span>{' '}
+            {s.usage.documents} documents <span>·</span>{' '}
+            {s.usage.clozes} passages <span>·</span>{' '}
             {(s.usage.bytes / 1024 / 1024).toFixed(1)} / {s.rights.quotas.bytes / 1024 / 1024} Mo
             d’images
           </p>
           <p className="muted small">
-            {s.rights.quotas.versions} dernières versions consultables par document. Aucune archive
-            ni aucun document n’est supprimé lors d’un changement de formule.
+            Tous les documents et toutes les versions restent consultables, même après un changement
+            de formule. Le stockage d’images dépend toujours de la formule.
           </p>
           {s.rights.billingExempt ? (
             <p>Votre accès Premium est permanent, gratuit et sans abonnement Stripe.</p>
