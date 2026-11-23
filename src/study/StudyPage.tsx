@@ -20,7 +20,8 @@ type Props = { user: { id: string } };
 type ReviewDocument = { document: DocumentRecord; passages: MemoryPassage[] };
 type PendingDifficulty = { kind: 'difficulty'; id: string; difficulty: Difficulty; difficultyRevision: number };
 type PendingPriority = { kind: 'priority'; id: string; priority: Priority; revision: number };
-type Pending = PendingDifficulty | PendingPriority;
+type PendingHint = { kind: 'hint'; id: string; hint: string; revision: number };
+type Pending = PendingDifficulty | PendingPriority | PendingHint;
 export function ReviewFilter<T extends string>({
   title,
   labels,
@@ -236,6 +237,47 @@ export function StudyPage({ user }: Props) {
       setBusyId(null);
     }
   }
+  async function saveHint(change: PendingHint) {
+    if (sending.current) return;
+    sending.current = true;
+    setBusyId(change.id);
+    setError('');
+    setMessage('');
+    setPending(change);
+    try {
+      const updated = await api<{
+        document: DocumentRecord;
+        passage: Pick<MemoryPassage, 'id' | 'hint' | 'revision'>;
+      }>(`/anchors/${change.id}/hint`, {
+        method: 'PATCH',
+        body: json({ hint: change.hint, revision: change.revision }),
+      });
+      client.setQueryData<ReviewDocument>(
+        key,
+        (current) =>
+          current && {
+            ...current,
+            document: updated.document,
+            passages: current.passages.map((p) =>
+              p.id === updated.passage.id ? { ...p, ...updated.passage } : p,
+            ),
+          },
+      );
+      void client.invalidateQueries({ queryKey: ['document', user.id, id] });
+      void client.invalidateQueries({ queryKey: ['study-documents', user.id] });
+      setPending(null);
+      setMessage(change.hint ? 'Indice enregistré.' : 'Indice supprimé.');
+    } catch (e) {
+      setError((e as Error).message);
+      if (e instanceof ApiError && [404, 409].includes(e.status)) {
+        setPending(null);
+        await query.refetch();
+      }
+    } finally {
+      sending.current = false;
+      setBusyId(null);
+    }
+  }
   return (
     <main className="review-shell">
       <header className="review-heading">
@@ -319,7 +361,13 @@ export function StudyPage({ user }: Props) {
             <button
               className="button"
               disabled={Boolean(busyId)}
-              onClick={() => void (pending.kind === 'priority' ? savePriority(pending) : saveDifficulty(pending))}
+              onClick={() =>
+                void (pending.kind === 'priority'
+                  ? savePriority(pending)
+                  : pending.kind === 'hint'
+                    ? saveHint(pending)
+                    : saveDifficulty(pending))
+              }
             >
               Réessayer l’enregistrement
             </button>
@@ -379,6 +427,16 @@ export function StudyPage({ user }: Props) {
                   kind: 'priority',
                   id: p.id,
                   priority,
+                  revision: p.revision,
+                });
+            }}
+            onHint={(passageId, hint) => {
+              const p = query.data.passages.find((p) => p.id === passageId);
+              if (p)
+                void saveHint({
+                  kind: 'hint',
+                  id: p.id,
+                  hint,
                   revision: p.revision,
                 });
             }}
