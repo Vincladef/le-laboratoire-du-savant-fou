@@ -327,19 +327,11 @@ test('partage : lecture anonyme, révision, copie après connexion ou inscriptio
   await expect(guest.locator('[contenteditable=true]')).toHaveCount(0);
   await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
   await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
-  await expect(guest.getByLabel('Évaluer la difficulté du passage 1')).toHaveCount(1);
-  await guest.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+  await expect(guest.getByLabel('Difficulté du passage 1', { exact: true })).toBeVisible();
   await guest.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
-  await guest.getByLabel('Régler la priorité du passage 1', { exact: true }).click();
-  await expect
-    .poll(async () => {
-      const bounds = await guest
-        .locator('.review-priority[open] .review-inline-popover')
-        .boundingBox();
-      return Boolean(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 390);
-    })
-    .toBe(true);
-
+  await expect(guest.getByLabel('Priorité du passage 1', { exact: true })).toBeVisible();
+  const priorityBounds = await guest.getByLabel('Priorité du passage 1', { exact: true }).boundingBox();
+  expect(priorityBounds && priorityBounds.x >= 0 && priorityBounds.x + priorityBounds.width <= 390).toBe(true);
   await guest.getByLabel('Priorité du passage 1', { exact: true }).selectOption('high');
   await guest.getByRole('button', { name: 'Recommencer la révision' }).click();
   await expect(guest.getByRole('button', { name: 'Révéler le passage 1' })).toBeVisible();
@@ -510,7 +502,6 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await expect(page.getByLabel('Filtrer par priorité')).toBeVisible();
   await expect(page.locator('.review-evaluations, .review-rating-bar')).toHaveCount(0);
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
-  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
   await expect
     .poll(async () => {
@@ -519,7 +510,6 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
     })
     .toBe('easy');
   await page.getByRole('button', { name: 'Révéler le passage 2', exact: true }).click();
-  await page.getByLabel('Évaluer la difficulté du passage 2', { exact: true }).click();
   await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('medium');
   await expect(page.locator('.review-context')).toContainText('2 / 2 réponses révélées');
   await page.getByRole('button', { name: 'Recommencer la révision' }).click();
