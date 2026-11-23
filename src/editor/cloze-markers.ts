@@ -75,7 +75,8 @@ export function findClozeMarkerPairs(text: string, settings: ClozeMarkerSettings
       pairs.push({ open, contentStart, contentEnd, end: contentEnd + closing.length });
       cursor = contentEnd + closing.length;
     } else {
-      cursor = open + opening.length;
+      // Do not partially convert ambiguous nested or empty delimiters.
+      cursor = contentEnd + closing.length;
     }
   }
   return pairs;
