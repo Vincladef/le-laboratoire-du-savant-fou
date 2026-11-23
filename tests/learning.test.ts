@@ -218,6 +218,88 @@ describe('Révision unique, annotations et difficulté persistante', () => {
     expect(raised.passage.priority).toBe('medium');
     expect((await anchors(saved))[0].difficulty).toBe('hard');
   });
+  it('crée, modifie et supprime un indice depuis Réviser sans altérer le texte ni la difficulté', async () => {
+    const id = crypto.randomUUID();
+    const d = await doc([
+      marked(id, 'La première ', 'high', '', 'bold'),
+      marked(id, 'partie', 'high', '', 'italic'),
+      { type: 'text', text: ' et le reste' },
+    ]);
+    const initial = (await anchors(d))[0];
+    expect(initial.hint).toBe('');
+    await evaluate(id, 'hard');
+    const created = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: 'Indice ajouté pendant la révision',
+      revision: initial.revision,
+    });
+    expect(created.passage).toMatchObject({
+      id,
+      hint: 'Indice ajouté pendant la révision',
+      revision: initial.revision + 1,
+    });
+    expect(created.document.revision).toBe(d.revision + 1);
+    const parts = created.document.content.content[0].content;
+    expect(parts.slice(0, 2).map((n: RichNode) =>
+      n.marks?.find((m) => m.type === 'memoryAnchor')?.attrs?.hint,
+    )).toEqual(['Indice ajouté pendant la révision', 'Indice ajouté pendant la révision']);
+    expect(parts[0].marks[0].type).toBe('bold');
+    expect(parts[1].marks[0].type).toBe('italic');
+    expect(parts[0].text).toBe('La première ');
+    expect((await anchors(d))[0]).toMatchObject({ hint: created.passage.hint, difficulty: 'hard' });
+    expect((await alice.call(`/documents/${d.id}/review`)).passages[0].hint).toBe(created.passage.hint);
+    const retry = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: created.passage.hint,
+      revision: initial.revision,
+    });
+    expect(retry.document.revision).toBe(created.document.revision);
+    const unchanged = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: created.passage.hint,
+      revision: created.passage.revision,
+    });
+    expect(unchanged.document.revision).toBe(created.document.revision);
+    const changed = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: '  Nouvelle piste  ',
+      revision: created.passage.revision,
+    });
+    expect(changed.passage.hint).toBe('Nouvelle piste');
+    const cleared = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: '',
+      revision: changed.passage.revision,
+    });
+    expect(cleared.passage.hint).toBe('');
+    expect((await anchors(d))[0]).toMatchObject({ difficulty: 'hard', hint: '' });
+    const current = await alice.call(`/documents/${d.id}`);
+    const saved = await save(current, current.content.content[0].content);
+    expect((await anchors(saved))[0].hint).toBe('');
+    expect((await alice.call(`/documents/${d.id}/versions`)).length).toBeGreaterThanOrEqual(5);
+  });
+  it('refuse les indices trop longs, les modifications concurrentes et les autres comptes', async () => {
+    const id = crypto.randomUUID();
+    const d = await doc([marked(id, 'Une réponse', 'medium', 'Indice initial')]);
+    const initial = (await anchors(d))[0];
+    await bob.call(`/anchors/${id}/hint`, 'PATCH', { hint: 'Intrusion', revision: initial.revision }, 404);
+    await alice.call(`/anchors/${id}/hint`, 'PATCH', { hint: 'x'.repeat(1001), revision: initial.revision }, 400);
+    await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: 'Index',
+      revision: initial.revision,
+      ownerId: bob.id,
+    }, 400);
+    const first = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: 'Indice modifié',
+      revision: initial.revision,
+    });
+    await alice.call(`/anchors/${id}/hint`, 'PATCH', {
+      hint: 'Conflit',
+      revision: initial.revision,
+    }, 409);
+    expect((await anchors(d))[0].hint).toBe('Indice modifié');
+    const priority = await alice.call(`/anchors/${id}/priority`, 'PATCH', {
+      priority: 'high',
+      revision: first.passage.revision,
+    });
+    expect(priority.passage.priority).toBe('high');
+    expect((await anchors(d))[0].hint).toBe('Indice modifié');
+  });
   it('protège les priorités des changements concurrents et des autres comptes', async () => {
     const id = crypto.randomUUID(), d = await doc([marked(id, 'Privé')]);
     const initial = (await anchors(d))[0];
