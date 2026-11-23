@@ -243,6 +243,21 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   });
   await filterReview(page, 'priority', 'all');
   await filterReview(page, 'difficulty', 'all');
+  await revealIndividually(page);
+  await page.getByLabel('Régler la priorité du passage 3', { exact: true }).click();
+  await expect(page.getByLabel('Priorité du passage 3', { exact: true })).toHaveValue('low');
+  await page.getByLabel('Priorité du passage 3', { exact: true }).selectOption('high');
+  await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
+  await expect(page.getByLabel('Régler la priorité du passage 3', { exact: true }))
+    .toContainText('Haute');
+  const afterPriority = await (await page.request.get(`/api/documents/${id}`)).json();
+  expect(afterPriority.revision).toBe(original.revision + 1);
+  expect(afterPriority.content.content[0].content
+    .flatMap((node: any) => node.marks || [])
+    .filter((mark: any) => mark.type === 'memoryAnchor')
+    .at(-1)?.attrs?.priority).toBe('high');
+  passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+  expect(passages[2].priority).toBe('high');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload();
   await expect(page.locator('.review-reveal')).toHaveCount(3);

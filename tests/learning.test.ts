@@ -166,6 +166,68 @@ describe('Révision unique, annotations et difficulté persistante', () => {
     expect(d.content.content[0].content[1].marks[0].type).toBe('italic');
     expect(await connection.db.select().from(fsrsCards)).toHaveLength(0);
   });
+  it('change la priorité pendant la révision dans les fragments formatés, le document et la base', async () => {
+    const id = crypto.randomUUID();
+    const d = await doc([
+      marked(id, 'Partie ', 'high', 'Indice', 'bold'),
+      marked(id, 'formatée', 'high', 'Indice', 'italic'),
+      { type: 'text', text: ' reste identique' },
+    ]);
+    const original = (await anchors(d))[0];
+    await evaluate(id, 'hard');
+    const result = await alice.call(`/anchors/${id}/priority`, 'PATCH', {
+      priority: 'low',
+      revision: original.revision,
+    });
+    expect(result.passage).toMatchObject({
+      id,
+      priority: 'low',
+      revision: original.revision + 1,
+    });
+    expect(result.document.revision).toBe(d.revision + 1);
+    const updatedDoc = await alice.call(`/documents/${d.id}`);
+    expect(updatedDoc.revision).toBe(d.revision + 1);
+    const parts = updatedDoc.content.content[0].content;
+    expect(parts.slice(0, 2).map((n: RichNode) => n.marks?.find((m) => m.type === 'memoryAnchor')?.attrs?.priority))
+      .toEqual(['low', 'low']);
+    expect(parts[0].marks[0].type).toBe('bold');
+    expect(parts[1].marks[0].type).toBe('italic');
+    expect((await anchors(d))[0]).toMatchObject({
+      priority: 'low',
+      difficulty: 'hard',
+      difficultyRevision: 1,
+    });
+    expect((await alice.call(`/documents/${d.id}/review`)).passages[0].priority).toBe('low');
+    const retry = await alice.call(`/anchors/${id}/priority`, 'PATCH', {
+      priority: 'low',
+      revision: original.revision,
+    });
+    expect(retry.document.revision).toBe(updatedDoc.revision);
+    const unchanged = await alice.call(`/anchors/${id}/priority`, 'PATCH', {
+      priority: 'low',
+      revision: result.passage.revision,
+    });
+    expect(unchanged.document.revision).toBe(updatedDoc.revision);
+    const saved = await save(updatedDoc, parts);
+    expect((await anchors(saved))[0].priority).toBe('low');
+    const latest = (await anchors(saved))[0];
+    const raised = await alice.call(`/anchors/${id}/priority`, 'PATCH', {
+      priority: 'medium',
+      revision: latest.revision,
+    });
+    expect(raised.passage.priority).toBe('medium');
+    expect((await anchors(saved))[0].difficulty).toBe('hard');
+  });
+  it('protège les priorités des changements concurrents et des autres comptes', async () => {
+    const id = crypto.randomUUID(), d = await doc([marked(id, 'Privé')]);
+    const initial = (await anchors(d))[0];
+    await bob.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'low', revision: initial.revision }, 404);
+    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'urgent', revision: initial.revision }, 400);
+    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'low', revision: initial.revision, ownerId: bob.id }, 400);
+    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'low', revision: initial.revision });
+    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'medium', revision: initial.revision }, 409);
+    expect((await anchors(d))[0].priority).toBe('low');
+  });
   it('combine les filtres exacts, indépendants, avec toutes les valeurs par défaut', () => {
     const base = { status: 'active', priority: 'medium', difficulty: 'unrated' } as MemoryPassage;
     const all = {

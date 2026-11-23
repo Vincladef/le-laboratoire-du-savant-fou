@@ -172,7 +172,7 @@ function maskExtension(
                         details.append(panel);
                       }
                       if (!hidden && setPriority) {
-                        const { details, summary } = popup('Priorité', 'review-priority');
+                        const { details, summary } = popup(`Priorité : ${priorityLabels[passage.priority]}`, 'review-priority');
                         summary.setAttribute(
                           'aria-label',
                           `Régler la priorité du passage ${number}`,
@@ -183,6 +183,7 @@ function maskExtension(
                         label.append('Priorité ');
                         const select = document.createElement('select');
                         select.setAttribute('aria-label', `Priorité du passage ${number}`);
+                        select.disabled = value.busyId !== null;
                         for (const [value, title] of Object.entries(priorityLabels)) {
                           const option = document.createElement('option');
                           option.value = value;
