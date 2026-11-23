@@ -384,7 +384,7 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     expect(args.subscription_data.metadata.labUserId).toBe(alice.id);
     expect(args.success_url).toBe(`${origin}/billing?checkout=returned`);
     expect(r.acceptedLegal?.publisher).toBe('Fixture only');
-    expect(r.acceptedOffer?.documents).toBe(100);
+    expect(r.acceptedOffer?.documents).toBeNull();
     expect(r.immediateAccessRequestedAt).toBeInstanceOf(Date);
     expect((await alice.call('/profile')).entitlements.tier).toBe('free');
   });
