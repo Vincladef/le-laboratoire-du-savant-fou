@@ -80,8 +80,9 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await page.getByLabel('Interligne', { exact: true }).selectOption('2');
   await page.getByRole('button', { name: 'Centrer', exact: true }).click();
   await expect(editor.locator('p')).toHaveCSS('text-align', 'center');
-  await editor.press('ArrowRight');
-  await editor.press('End');
+  // Explicitly collapse the formatting selection at the document end across browsers.
+  await editor.focus();
+  await editor.press('ControlOrMeta+End');
   await editor.press('Enter');
   await page.getByLabel('Style de paragraphe').selectOption('h2');
   await page.keyboard.type('Les résultats');
