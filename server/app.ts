@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { bodyLimit } from 'hono/body-limit';
-import { and, eq, ne, isNull, isNotNull, desc, ilike, or, sql, inArray } from 'drizzle-orm';
+import { and, eq, isNull, isNotNull, desc, ilike, or, sql, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Database } from './db';
 import { createAuth } from './auth';
