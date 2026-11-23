@@ -29,4 +29,4 @@ export type PaidPlan = Exclude<Plan, 'free'>;
 export const imageLimit = 4 * 1024 * 1024;
 // Document count, cloze count, and history have no plan quotas; image storage still varies by tier.
 // Versions are preserved across plan changes and always remain accessible.
-export const offerVersion = '2026-10-15-v2';
+export const offerVersion = '2026-11-23-v3';
