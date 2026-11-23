@@ -384,7 +384,7 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     expect(args.subscription_data.metadata.labUserId).toBe(alice.id);
     expect(args.success_url).toBe(`${origin}/billing?checkout=returned`);
     expect(r.acceptedLegal?.publisher).toBe('Fixture only');
-    expect(r.acceptedOffer?.documents).toBe(100);
+    expect(r.acceptedOffer?.documents).toBeNull();
     expect(r.immediateAccessRequestedAt).toBeInstanceOf(Date);
     expect((await alice.call('/profile')).entitlements.tier).toBe('free');
   });
@@ -581,8 +581,8 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     await owner.call('/admin/billing/reconcile', 'POST', { userId: alice.id });
     expect(await db.db.select().from(billingAdminAudit)).toHaveLength(1);
   });
-  it('limite les passages dans la transaction documentaire sans perte de réponse ni demi-sauvegarde', async () => {
-    const nodes = Array.from({ length: 501 }, (_, i) => ({
+  it('autorise des milliers de passages en gratuit et après résiliation sans interrompre la sauvegarde', async () => {
+    const nodes = Array.from({ length: 1201 }, (_, i) => ({
       type: 'text',
       text: `Réponse ${i}`,
       marks: [
@@ -599,41 +599,34 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
     const doc = await alice.call(
       '/documents',
       'POST',
-      { title: 'Quota passages', content: content(500) },
+      { title: 'Passages sans plafond', content: content(500) },
       201,
     );
-    await alice.call(
-      `/documents/${doc.id}`,
-      'PUT',
-      { revision: doc.revision, title: doc.title, layout: doc.layout, content: content(501) },
-      413,
-    );
-    const unchanged = await alice.call(`/documents/${doc.id}`);
-    expect(unchanged.revision).toBe(doc.revision);
-    expect(unchanged.content).toEqual(doc.content);
-    expect((await alice.call('/billing')).usage.clozes).toBe(500);
-    await subscribed();
-    const changed = await alice.call(`/documents/${doc.id}`, 'PUT', {
+    const updated = await alice.call(`/documents/${doc.id}`, 'PUT', {
       revision: doc.revision,
       title: doc.title,
       layout: doc.layout,
-      content: content(501),
+      content: content(1201),
     });
-    expect(changed.revision).toBe(doc.revision + 1);
-    // Preserve data on downgrade; removing just one annotation remains possible above quota.
-    gateway.current[0].status = 'canceled';
+    expect(updated.revision).toBe(doc.revision + 1);
+    expect((await alice.call('/billing')).usage.clozes).toBe(1201);
+    expect((await alice.call('/billing')).rights.quotas.clozes).toBeNull();
+    const paid = await subscribed();
+    paid.status = 'canceled';
+    gateway.current = [paid];
     await alice.call('/billing/refresh', 'POST', {});
     const reduced = await alice.call(`/documents/${doc.id}`, 'PUT', {
-      revision: changed.revision,
+      revision: updated.revision,
       title: doc.title,
       layout: doc.layout,
-      content: content(500),
+      content: content(1200),
     });
-    expect(reduced.revision).toBe(changed.revision + 1);
+    expect(reduced.revision).toBe(updated.revision + 1);
+    expect((await alice.call('/billing')).usage.clozes).toBe(1200);
     await db.db.delete(documents).where(eq(documents.id, doc.id));
   });
-  it('limite la fenêtre des versions sans purge et préserve les 100 versions des comptes historiques', async () => {
-    const doc = await alice.call('/documents', 'POST', { title: 'Historique à préserver' }, 201);
+  it('rend toutes les versions consultables sans restriction de formule', async () => {
+    const doc = await alice.call('/documents', 'POST', { title: 'Historique intégral' }, 201);
     const inserted = await db.db
       .insert(versions)
       .values(
@@ -648,28 +641,16 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
         })),
       )
       .returning();
-    expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(10);
-    await alice.call(`/documents/${doc.id}/versions/${inserted[0].id}`, 'GET', undefined, 403);
-    await subscribed();
-    expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(30);
-    await db.db
-      .update(profiles)
-      .set({ legacyVersionLimit: 100 })
-      .where(eq(profiles.userId, alice.id));
     expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(35);
     expect((await alice.call(`/documents/${doc.id}/versions/${inserted[0].id}`)).id).toBe(
       inserted[0].id,
     );
-    expect(await db.db.select().from(versions).where(eq(versions.documentId, doc.id))).toHaveLength(
-      35,
-    );
-    await db.db
-      .update(profiles)
-      .set({ legacyVersionLimit: 0 })
-      .where(eq(profiles.userId, alice.id));
+    await subscribed();
+    expect(await alice.call(`/documents/${doc.id}/versions`)).toHaveLength(35);
+    expect((await alice.call('/billing')).rights.quotas.versions).toBeNull();
     await db.db.delete(documents).where(eq(documents.id, doc.id));
   });
-  it('applique les quotas en transaction : gratuit/Pro pleins, Premium autorisé, données conservées après retour gratuit', async () => {
+  it('autorise davantage de documents à chaque formule tout en conservant les limites de stockage', async () => {
     const count = (
       await db.db
         .select({ count: sql<number>`count(*)::int` })
@@ -685,16 +666,16 @@ describe('Stripe : API, transactions PostgreSQL et SDK de signature réels, tran
         content: { type: 'doc', content: [{ type: 'paragraph' }] },
       })),
     );
-    await alice.call('/documents', 'POST', { title: 'Refus gratuit' }, 413);
+    await alice.call('/documents', 'POST', { title: 'Document gratuit après le centième' }, 201);
     const paid = await subscribed();
-    await alice.call('/documents', 'POST', { title: 'Refus Pro plein' }, 413);
+    await alice.call('/documents', 'POST', { title: 'Document Pro sans limite' }, 201);
     paid.items.data[0].price.id = 'price_premium';
     gateway.current = [paid];
     await alice.call('/billing/refresh', 'POST', {});
     const doc = await alice.call('/documents', 'POST', { title: 'Document conservé' }, 201);
     gateway.current[0].status = 'canceled';
     await alice.call('/billing/refresh', 'POST', {});
-    await alice.call('/documents', 'POST', { title: 'Refus après baisse' }, 413);
+    await alice.call('/documents', 'POST', { title: 'Document après baisse' }, 201);
     const saved = await alice.call(`/documents/${doc.id}`, 'PUT', {
       revision: doc.revision,
       title: 'Toujours éditable',
