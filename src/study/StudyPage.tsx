@@ -9,6 +9,7 @@ import {
   matchesPassage,
   type MemoryPassage,
   type Difficulty,
+  type Priority,
   type ReviewFilters,
 } from '../shared/learning';
 import type { DocumentRecord, DocumentSummary, FolderRecord } from '../shared/document';
@@ -17,7 +18,9 @@ import './review.css';
 
 type Props = { user: { id: string } };
 type ReviewDocument = { document: DocumentRecord; passages: MemoryPassage[] };
-type Pending = { id: string; difficulty: Difficulty; difficultyRevision: number };
+type PendingDifficulty = { kind: 'difficulty'; id: string; difficulty: Difficulty; difficultyRevision: number };
+type PendingPriority = { kind: 'priority'; id: string; priority: Priority; revision: number };
+type Pending = PendingDifficulty | PendingPriority;
 export function ReviewFilter<T extends string>({
   title,
   labels,
@@ -150,7 +153,7 @@ export function StudyPage({ user }: Props) {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [hidden.join(',')]);
-  async function saveDifficulty(change: Pending) {
+  async function saveDifficulty(change: PendingDifficulty) {
     if (sending.current) return;
     sending.current = true;
     setBusyId(change.id);
@@ -181,6 +184,47 @@ export function StudyPage({ user }: Props) {
       requestAnimationFrame(() =>
         document.querySelector<HTMLButtonElement>('.review-reveal')?.focus({ preventScroll: true }),
       );
+    } catch (e) {
+      setError((e as Error).message);
+      if (e instanceof ApiError && [404, 409].includes(e.status)) {
+        setPending(null);
+        await query.refetch();
+      }
+    } finally {
+      sending.current = false;
+      setBusyId(null);
+    }
+  }
+  async function savePriority(change: PendingPriority) {
+    if (sending.current) return;
+    sending.current = true;
+    setBusyId(change.id);
+    setError('');
+    setMessage('');
+    setPending(change);
+    try {
+      const updated = await api<{
+        document: DocumentRecord;
+        passage: Pick<MemoryPassage, 'id' | 'priority' | 'revision'>;
+      }>(`/anchors/${change.id}/priority`, {
+        method: 'PATCH',
+        body: json({ priority: change.priority, revision: change.revision }),
+      });
+      client.setQueryData<ReviewDocument>(
+        key,
+        (current) =>
+          current && {
+            ...current,
+            document: updated.document,
+            passages: current.passages.map((p) =>
+              p.id === updated.passage.id ? { ...p, ...updated.passage } : p,
+            ),
+          },
+      );
+      void client.invalidateQueries({ queryKey: ['document', user.id, id] });
+      void client.invalidateQueries({ queryKey: ['study-documents', user.id] });
+      setPending(null);
+      setMessage('Priorité enregistrée.');
     } catch (e) {
       setError((e as Error).message);
       if (e instanceof ApiError && [404, 409].includes(e.status)) {
@@ -275,7 +319,7 @@ export function StudyPage({ user }: Props) {
             <button
               className="button"
               disabled={Boolean(busyId)}
-              onClick={() => void saveDifficulty(pending)}
+              onClick={() => void (pending.kind === 'priority' ? savePriority(pending) : saveDifficulty(pending))}
             >
               Réessayer l’enregistrement
             </button>
@@ -322,9 +366,20 @@ export function StudyPage({ user }: Props) {
               const p = query.data.passages.find((p) => p.id === passageId);
               if (p)
                 void saveDifficulty({
+                  kind: 'difficulty',
                   id: p.id,
                   difficulty,
                   difficultyRevision: p.difficultyRevision,
+                });
+            }}
+            onPriority={(passageId, priority) => {
+              const p = query.data.passages.find((p) => p.id === passageId);
+              if (p)
+                void savePriority({
+                  kind: 'priority',
+                  id: p.id,
+                  priority,
+                  revision: p.revision,
                 });
             }}
           />
