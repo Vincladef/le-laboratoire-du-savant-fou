@@ -163,7 +163,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(paper).toContainText('Les mitochondries produisent');
   await expect(paper).toContainText('Le ribosome fabrique');
   await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).click();
-  await expect(page.locator('.review-hint[open]')).toContainText('Unité du vivant');
+  await expect(page.getByLabel('Indice du passage 1', { exact: true })).toHaveValue('Unité du vivant');
   await expect(page.locator('.review-hint')).toHaveCount(1);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
@@ -319,6 +319,29 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(page.locator('.review-reveal')).toHaveCount(2);
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({ path: info.outputPath('revision-simple-desktop.png'), fullPage: true });
+
+  // Editing an index is possible directly from review, even while its answer is hidden.
+  await filterReview(page, 'priority', 'all');
+  await filterReview(page, 'difficulty', 'all');
+  await page.getByLabel('Ajouter un indice au passage 2', { exact: true }).click();
+  await page.getByLabel('Indice du passage 2', { exact: true }).fill('Une piste pendant la révision');
+  await page.locator('.review-hint[open]').getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('status')).toHaveText('Indice enregistré.');
+  await expect(page.getByLabel('Afficher l’indice du passage 2', { exact: true })).toBeVisible();
+  let afterHint = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+  expect(afterHint[1]).toMatchObject({ hint: 'Une piste pendant la révision', difficulty: 'hard' });
+  await page.getByLabel('Afficher l’indice du passage 2', { exact: true }).click();
+  await page.getByLabel('Indice du passage 2', { exact: true }).fill('Indice corrigé');
+  await page.locator('.review-hint[open]').getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('status')).toHaveText('Indice enregistré.');
+  afterHint = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+  expect(afterHint[1].hint).toBe('Indice corrigé');
+  await page.getByLabel('Afficher l’indice du passage 2', { exact: true }).click();
+  await page.locator('.review-hint[open]').getByRole('button', { name: 'Supprimer' }).click();
+  await expect(page.getByRole('status')).toHaveText('Indice supprimé.');
+  afterHint = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
+  expect(afterHint[1]).toMatchObject({ hint: '', difficulty: 'hard' });
+  await expect(page.getByLabel('Ajouter un indice au passage 2', { exact: true })).toBeVisible();
   expect(obsoleteRequests).toEqual([]);
   expect(errors).toEqual([]);
 });

@@ -242,6 +242,63 @@
 .review-hint[open] summary {
   background: #dfebf2;
 }
+.review-hint-empty summary {
+  min-width: 0;
+  border-radius: 5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.review-hint-panel:has(textarea) {
+  width: min(310px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+}
+.review-hint-panel label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+}
+.review-hint-panel textarea {
+  display: block;
+  width: 100%;
+  min-height: 72px;
+  max-height: 220px;
+  resize: vertical;
+  padding: 8px;
+  border: 1px solid #c6b68f;
+  border-radius: 5px;
+  background: #fff;
+  color: #30495c;
+  font: 13px/1.5 system-ui, sans-serif;
+}
+.review-hint-panel textarea:focus-visible {
+  outline: 2px solid #4c7790;
+  outline-offset: 1px;
+}
+.review-hint-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 9px;
+}
+.review-hint-actions button {
+  min-height: 34px;
+  padding: 5px 10px;
+  border: 1px solid #c6b68f;
+  border-radius: 5px;
+  background: #fff9ee;
+  color: #30495c;
+  font: 12px/1.4 system-ui, sans-serif;
+  cursor: pointer;
+}
+.review-hint-actions .review-hint-save {
+  background: #406a7c;
+  border-color: #406a7c;
+  color: white;
+}
+.review-hint-actions button:disabled {
+  cursor: wait;
+  opacity: .6;
+}
 .review-inline-popover {
   position: absolute;
   z-index: 20;
