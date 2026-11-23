@@ -382,7 +382,7 @@ test('accessibilité de la bibliothèque, du document à réviser et des command
   await accessible(page);
   await revealIndividually(page);
   await accessible(page);
-  await page.getByLabel('Évaluer la difficulté du passage 1', { exact: true }).click();
+  await page.getByLabel('Difficulté du passage 1', { exact: true }).focus();
   await accessible(page);
   await page.keyboard.press('Escape');
   await page.setViewportSize({ width: 390, height: 844 });
