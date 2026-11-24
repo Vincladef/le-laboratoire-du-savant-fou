@@ -490,3 +490,104 @@ test('trous liés : une seule question, révélation simultanée, réglages comm
   await page.goto('/study/' + id);
   await expect(page.locator('.review-context')).toContainText('0 / 1 réponses révélées');
 });
+
+test('clic Lier au dernier trou crée une deuxième annotation sur la sélection', async ({
+  page,
+}) => {
+  test.setTimeout(70000);
+  await register(page);
+  await page.getByRole('button', { name: 'Nouveau document', exact: true }).click();
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  await editor.fill('La révolution française en 1789. Ensuite, autre date 1790.');
+  await selectText(page, '1789');
+  await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).click();
+  await expect(editor.locator('[data-memory-id]')).toHaveCount(1);
+  await selectText(page, '1790');
+  await page.getByRole('button', { name: 'Lier au dernier trou', exact: true }).click();
+  await expect(editor.locator('[data-memory-id]')).toHaveCount(2);
+  const id = page.url().split('/').pop();
+  await saved(page);
+  const rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows.map((p: any) => p.groupId)).toEqual([rows[0].id, rows[0].id]);
+});
+
+test('lier directement un deuxième trou préexistant au précédent depuis le texte sélectionné', async ({
+  page,
+}) => {
+  test.setTimeout(70000);
+  await register(page);
+  const first = crypto.randomUUID(),
+    second = crypto.randomUUID();
+  const mark = (id: string, text: string) => ({
+    type: 'text',
+    text,
+    marks: [
+      {
+        type: 'memoryAnchor',
+        attrs: {
+          id,
+          sourceId: null,
+          hint: 'La date',
+          priority: 'medium',
+        },
+      },
+    ],
+  });
+  const response = await page.request.post('/api/documents', {
+    headers: { Origin: 'http://localhost:5174' },
+    data: {
+      title: 'Chronologie française',
+      layout: { format: 'A4', margin: 20, landscape: false },
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'En ' },
+              mark(first, '1789'),
+              { type: 'text', text: ' puis en ' },
+              mark(second, '1790'),
+              { type: 'text', text: ' événements.' },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  expect(response.status()).toBe(201);
+  const { id } = await response.json();
+  await page.goto('/document/' + id);
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  await expect(editor.locator('[data-memory-id]')).toHaveCount(2);
+  await selectText(page, '1790');
+  await page.getByRole('button', { name: 'Lier au dernier trou', exact: true }).click();
+  await expect(editor.locator('[data-memory-id]')).toHaveCount(2);
+  await saved(page);
+  const rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows.map((p: any) => p.groupId)).toEqual([first, first]);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.goto('/study/' + id);
+  await expect(page.locator('.review-context')).toContainText('0 / 1 réponses révélées');
+});
+
+test.describe('liaison tactile', () => {
+  test.use({ hasTouch: true, viewport: { width: 390, height: 844 } });
+  test('le bouton Lier conserve le passage sélectionné sur mobile', async ({ page }) => {
+    test.setTimeout(70000);
+    await register(page);
+    await page.getByRole('button', { name: 'Nouveau document', exact: true }).click();
+    const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+    await editor.fill('La première date 1789 et la seconde 1790.');
+    await selectText(page, '1789');
+    await page.getByRole('button', { name: 'Créer un texte à trous', exact: true }).tap();
+    await expect(editor.locator('[data-memory-id]')).toHaveCount(1);
+    await selectText(page, '1790');
+    await page.getByRole('button', { name: 'Lier la sélection au dernier trou' }).tap();
+    await expect(editor.locator('[data-memory-id]')).toHaveCount(2);
+    await saved(page);
+    const id = page.url().split('/').pop();
+    const rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+    expect(rows.map((p: any) => p.groupId)).toEqual([rows[0].id, rows[0].id]);
+  });
+});

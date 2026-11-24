@@ -231,3 +231,28 @@ it('lie deux occurrences, conserve leurs identités et permet une dissociation',
   expect(editor.getText()).toBe(text);
   editor.destroy();
 });
+
+it('crée un trou lié par une seule transaction, sans insertion temporaire indépendante', () => {
+  const editor = new Editor({
+    element: document.createElement('div'),
+    extensions: editorExtensions(),
+    content: {
+      type: 'doc',
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: '1789 est repris en 1790.' }] },
+      ],
+    },
+  });
+  editor.commands.setTextSelection({ from: 1, to: 5 });
+  const first = createPassage(editor, 'Année de départ', 'high');
+  editor.commands.setTextSelection({ from: 20, to: 24 });
+  const transactions = vi.fn();
+  editor.on('update', transactions);
+  const second = createLinkedPassage(editor, first);
+  expect(transactions).toHaveBeenCalledTimes(1);
+  const rows = extractAnchors(editor.getJSON() as RichNode);
+  expect(rows.map((p) => p.id)).toEqual([first, second]);
+  expect(rows.map((p) => p.groupId)).toEqual([first, first]);
+  expect(rows.map((p) => p.hint)).toEqual(['Année de départ', 'Année de départ']);
+  editor.destroy();
+});
