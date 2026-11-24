@@ -1,4 +1,10 @@
-import { navigation, filterReview, revealIndividually } from './navigation';
+import {
+  navigation,
+  filterReview,
+  revealIndividually,
+  gradeReview,
+  activateReviewQuestion,
+} from './navigation';
 import type { Page } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { readdir, readFile } from 'node:fs/promises';
@@ -16,9 +22,13 @@ async function register(page: Page) {
     .poll(async () => {
       const files = await readdir(`${process.env.LAB_E2E_DIR}/mail`).catch(() => []);
       const entries = await Promise.all(
-        files.map(async (f) =>
-          JSON.parse(await readFile(`${process.env.LAB_E2E_DIR}/mail/${f}`, 'utf8')),
-        ),
+        files.map(async (f) => {
+          try {
+            return JSON.parse(await readFile(`${process.env.LAB_E2E_DIR}/mail/${f}`, 'utf8'));
+          } catch {
+            return null;
+          } // A local mailbox file may still be being written.
+        }),
       );
       mail = entries.find((m) => m.to === email);
       return Boolean(mail);
@@ -172,29 +182,28 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(page.locator('.review-hint')).toHaveCount(1);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
-  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toBeFocused();
-  // The visible controls are native dropdowns: one interaction selects a value.
-  await expect(page.locator('.review-evaluation select')).toHaveCount(1);
-  await expect(page.locator('.review-priority select')).toHaveCount(1);
-  await expect(page.locator('.review-evaluation details, .review-priority details')).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: 'Évaluation du passage 1' })).toBeVisible();
+  // The document is a reading surface, with no per-hole dropdowns.
+  await expect(page.locator('.review-inline-select')).toHaveCount(0);
+  await expect(page.locator('.review-inspector-grade button')).toHaveCount(3);
   await expect(page.locator('.review-reveal')).toHaveCount(0);
   await expect(paper.locator('strong')).toHaveText('cellule');
   // Revealing is entirely optional and never writes an evaluation.
   let passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages.map((p: any) => p.difficulty)).toEqual(['hard', 'unrated', 'unrated']);
   expect(passages.map((p: any) => p.difficultyRevision)).toEqual([1, 0, 0]);
-  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
+  await gradeReview(page, 1, 'hard');
   // Choosing the current value is a no-op, not an extra evaluation or save.
-  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toHaveValue('hard');
+  await expect(
+    page.getByRole('button', { name: 'Évaluer difficile le passage 1' }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await filterReview(page, 'priority', 'all');
   await revealIndividually(page);
   for (const [number, difficulty] of [
     [2, 'medium'],
     [3, 'easy'],
   ] as const) {
-    await page
-      .getByLabel(`Difficulté du passage ${number}`, { exact: true })
-      .selectOption(difficulty);
+    await gradeReview(page, number, difficulty);
     await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
   }
   for (const difficulty of ['easy', 'medium', 'hard']) {
@@ -230,7 +239,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
     },
     { times: 1 },
   );
-  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
+  await gradeReview(page, 1, 'easy');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
   await filterReview(page, 'priority', 'all');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
@@ -249,6 +258,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await filterReview(page, 'priority', 'all');
   await filterReview(page, 'difficulty', 'all');
   await revealIndividually(page);
+  await activateReviewQuestion(page, 3);
   await expect(page.getByLabel('Priorité du passage 3', { exact: true })).toHaveValue('low');
   await page.getByLabel('Priorité du passage 3', { exact: true }).selectOption('high');
   await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
@@ -268,7 +278,7 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(page.locator('.review-reveal')).toHaveCount(3);
   await revealIndividually(page);
   await page.context().setOffline(true);
-  await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('hard');
+  await gradeReview(page, 2, 'hard');
   await expect(page.getByRole('button', { name: 'Réessayer l’enregistrement' })).toBeVisible();
   await page.context().setOffline(false);
   await page.getByRole('button', { name: 'Réessayer l’enregistrement' }).click();
@@ -446,13 +456,15 @@ test('trous liés : une seule question, révélation simultanée, réglages comm
   await page.locator('.review-reveal').last().click();
   await expect(page.locator('.review-reveal')).toHaveCount(0);
   await expect(page.locator('.review-context')).toContainText('1 / 1 réponses révélées');
-  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toHaveCount(2);
-  await page.getByLabel('Difficulté du passage 1', { exact: true }).last().selectOption('hard');
+  // Two occurrences share a single contextual grader.
+  await expect(page.locator('.review-inspector')).toHaveCount(1);
+  await expect(page.locator('.review-inline-select')).toHaveCount(0);
+  await gradeReview(page, 1, 'hard');
   await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
-  await expect(page.getByLabel('Difficulté du passage 1', { exact: true }).first()).toHaveValue(
-    'hard',
-  );
-  await page.getByLabel('Priorité du passage 1', { exact: true }).last().selectOption('high');
+  await expect(
+    page.getByRole('button', { name: 'Évaluer difficile le passage 1' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await page.getByLabel('Priorité du passage 1', { exact: true }).selectOption('high');
   await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
   rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
   expect(rows.map((p: any) => [p.priority, p.difficulty])).toEqual([
@@ -590,4 +602,160 @@ test.describe('liaison tactile', () => {
     const rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
     expect(rows.map((p: any) => p.groupId)).toEqual([rows[0].id, rows[0].id]);
   });
+});
+
+test('refonte de révision : lecture fluide, groupes visibles, évaluation unique et responsive', async ({
+  page,
+}, info) => {
+  test.setTimeout(100000);
+  await register(page);
+  const first = crypto.randomUUID(),
+    second = crypto.randomUUID(),
+    alone = crypto.randomUUID();
+  const mark = (id: string, text: string, groupId?: string) => ({
+    type: 'text',
+    text,
+    marks: [
+      {
+        type: 'memoryAnchor',
+        attrs: {
+          id,
+          groupId: groupId || null,
+          sourceId: null,
+          hint: 'Prise de la Bastille',
+          priority: 'medium',
+        },
+      },
+    ],
+  });
+  const result = await page.request.post('/api/documents', {
+    headers: { Origin: 'http://localhost:5174' },
+    data: {
+      title: 'Les indispensables, modèles et dates',
+      layout: { format: 'A4', margin: 20, landscape: false },
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'heading',
+            attrs: { level: 1 },
+            content: [{ type: 'text', text: '1. LES INDISPENSABLES' }],
+          },
+          {
+            type: 'heading',
+            attrs: { level: 2 },
+            content: [{ type: 'text', text: 'Définitions fondamentales' }],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Sécurité : prévenir les événements critiques pour les personnes, les équipements et l’environnement.',
+              },
+            ],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              {
+                type: 'text',
+                text: 'Fiabilité : capacité d’un système à remplir sa mission dans les conditions attendues.',
+              },
+            ],
+          },
+          {
+            type: 'heading',
+            attrs: { level: 2 },
+            content: [{ type: 'text', text: 'Le modèle de Reason' }],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              mark(alone, 'Reason (1993)'),
+              {
+                type: 'text',
+                text: ' distingue les erreurs actives des erreurs latentes, qui agissent à des niveaux différents du système.',
+              },
+            ],
+          },
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'La Révolution française débute en ' },
+              mark(first, '1789', first),
+              { type: 'text', text: '. La date ' },
+              mark(second, '1789', first),
+              {
+                type: 'text',
+                text: ' revient dans le texte et correspond à la même connaissance.',
+              },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  expect(result.status()).toBe(201);
+  const { id } = await result.json();
+  await page.goto('/study/' + id);
+  await expect(page.locator('.review-reveal')).toHaveCount(3);
+  await expect(page.locator('.review-group-chip')).toHaveCount(2);
+  await expect(page.locator('.review-inline-select')).toHaveCount(0);
+  await expect(page.getByRole('complementary', { name: /Évaluation du passage/ })).toHaveCount(0);
+  await page.setViewportSize({ width: 920, height: 850 });
+  await page.screenshot({ path: info.outputPath('reading-before-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Révéler le passage 2' }).last().click();
+  await expect(page.locator('.review-reveal')).toHaveCount(1);
+  const inspector = page.getByRole('complementary', { name: 'Évaluation du passage 2' });
+  await expect(inspector).toBeVisible();
+  await expect(inspector).toContainText('2 occurrences');
+  await expect(
+    inspector.getByRole('button', { name: 'Évaluer difficile le passage 2' }),
+  ).toBeVisible();
+  await expect(page.locator('.review-paper .review-grouped.review-revealed')).toHaveCount(2);
+  await page.locator('.review-paper .review-grouped.review-revealed').first().hover();
+  await expect(page.locator('.review-paper .review-grouped.review-group-hovered')).toHaveCount(2);
+  await expect(
+    page.locator('.review-paper .review-grouped-tools.review-group-hovered'),
+  ).toHaveCount(2);
+  await inspector.getByRole('button', { name: 'Évaluer difficile le passage 2' }).click();
+  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  // Numeric grading continues to work while an inspector button still has focus.
+  await page.keyboard.press('3');
+  await expect(
+    inspector.getByRole('button', { name: 'Évaluer facile le passage 2' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('1');
+  await expect(
+    inspector.getByRole('button', { name: 'Évaluer difficile le passage 2' }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await inspector.getByLabel('Priorité du passage 2').selectOption('high');
+  await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
+  const rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows.slice(1).map((r: any) => [r.difficulty, r.priority])).toEqual([
+    ['hard', 'high'],
+    ['hard', 'high'],
+  ]);
+  await expect(page.locator('.review-reveal')).toHaveCount(1);
+  await page.screenshot({ path: info.outputPath('reading-after-desktop.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Masquer les couleurs des groupes' }).click();
+  await expect(page.locator('.review-group-chip')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Afficher les couleurs des groupes' }).click();
+  await expect(page.locator('.review-group-chip')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Mode concentration' }).click();
+  await expect(page.locator('.review-toolbar')).toBeHidden();
+  await page.getByRole('button', { name: 'Quitter le mode concentration' }).click();
+  await expect(page.locator('.review-toolbar')).toBeVisible();
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(inspector).toBeVisible();
+  await page.screenshot({ path: info.outputPath('reading-after-wide.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(inspector).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2)).toBe(
+    true,
+  );
+  const panelBox = await inspector.boundingBox();
+  expect(panelBox && panelBox.x >= 0 && panelBox.x + panelBox.width <= 390).toBe(true);
+  await page.screenshot({ path: info.outputPath('reading-after-mobile.png'), fullPage: true });
 });
