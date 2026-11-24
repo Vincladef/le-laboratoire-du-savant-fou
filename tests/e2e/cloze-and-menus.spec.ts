@@ -12,17 +12,21 @@ async function register(page: Page) {
   await page.getByLabel('Mot de passe', { exact: true }).fill('Cloze-Test-Password42!');
   await page.getByRole('button', { name: 'Créer mon compte' }).click();
   let mail: { url: string } | undefined;
-  await expect.poll(async () => {
-    const entries = await Promise.all(
-      (await readdir(process.env.LAB_E2E_DIR + '/mail').catch(() => [])).map(async (name) => {
-        try {
-          return JSON.parse(await readFile(process.env.LAB_E2E_DIR + '/mail/' + name, 'utf8'));
-        } catch { return null; }
-      }),
-    );
-    mail = entries.find((entry) => entry?.to === email);
-    return Boolean(mail);
-  }).toBe(true);
+  await expect
+    .poll(async () => {
+      const entries = await Promise.all(
+        (await readdir(process.env.LAB_E2E_DIR + '/mail').catch(() => [])).map(async (name) => {
+          try {
+            return JSON.parse(await readFile(process.env.LAB_E2E_DIR + '/mail/' + name, 'utf8'));
+          } catch {
+            return null;
+          }
+        }),
+      );
+      mail = entries.find((entry) => entry?.to === email);
+      return Boolean(mail);
+    })
+    .toBe(true);
   await page.goto(mail!.url);
   await expect(page).toHaveURL(/\/library$/);
 }
@@ -39,10 +43,19 @@ test('balises manuscrites, préférences et menus de bibliothèque', async ({ pa
   await expect(editor).not.toContainText('<<');
 
   await page.getByLabel('Options du document').click();
-  await page.getByRole('button', { name: 'Balises des trous' }).click();
+  await page.getByRole('button', { name: 'Balises et raccourcis' }).click();
   await page.getByLabel('Balise d’ouverture').fill('[[');
   await page.getByLabel('Balise de fermeture').fill(']]');
+  await page.getByLabel('Raccourci : Créer un trou').focus();
+  await page.keyboard.press('Control+Shift+K');
+  await expect(page.getByLabel('Raccourci : Créer un trou')).toHaveValue('Ctrl/⌘ + Maj + k');
   await page.getByRole('dialog').getByRole('button', { name: 'Enregistrer' }).click();
+  await expect
+    .poll(async () => {
+      const response = await page.request.get('/api/editor/preferences');
+      return (await response.json()).shortcuts.create;
+    })
+    .toBe('Mod-Shift-k');
   await editor.click();
   await editor.press('End');
   await page.keyboard.type(' et les [[chiens]]', { delay: 15 });
@@ -50,10 +63,19 @@ test('balises manuscrites, préférences et menus de bibliothèque', async ({ pa
   await expect(editor.locator('[data-memory-id]').last()).toHaveText('chiens');
   await expect(page.locator('.save-state')).toHaveText('Enregistré', { timeout: 20000 });
   await page.reload();
-  await expect(page.getByRole('textbox', { name: 'Contenu du document' }).locator('[data-memory-id]')).toHaveCount(2);
+  await expect(
+    page.getByRole('textbox', { name: 'Contenu du document' }).locator('[data-memory-id]'),
+  ).toHaveCount(2);
+  await page.getByLabel('Options du document').click();
+  await page.getByRole('button', { name: 'Balises et raccourcis' }).click();
+  await expect(page.getByLabel('Raccourci : Créer un trou')).toHaveValue('Ctrl/⌘ + Maj + k');
+  await page.getByRole('dialog').getByRole('button', { name: 'Enregistrer' }).click();
 
   const headers = { Origin: 'http://localhost:5174' };
-  const content = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Essai' }] }] };
+  const content = {
+    type: 'doc',
+    content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Essai' }] }],
+  };
   for (let i = 0; i < 4; i++) {
     const result = await page.request.post('/api/documents', {
       headers,

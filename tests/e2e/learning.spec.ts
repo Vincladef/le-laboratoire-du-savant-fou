@@ -163,13 +163,16 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(paper).toContainText('Les mitochondries produisent');
   await expect(paper).toContainText('Le ribosome fabrique');
   await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).click();
-  await expect(page.getByLabel('Indice du passage 1', { exact: true })).toHaveValue('Unité du vivant');
+  await expect(page.locator('.review-hint[open] [role=note]')).toContainText('Unité du vivant');
+  await expect(page.getByLabel('Indice du passage 1', { exact: true })).not.toBeVisible();
+  await page.getByRole('button', { name: 'Modifier l’indice du passage 1' }).click();
+  await expect(page.getByLabel('Indice du passage 1', { exact: true })).toHaveValue(
+    'Unité du vivant',
+  );
   await expect(page.locator('.review-hint')).toHaveCount(1);
   await page.keyboard.press('Escape');
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
-  await expect(
-    page.getByLabel('Difficulté du passage 1', { exact: true }),
-  ).toBeFocused();
+  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toBeFocused();
   // The visible controls are native dropdowns: one interaction selects a value.
   await expect(page.locator('.review-evaluation select')).toHaveCount(1);
   await expect(page.locator('.review-priority select')).toHaveCount(1);
@@ -249,14 +252,15 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await expect(page.getByLabel('Priorité du passage 3', { exact: true })).toHaveValue('low');
   await page.getByLabel('Priorité du passage 3', { exact: true }).selectOption('high');
   await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
-  await expect(page.getByLabel('Priorité du passage 3', { exact: true }))
-    .toHaveValue('high');
+  await expect(page.getByLabel('Priorité du passage 3', { exact: true })).toHaveValue('high');
   const afterPriority = await (await page.request.get(`/api/documents/${id}`)).json();
   expect(afterPriority.revision).toBe(original.revision + 1);
-  expect(afterPriority.content.content[0].content
-    .flatMap((node: any) => node.marks || [])
-    .filter((mark: any) => mark.type === 'memoryAnchor')
-    .at(-1)?.attrs?.priority).toBe('high');
+  expect(
+    afterPriority.content.content[0].content
+      .flatMap((node: any) => node.marks || [])
+      .filter((mark: any) => mark.type === 'memoryAnchor')
+      .at(-1)?.attrs?.priority,
+  ).toBe('high');
   passages = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(passages[2].priority).toBe('high');
   await page.setViewportSize({ width: 390, height: 844 });
@@ -324,19 +328,26 @@ test('révision unique : contexte, filtres combinés, indice local, difficulté 
   await filterReview(page, 'priority', 'all');
   await filterReview(page, 'difficulty', 'all');
   await page.getByLabel('Ajouter un indice au passage 2', { exact: true }).click();
-  await page.getByLabel('Indice du passage 2', { exact: true }).fill('Une piste pendant la révision');
+  await page
+    .getByLabel('Indice du passage 2', { exact: true })
+    .fill('Une piste pendant la révision');
   await page.locator('.review-hint[open]').getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByRole('status')).toHaveText('Indice enregistré.');
   await expect(page.getByLabel('Afficher l’indice du passage 2', { exact: true })).toBeVisible();
   let afterHint = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(afterHint[1]).toMatchObject({ hint: 'Une piste pendant la révision', difficulty: 'hard' });
   await page.getByLabel('Afficher l’indice du passage 2', { exact: true }).click();
+  await expect(page.locator('.review-hint[open] [role=note]')).toContainText(
+    'Une piste pendant la révision',
+  );
+  await page.getByRole('button', { name: 'Modifier l’indice du passage 2' }).click();
   await page.getByLabel('Indice du passage 2', { exact: true }).fill('Indice corrigé');
   await page.locator('.review-hint[open]').getByRole('button', { name: 'Enregistrer' }).click();
   await expect(page.getByRole('status')).toHaveText('Indice enregistré.');
   afterHint = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
   expect(afterHint[1].hint).toBe('Indice corrigé');
   await page.getByLabel('Afficher l’indice du passage 2', { exact: true }).click();
+  await page.getByRole('button', { name: 'Modifier l’indice du passage 2' }).click();
   await page.locator('.review-hint[open]').getByRole('button', { name: 'Supprimer' }).click();
   await expect(page.getByRole('status')).toHaveText('Indice supprimé.');
   afterHint = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
@@ -370,4 +381,112 @@ test('les écrans Neon proposent la confirmation par code et la récupération p
   await page.getByRole('button', { name: 'Mot de passe oublié ?' }).click();
   await page.getByRole('button', { name: 'Envoyer le lien de récupération' }).click();
   await expect(page.getByRole('status')).toContainText('un email de récupération');
+});
+
+test('trous liés : une seule question, révélation simultanée, réglages communs et dissociation', async ({
+  page,
+}) => {
+  test.setTimeout(100000);
+  await register(page);
+  const first = crypto.randomUUID(),
+    second = crypto.randomUUID();
+  const mark = (id: string) => ({
+    type: 'text',
+    text: '1789',
+    marks: [
+      {
+        type: 'memoryAnchor',
+        attrs: {
+          id,
+          sourceId: null,
+          hint: 'Révolution française',
+          priority: 'medium',
+        },
+      },
+    ],
+  });
+  const response = await page.request.post('/api/documents', {
+    headers: { Origin: 'http://localhost:5174' },
+    data: {
+      title: 'Les deux révolutions',
+      layout: { format: 'A4', margin: 20, landscape: false },
+      content: {
+        type: 'doc',
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'La Révolution française débute en ' },
+              mark(first),
+              { type: 'text', text: '. Elle débute en ' },
+              mark(second),
+              { type: 'text', text: ' pour les élèves.' },
+            ],
+          },
+        ],
+      },
+    },
+  });
+  expect(response.status()).toBe(201);
+  const { id } = await response.json();
+  await page.goto('/document/' + id);
+  const editor = page.getByRole('textbox', { name: 'Contenu du document' });
+  await expect(editor.locator('[data-memory-id]')).toHaveCount(2);
+  await editor.locator('[data-memory-id]').first().click();
+  const panel = page.getByRole('region', { name: 'Réglages du passage' });
+  await panel.getByLabel('Associer le trou à un autre passage').selectOption(second);
+  await saved(page);
+  let rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows).toHaveLength(2);
+  expect(rows.map((p: any) => p.groupId)).toEqual([first, first]);
+
+  await page.goto('/study/' + id);
+  await expect(page.locator('.review-context')).toContainText('0 / 1 réponses révélées');
+  await expect(page.locator('.review-reveal')).toHaveCount(2);
+  await page.locator('.review-reveal').last().click();
+  await expect(page.locator('.review-reveal')).toHaveCount(0);
+  await expect(page.locator('.review-context')).toContainText('1 / 1 réponses révélées');
+  await expect(page.getByLabel('Difficulté du passage 1', { exact: true })).toHaveCount(2);
+  await page.getByLabel('Difficulté du passage 1', { exact: true }).last().selectOption('hard');
+  await expect(page.getByRole('status')).toHaveText('Difficulté enregistrée.');
+  await expect(page.getByLabel('Difficulté du passage 1', { exact: true }).first()).toHaveValue(
+    'hard',
+  );
+  await page.getByLabel('Priorité du passage 1', { exact: true }).last().selectOption('high');
+  await expect(page.getByRole('status')).toHaveText('Priorité enregistrée.');
+  rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows.map((p: any) => [p.priority, p.difficulty])).toEqual([
+    ['high', 'hard'],
+    ['high', 'hard'],
+  ]);
+  await page.getByLabel('Afficher l’indice du passage 1', { exact: true }).last().click();
+  await expect(page.locator('.review-hint[open] [role=note]')).toContainText(
+    'Révolution française',
+  );
+  await page.getByRole('button', { name: 'Modifier l’indice du passage 1' }).click();
+  await page.locator('.review-hint[open] textarea').fill('14 juillet');
+  await page.locator('.review-hint[open]').getByRole('button', { name: 'Enregistrer' }).click();
+  await expect(page.getByRole('status')).toHaveText('Indice enregistré.');
+  rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows.map((p: any) => p.hint)).toEqual(['14 juillet', '14 juillet']);
+
+  await page.goto('/document/' + id);
+  await editor.locator('[data-memory-id]').last().click();
+  await page.getByRole('button', { name: 'Dissocier ce trou' }).click();
+  await saved(page);
+  rows = await (await page.request.get('/api/documents/' + id + '/anchors')).json();
+  expect(rows[0].groupId).toBe(first);
+  expect(rows[1].groupId).toBeUndefined();
+  expect(rows.map((p: any) => p.difficulty)).toEqual(['hard', 'hard']);
+  await page.goto('/study/' + id);
+  await expect(page.locator('.review-context')).toContainText('0 / 2 réponses révélées');
+  await page.goto('/document/' + id);
+  await editor.locator('[data-memory-id]').first().click();
+  await expect(
+    page.getByRole('button', { name: 'Associer les occurrences identiques' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Associer les occurrences identiques' }).click();
+  await saved(page);
+  await page.goto('/study/' + id);
+  await expect(page.locator('.review-context')).toContainText('0 / 1 réponses révélées');
 });

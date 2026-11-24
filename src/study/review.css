@@ -248,7 +248,7 @@
   font-weight: 500;
   white-space: nowrap;
 }
-.review-hint-panel:has(textarea) {
+.review-hint-panel:has(.review-hint-form:not([hidden])) {
   width: min(310px, calc(100vw - 20px));
   max-width: calc(100vw - 20px);
 }
@@ -268,7 +268,9 @@
   border-radius: 5px;
   background: #fff;
   color: #30495c;
-  font: 13px/1.5 system-ui, sans-serif;
+  font:
+    13px/1.5 system-ui,
+    sans-serif;
 }
 .review-hint-panel textarea:focus-visible {
   outline: 2px solid #4c7790;
@@ -287,7 +289,9 @@
   border-radius: 5px;
   background: #fff9ee;
   color: #30495c;
-  font: 12px/1.4 system-ui, sans-serif;
+  font:
+    12px/1.4 system-ui,
+    sans-serif;
   cursor: pointer;
 }
 .review-hint-actions .review-hint-save {
@@ -297,7 +301,7 @@
 }
 .review-hint-actions button:disabled {
   cursor: wait;
-  opacity: .6;
+  opacity: 0.6;
 }
 .review-inline-popover {
   position: absolute;
@@ -316,7 +320,9 @@
   border-radius: 7px;
   box-shadow: 0 5px 15px #30495c20;
   color: #30495c;
-  font: 12px/1.5 system-ui, sans-serif;
+  font:
+    12px/1.5 system-ui,
+    sans-serif;
 }
 .review-inline-select {
   display: inline-flex;
@@ -325,7 +331,9 @@
   margin: 0 3px;
   vertical-align: baseline;
   color: #526979;
-  font: 11px/1.4 system-ui, sans-serif;
+  font:
+    11px/1.4 system-ui,
+    sans-serif;
   white-space: nowrap;
 }
 .review-inline-select select {
@@ -338,7 +346,9 @@
   border-radius: 5px;
   background: #fffaf0;
   color: #30495c;
-  font: 12px/1.4 system-ui, sans-serif;
+  font:
+    12px/1.4 system-ui,
+    sans-serif;
   cursor: pointer;
 }
 .review-inline-select select:hover {
@@ -483,4 +493,34 @@
   .review-paper::before {
     display: none;
   }
+}
+
+/* The quiet '?' stays identical whether or not an index has been created. */
+.review-hint summary {
+  min-width: 26px;
+  min-height: 26px;
+  border-radius: 50%;
+  font-size: 12px;
+}
+.review-hint-form[hidden],
+.review-hint-edit[hidden] {
+  display: none !important;
+}
+.review-hint-edit {
+  display: block;
+  border: 0;
+  background: transparent;
+  padding: 5px 0 0;
+  color: #406a7c;
+  font-size: 12px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.review-hint-panel:has(.review-hint-form:not([hidden])) {
+  width: min(310px, calc(100vw - 20px));
+  max-width: calc(100vw - 20px);
+}
+.review-hint-form:not([hidden]) {
+  display: block;
+  margin-top: 5px;
 }

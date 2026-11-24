@@ -188,8 +188,11 @@ describe('Révision unique, annotations et difficulté persistante', () => {
     const updatedDoc = await alice.call(`/documents/${d.id}`);
     expect(updatedDoc.revision).toBe(d.revision + 1);
     const parts = updatedDoc.content.content[0].content;
-    expect(parts.slice(0, 2).map((n: RichNode) => n.marks?.find((m) => m.type === 'memoryAnchor')?.attrs?.priority))
-      .toEqual(['low', 'low']);
+    expect(
+      parts
+        .slice(0, 2)
+        .map((n: RichNode) => n.marks?.find((m) => m.type === 'memoryAnchor')?.attrs?.priority),
+    ).toEqual(['low', 'low']);
     expect(parts[0].marks[0].type).toBe('bold');
     expect(parts[1].marks[0].type).toBe('italic');
     expect((await anchors(d))[0]).toMatchObject({
@@ -239,14 +242,18 @@ describe('Révision unique, annotations et difficulté persistante', () => {
     });
     expect(created.document.revision).toBe(d.revision + 1);
     const parts = created.document.content.content[0].content;
-    expect(parts.slice(0, 2).map((n: RichNode) =>
-      n.marks?.find((m) => m.type === 'memoryAnchor')?.attrs?.hint,
-    )).toEqual(['Indice ajouté pendant la révision', 'Indice ajouté pendant la révision']);
+    expect(
+      parts
+        .slice(0, 2)
+        .map((n: RichNode) => n.marks?.find((m) => m.type === 'memoryAnchor')?.attrs?.hint),
+    ).toEqual(['Indice ajouté pendant la révision', 'Indice ajouté pendant la révision']);
     expect(parts[0].marks[0].type).toBe('bold');
     expect(parts[1].marks[0].type).toBe('italic');
     expect(parts[0].text).toBe('La première ');
     expect((await anchors(d))[0]).toMatchObject({ hint: created.passage.hint, difficulty: 'hard' });
-    expect((await alice.call(`/documents/${d.id}/review`)).passages[0].hint).toBe(created.passage.hint);
+    expect((await alice.call(`/documents/${d.id}/review`)).passages[0].hint).toBe(
+      created.passage.hint,
+    );
     const retry = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
       hint: created.passage.hint,
       revision: initial.revision,
@@ -277,21 +284,41 @@ describe('Révision unique, annotations et difficulté persistante', () => {
     const id = crypto.randomUUID();
     const d = await doc([marked(id, 'Une réponse', 'medium', 'Indice initial')]);
     const initial = (await anchors(d))[0];
-    await bob.call(`/anchors/${id}/hint`, 'PATCH', { hint: 'Intrusion', revision: initial.revision }, 404);
-    await alice.call(`/anchors/${id}/hint`, 'PATCH', { hint: 'x'.repeat(1001), revision: initial.revision }, 400);
-    await alice.call(`/anchors/${id}/hint`, 'PATCH', {
-      hint: 'Index',
-      revision: initial.revision,
-      ownerId: bob.id,
-    }, 400);
+    await bob.call(
+      `/anchors/${id}/hint`,
+      'PATCH',
+      { hint: 'Intrusion', revision: initial.revision },
+      404,
+    );
+    await alice.call(
+      `/anchors/${id}/hint`,
+      'PATCH',
+      { hint: 'x'.repeat(1001), revision: initial.revision },
+      400,
+    );
+    await alice.call(
+      `/anchors/${id}/hint`,
+      'PATCH',
+      {
+        hint: 'Index',
+        revision: initial.revision,
+        ownerId: bob.id,
+      },
+      400,
+    );
     const first = await alice.call(`/anchors/${id}/hint`, 'PATCH', {
       hint: 'Indice modifié',
       revision: initial.revision,
     });
-    await alice.call(`/anchors/${id}/hint`, 'PATCH', {
-      hint: 'Conflit',
-      revision: initial.revision,
-    }, 409);
+    await alice.call(
+      `/anchors/${id}/hint`,
+      'PATCH',
+      {
+        hint: 'Conflit',
+        revision: initial.revision,
+      },
+      409,
+    );
     expect((await anchors(d))[0].hint).toBe('Indice modifié');
     const priority = await alice.call(`/anchors/${id}/priority`, 'PATCH', {
       priority: 'high',
@@ -301,14 +328,106 @@ describe('Révision unique, annotations et difficulté persistante', () => {
     expect((await anchors(d))[0].hint).toBe('Indice modifié');
   });
   it('protège les priorités des changements concurrents et des autres comptes', async () => {
-    const id = crypto.randomUUID(), d = await doc([marked(id, 'Privé')]);
+    const id = crypto.randomUUID(),
+      d = await doc([marked(id, 'Privé')]);
     const initial = (await anchors(d))[0];
-    await bob.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'low', revision: initial.revision }, 404);
-    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'urgent', revision: initial.revision }, 400);
-    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'low', revision: initial.revision, ownerId: bob.id }, 400);
-    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'low', revision: initial.revision });
-    await alice.call(`/anchors/${id}/priority`, 'PATCH', { priority: 'medium', revision: initial.revision }, 409);
+    await bob.call(
+      `/anchors/${id}/priority`,
+      'PATCH',
+      { priority: 'low', revision: initial.revision },
+      404,
+    );
+    await alice.call(
+      `/anchors/${id}/priority`,
+      'PATCH',
+      { priority: 'urgent', revision: initial.revision },
+      400,
+    );
+    await alice.call(
+      `/anchors/${id}/priority`,
+      'PATCH',
+      { priority: 'low', revision: initial.revision, ownerId: bob.id },
+      400,
+    );
+    await alice.call(`/anchors/${id}/priority`, 'PATCH', {
+      priority: 'low',
+      revision: initial.revision,
+    });
+    await alice.call(
+      `/anchors/${id}/priority`,
+      'PATCH',
+      { priority: 'medium', revision: initial.revision },
+      409,
+    );
     expect((await anchors(d))[0].priority).toBe('low');
+  });
+  it('révise deux passages liés comme une seule réponse avec un indice et une priorité communs', async () => {
+    const root = crypto.randomUUID(),
+      other = crypto.randomUUID();
+    const first = marked(root, '1789', 'medium', 'Révolution');
+    const second = marked(other, '1789', 'medium', 'Révolution', 'italic');
+    first.marks!.at(-1)!.attrs!.groupId = root;
+    second.marks!.at(-1)!.attrs!.groupId = root;
+    const d = await doc([first, { type: 'text', text: ' et encore ' }, second]);
+    const rows = await anchors(d);
+    expect(rows.map((p: any) => p.groupId)).toEqual([root, root]);
+    const grade = await alice.call('/anchors/' + other + '/difficulty', 'PATCH', {
+      difficulty: 'hard',
+      difficultyRevision: 0,
+    });
+    expect(grade.id).toBe(root);
+    expect(grade.memberIds).toEqual([root, other]);
+    expect((await anchors(d)).map((p: any) => p.difficulty)).toEqual(['hard', 'hard']);
+    const priority = await alice.call('/anchors/' + other + '/priority', 'PATCH', {
+      priority: 'low',
+      revision: rows[1].revision,
+    });
+    expect(priority.passages).toHaveLength(2);
+    expect((await anchors(d)).map((p: any) => p.priority)).toEqual(['low', 'low']);
+    const member = priority.passages.find((p: any) => p.id === other);
+    const hint = await alice.call('/anchors/' + other + '/hint', 'PATCH', {
+      hint: 'Prise de la Bastille',
+      revision: member.revision,
+    });
+    expect(hint.passages).toHaveLength(2);
+    expect((await anchors(d)).map((p: any) => p.hint)).toEqual([
+      'Prise de la Bastille',
+      'Prise de la Bastille',
+    ]);
+    const updated = await alice.call('/documents/' + d.id);
+    expect(updated.content.content[0].content[0].text).toBe('1789');
+    expect(updated.content.content[0].content[2].marks[0].type).toBe('italic');
+    expect((await anchors(d)).map((p: any) => p.difficulty)).toEqual(['hard', 'hard']);
+  });
+  it('synchronise les raccourcis propres à chaque compte', async () => {
+    const original = await alice.call('/editor/preferences');
+    expect(original).toBeNull();
+    const data = {
+      markers: { opening: '[[', closing: ']]' },
+      shortcuts: { create: 'Mod-Shift-k', link: 'Mod-Shift-l', edit: 'Alt-Enter' },
+    };
+    expect(await alice.call('/editor/preferences', 'PUT', data)).toEqual(data);
+    expect(await alice.call('/editor/preferences')).toEqual(data);
+    expect(await bob.call('/editor/preferences')).toBeNull();
+    await alice.call(
+      '/editor/preferences',
+      'PUT',
+      { ...data, shortcuts: { ...data.shortcuts, link: data.shortcuts.create } },
+      400,
+    );
+    await alice.call(
+      '/editor/preferences',
+      'PUT',
+      { ...data, shortcuts: { ...data.shortcuts, create: 'Mod-s' } },
+      400,
+    );
+    await alice.call(
+      '/editor/preferences',
+      'PUT',
+      { ...data, markers: { opening: '<<', closing: '<<' } },
+      400,
+    );
+    expect(await alice.call('/editor/preferences')).toEqual(data);
   });
   it('combine les filtres exacts, indépendants, avec toutes les valeurs par défaut', () => {
     const base = { status: 'active', priority: 'medium', difficulty: 'unrated' } as MemoryPassage;

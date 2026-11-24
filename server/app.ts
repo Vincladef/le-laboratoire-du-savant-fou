@@ -28,6 +28,8 @@ import {
 import { documentShares, sharedCopies } from './db/schema';
 import { randomBytes } from 'node:crypto';
 import { copyWithNewAnchors } from '../src/shared/document';
+import { editorPreferencesSchema, validateShortcuts } from '../src/shared/editor-preferences';
+import { validateClozeMarkers } from '../src/editor/cloze-markers';
 import { createStorage } from './storage';
 
 const uuid = z.string().uuid();
@@ -223,6 +225,36 @@ export function createApp(
         : session.user.id,
     );
     await next();
+  });
+  // Small account-level preferences; independent of document saves and Netlify deploys.
+  app.get('/api/editor/preferences', async (c) => {
+    const [profile] = await db
+      .select({ preferences: profiles.preferences })
+      .from(profiles)
+      .where(eq(profiles.userId, c.get('userId')));
+    const value = editorPreferencesSchema.safeParse(
+      (profile?.preferences as Record<string, unknown> | undefined)?.editor,
+    );
+    return c.json(value.success ? value.data : null);
+  });
+  app.put('/api/editor/preferences', async (c) => {
+    const value = editorPreferencesSchema.parse(await c.req.json());
+    const markerError = validateClozeMarkers(value.markers);
+    const shortcutError = validateShortcuts(value.shortcuts);
+    if (markerError || shortcutError) return c.json({ error: markerError || shortcutError }, 400);
+    const userId = c.get('userId');
+    await db.transaction(async (tx) => {
+      await tx.insert(profiles).values({ userId }).onConflictDoNothing();
+      await tx.select().from(profiles).where(eq(profiles.userId, userId)).for('update');
+      await tx
+        .update(profiles)
+        .set({
+          preferences: sql`${profiles.preferences} || ${JSON.stringify({ editor: value })}::jsonb`,
+          updatedAt: new Date(),
+        })
+        .where(eq(profiles.userId, userId));
+    });
+    return c.json(value);
   });
   const owner = (id: string, userId: string) =>
     and(eq(documents.id, uuid.parse(id)), eq(documents.ownerId, userId));

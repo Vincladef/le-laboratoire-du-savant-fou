@@ -1,11 +1,12 @@
 import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
-import { and, asc, eq, getTableColumns } from 'drizzle-orm';
+import { and, asc, eq, getTableColumns, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Database } from './db';
 import { documents, memoryAnchors, profiles, versions } from './db/schema';
 import { syncAnchors } from './anchors';
 import { extractAnchors, type RichNode } from '../src/shared/document';
+import { linkedMembers, enrichReviewPassages } from '../src/shared/review-groups';
 import { difficultySchema, prioritySchema, type Priority } from '../src/shared/learning';
 
 const uuid = z.string().uuid();
@@ -30,17 +31,18 @@ function inDocumentOrder<T extends { id: string }>(content: RichNode, passages: 
 /** Update every fragment of an annotation, including passages spanning styled text runs. */
 function withPassageAttribute(
   content: RichNode,
-  id: string,
+  ids: string[],
   attribute: 'priority' | 'hint',
   value: Priority | string,
 ) {
   let found = false;
+  const targets = new Set(ids);
   function visit(node: RichNode): RichNode {
     return {
       ...node,
       ...(node.marks && {
         marks: node.marks.map((mark) => {
-          if (mark.type !== 'memoryAnchor' || mark.attrs?.id !== id) return mark;
+          if (mark.type !== 'memoryAnchor' || !targets.has(mark.attrs?.id)) return mark;
           found = true;
           return { ...mark, attrs: { ...mark.attrs, [attribute]: value } };
         }),
@@ -84,7 +86,9 @@ export function learningRoutes(db: Database) {
       .from(memoryAnchors)
       .where(and(eq(memoryAnchors.documentId, doc.id), eq(memoryAnchors.ownerId, userId)))
       .orderBy(asc(memoryAnchors.createdAt));
-    return c.json(inDocumentOrder(doc.content as RichNode, rows));
+    return c.json(
+      enrichReviewPassages(doc.content as RichNode, inDocumentOrder(doc.content as RichNode, rows)),
+    );
   });
   app.get('/documents/:id/review', async (c) => {
     const userId = c.get('userId');
@@ -101,7 +105,13 @@ export function learningRoutes(db: Database) {
           .from(memoryAnchors)
           .where(and(eq(memoryAnchors.documentId, document.id), eq(memoryAnchors.ownerId, userId)))
           .orderBy(asc(memoryAnchors.createdAt));
-        return { document, passages: inDocumentOrder(document.content as RichNode, passages) };
+        return {
+          document,
+          passages: enrichReviewPassages(
+            document.content as RichNode,
+            inDocumentOrder(document.content as RichNode, passages),
+          ),
+        };
       }),
     );
   });
@@ -114,38 +124,59 @@ export function learningRoutes(db: Database) {
     return c.json(
       await db.transaction(async (tx) => {
         await lock(tx, userId);
-        const { anchor } = await passage(tx, c.req.param('id'), userId);
+        const { anchor, document } = await passage(tx, c.req.param('id'), userId);
+        const group = linkedMembers(document.content as RichNode, anchor.id);
+        const [leader] =
+          group.leaderId === anchor.id
+            ? [anchor]
+            : await tx
+                .select()
+                .from(memoryAnchors)
+                .where(own(memoryAnchors, group.leaderId, userId));
+        if (!leader || leader.status === 'deleted')
+          fail(409, 'Le passage lié a changé. Rechargez le document.');
         // Independent of document revisions: autosave cannot erase an evaluation.
         // A request replay after a lost response does not create another change.
-        if (anchor.difficultyRevision !== data.difficultyRevision) {
+        if (leader.difficultyRevision !== data.difficultyRevision) {
           if (
-            anchor.difficultyRevision === data.difficultyRevision + 1 &&
-            anchor.difficulty === data.difficulty
+            leader.difficultyRevision === data.difficultyRevision + 1 &&
+            leader.difficulty === data.difficulty
           )
             return {
-              id: anchor.id,
-              difficulty: anchor.difficulty,
-              difficultyRevision: anchor.difficultyRevision,
+              id: leader.id,
+              memberIds: group.ids,
+              difficulty: leader.difficulty,
+              difficultyRevision: leader.difficultyRevision,
             };
           fail(
             409,
             'La difficulté a changé sur un autre appareil. Rechargez-la avant de la modifier.',
           );
         }
-        const [updated] = await tx
+        // Persist the common rating on every member as well, so removing the
+        // founding occurrence does not erase what was learned.
+        const updatedMembers = await tx
           .update(memoryAnchors)
           .set({
             difficulty: data.difficulty,
-            difficultyRevision: anchor.difficultyRevision + 1,
+            difficultyRevision: leader.difficultyRevision + 1,
             updatedAt: new Date(),
           })
-          .where(own(memoryAnchors, anchor.id, userId))
+          .where(
+            and(
+              eq(memoryAnchors.ownerId, userId),
+              eq(memoryAnchors.documentId, document.id),
+              inArray(memoryAnchors.id, group.ids),
+            ),
+          )
           .returning({
             id: memoryAnchors.id,
             difficulty: memoryAnchors.difficulty,
             difficultyRevision: memoryAnchors.difficultyRevision,
           });
-        return updated;
+        const updated = updatedMembers.find((row) => row.id === leader.id);
+        if (!updated) fail(409, 'Le groupe a changé. Rechargez-le.');
+        return { ...updated, memberIds: group.ids };
       }),
     );
   });
@@ -161,6 +192,7 @@ export function learningRoutes(db: Database) {
       await db.transaction(async (tx) => {
         await lock(tx, userId);
         const { anchor, document } = await passage(tx, c.req.param('id'), userId);
+        const group = linkedMembers(document.content as RichNode, anchor.id);
         if (anchor.revision !== data.revision) {
           // A response can be lost after the first request was committed.
           if (anchor.revision !== data.revision + 1 || anchor.priority !== data.priority)
@@ -175,11 +207,20 @@ export function learningRoutes(db: Database) {
             document,
             passage: { id: anchor.id, priority: anchor.priority, revision: anchor.revision },
           };
-        const content = withPassageAttribute(document.content as RichNode, anchor.id, 'priority', data.priority);
+        const content = withPassageAttribute(
+          document.content as RichNode,
+          group.ids,
+          'priority',
+          data.priority,
+        );
         if (!content) fail(409, 'Ce passage ne figure plus dans le document. Rechargez-le.');
         const [updatedDoc] = await tx
           .update(documents)
-          .set({ content: content as Record<string, unknown>, revision: document.revision + 1, updatedAt: new Date() })
+          .set({
+            content: content as Record<string, unknown>,
+            revision: document.revision + 1,
+            updatedAt: new Date(),
+          })
           .where(own(documents, document.id, userId))
           .returning();
         await tx.insert(versions).values({
@@ -193,10 +234,28 @@ export function learningRoutes(db: Database) {
         });
         await syncAnchors(tx, updatedDoc);
         const [updatedAnchor] = await tx
-          .select({ id: memoryAnchors.id, priority: memoryAnchors.priority, revision: memoryAnchors.revision })
+          .select({
+            id: memoryAnchors.id,
+            priority: memoryAnchors.priority,
+            revision: memoryAnchors.revision,
+          })
           .from(memoryAnchors)
           .where(own(memoryAnchors, anchor.id, userId));
-        return { document: updatedDoc, passage: updatedAnchor };
+        const memberRows = await tx
+          .select({
+            id: memoryAnchors.id,
+            priority: memoryAnchors.priority,
+            revision: memoryAnchors.revision,
+          })
+          .from(memoryAnchors)
+          .where(
+            and(eq(memoryAnchors.ownerId, userId), eq(memoryAnchors.documentId, updatedDoc.id)),
+          );
+        return {
+          document: updatedDoc,
+          passage: updatedAnchor,
+          passages: memberRows.filter((row) => group.ids.includes(row.id)),
+        };
       }),
     );
   });
@@ -212,6 +271,7 @@ export function learningRoutes(db: Database) {
       await db.transaction(async (tx) => {
         await lock(tx, userId);
         const { anchor, document } = await passage(tx, c.req.param('id'), userId);
+        const group = linkedMembers(document.content as RichNode, anchor.id);
         if (anchor.revision !== data.revision) {
           if (anchor.revision !== data.revision + 1 || anchor.hint !== data.hint)
             fail(409, 'L’indice a changé. Rechargez le passage avant de le modifier.');
@@ -225,7 +285,12 @@ export function learningRoutes(db: Database) {
             document,
             passage: { id: anchor.id, hint: anchor.hint, revision: anchor.revision },
           };
-        const content = withPassageAttribute(document.content as RichNode, anchor.id, 'hint', data.hint);
+        const content = withPassageAttribute(
+          document.content as RichNode,
+          group.ids,
+          'hint',
+          data.hint,
+        );
         if (!content) fail(409, 'Ce passage ne figure plus dans le document. Rechargez-le.');
         const [updatedDoc] = await tx
           .update(documents)
@@ -247,10 +312,28 @@ export function learningRoutes(db: Database) {
         });
         await syncAnchors(tx, updatedDoc);
         const [updatedAnchor] = await tx
-          .select({ id: memoryAnchors.id, hint: memoryAnchors.hint, revision: memoryAnchors.revision })
+          .select({
+            id: memoryAnchors.id,
+            hint: memoryAnchors.hint,
+            revision: memoryAnchors.revision,
+          })
           .from(memoryAnchors)
           .where(own(memoryAnchors, anchor.id, userId));
-        return { document: updatedDoc, passage: updatedAnchor };
+        const memberRows = await tx
+          .select({
+            id: memoryAnchors.id,
+            hint: memoryAnchors.hint,
+            revision: memoryAnchors.revision,
+          })
+          .from(memoryAnchors)
+          .where(
+            and(eq(memoryAnchors.ownerId, userId), eq(memoryAnchors.documentId, updatedDoc.id)),
+          );
+        return {
+          document: updatedDoc,
+          passage: updatedAnchor,
+          passages: memberRows.filter((row) => group.ids.includes(row.id)),
+        };
       }),
     );
   });
