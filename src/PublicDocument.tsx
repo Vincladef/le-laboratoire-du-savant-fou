@@ -11,6 +11,8 @@ import {
   type PageLayout,
 } from './shared/document';
 import { StudyDocument } from './study/StudyDocument';
+import { ReviewInspector } from './study/ReviewInspector';
+import { reviewGroups } from './shared/review-groups';
 import { AuthPage } from './components/AuthPage';
 import {
   priorityLabels,
@@ -29,6 +31,7 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
   const [tab, setTab] = useState(0),
     [review, setReview] = useState(false),
     [revealed, setRevealed] = useState<string[]>([]),
+    [activeKey, setActiveKey] = useState<string | null>(null),
     [copyError, setCopyError] = useState('');
   const preferenceKey = `bouche-public-review-${token}-${user?.id || 'guest'}`;
   const [personal, setPersonal] = useState<
@@ -54,22 +57,24 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
       setPersonal({});
     }
     setRevealed([]);
+    setActiveKey(null);
   }, [preferenceKey]);
   function updatePersonal(
     id: string,
     change: Partial<{ priority: Priority; difficulty: Difficulty }>,
   ) {
+    const key = groups.keys.get(id) || id;
+    const members = groups.members.get(key) || [id];
     setPersonal((current) => {
-      const next = {
-        ...current,
-        [id]: {
-          ...(current[id] || {
+      const next = { ...current };
+      for (const member of members)
+        next[member] = {
+          ...(current[member] || {
             priority: 'medium' as Priority,
             difficulty: 'unrated' as Difficulty,
           }),
           ...change,
-        },
-      };
+        };
       try {
         localStorage.setItem(preferenceKey, JSON.stringify(next));
       } catch {}
@@ -128,11 +133,14 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
   };
   rewrite(content);
   const anchors = extractAnchors(active.content);
+  const groups = reviewGroups(active.content);
+  const groupKey = (id: string) => groups.keys.get(id) || id;
   const passages = anchors.map(
     (a) =>
       ({
         id: a.id,
         quote: a.quote,
+        groupId: a.groupId,
         hint: a.hint || '',
         priority: personal[a.id]?.priority || 'medium',
         difficulty: personal[a.id]?.difficulty || 'unrated',
@@ -143,7 +151,18 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         documentId: 'public',
       }) as MemoryPassage,
   );
-  const selected = passages.filter((p) => matchesPassage(p, filters));
+  const selected: MemoryPassage[] = [];
+  const seen = new Set<string>();
+  for (const passage of passages) {
+    const key = groupKey(passage.id);
+    if (!seen.has(key) && matchesPassage(passage, filters)) selected.push(passage);
+    seen.add(key);
+  }
+  const selectedIds = selected.flatMap((p) => groups.members.get(groupKey(p.id)) || [p.id]);
+  const hiddenIds = selectedIds.filter((id) => !revealed.includes(groupKey(id)));
+  const activeIndex = selected.findIndex((p) => groupKey(p.id) === activeKey);
+  const activePassage =
+    activeIndex >= 0 && activeKey && revealed.includes(activeKey) ? selected[activeIndex] : null;
   return (
     <main className="public-notebook">
       <header className="public-header">
@@ -163,6 +182,7 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
             onClick={() => {
               setTab(i);
               setRevealed([]);
+              setActiveKey(null);
             }}
           >
             {t.title}
@@ -175,6 +195,7 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
         onClick={() => {
           setReview(!review);
           setRevealed([]);
+          setActiveKey(null);
         }}
       >
         {review ? 'Lire le document' : 'Réviser'}
@@ -200,6 +221,7 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
               title="Recommencer la révision"
               onClick={() => {
                 setRevealed([]);
+                setActiveKey(null);
               }}
             >
               <RotateCcw size={18} />
@@ -207,20 +229,76 @@ export function PublicDocument({ user, copy = false }: { user?: { id: string }; 
           </div>
         </>
       )}
-      <StudyDocument
-        key={active.id + JSON.stringify(content)}
-        document={{ ...data, content } as DocumentRecord}
-        passages={passages}
-        selected={review ? selected.map((a) => a.id) : []}
-        hidden={review ? selected.filter((a) => !revealed.includes(a.id)).map((a) => a.id) : []}
-        onReveal={(id) => {
-          setRevealed((r) => [...r, id]);
-        }}
-        onDifficulty={(id, difficulty) => updatePersonal(id, { difficulty })}
-        onPriority={(id, priority) => updatePersonal(id, { priority })}
-        busyId={null}
-        readOnly
-      />
+      <div
+        className={
+          'review-workspace review-public-workspace' + (activePassage ? ' has-inspector' : '')
+        }
+      >
+        <StudyDocument
+          key={active.id + JSON.stringify(content)}
+          document={{ ...data, content } as DocumentRecord}
+          passages={passages}
+          selected={review ? selectedIds : []}
+          hidden={review ? hiddenIds : []}
+          activeKey={activeKey}
+          showGroups={review}
+          onReveal={(id) => {
+            const key = groupKey(id);
+            setRevealed((r) => [...new Set([...r, key])]);
+            setActiveKey(key);
+          }}
+          onSelect={(id) => {
+            const key = groupKey(id);
+            if (revealed.includes(key)) setActiveKey(key);
+          }}
+          busyId={null}
+          readOnly
+        />
+        {review && activePassage && (
+          <ReviewInspector
+            passage={activePassage}
+            number={[...groups.members.keys()].indexOf(activeKey!) + 1}
+            position={activeIndex + 1}
+            total={selected.length}
+            groupCount={groups.members.get(activeKey!)?.length || 1}
+            onDifficulty={(difficulty) => updatePersonal(activePassage.id, { difficulty })}
+            onPriority={(priority) => updatePersonal(activePassage.id, { priority })}
+            onPrevious={
+              activeIndex > 0
+                ? () => {
+                    const prev = selected[activeIndex - 1];
+                    const key = groupKey(prev.id);
+                    setActiveKey(revealed.includes(key) ? key : null);
+                    requestAnimationFrame(() => {
+                      document
+                        .querySelector<HTMLElement>(
+                          '.review-inline-tools[data-passage-id="' + prev.id + '"] .review-reveal',
+                        )
+                        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    });
+                  }
+                : undefined
+            }
+            onNext={
+              activeIndex < selected.length - 1
+                ? () => {
+                    const next = selected[activeIndex + 1];
+                    const key = groupKey(next.id);
+                    setActiveKey(revealed.includes(key) ? key : null);
+                    requestAnimationFrame(() => {
+                      document
+                        .querySelector<HTMLElement>(
+                          '.review-inline-tools[data-passage-id="' + next.id + '"] .review-reveal',
+                        )
+                        ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    });
+                  }
+                : undefined
+            }
+            onClose={() => setActiveKey(null)}
+          />
+        )}
+      </div>
       <p className="muted">
         Un carnet pour écrire et apprendre.{' '}
         <Link to="/">Créez vos propres textes à trous avec Bouche-Trou.</Link>

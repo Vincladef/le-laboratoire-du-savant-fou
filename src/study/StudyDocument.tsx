@@ -1,17 +1,12 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import { Extension } from '@tiptap/core';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { editorExtensions } from '../editor/extensions';
 import type { DocumentRecord } from '../shared/document';
-import {
-  difficultyLabels,
-  priorityLabels,
-  type Priority,
-  type Difficulty,
-  type MemoryPassage,
-} from '../shared/learning';
+import type { MemoryPassage } from '../shared/learning';
+import { groupTone } from './group-palette';
 
 function placeReviewPopup(details: HTMLDetailsElement) {
   const panel = details.querySelector<HTMLElement>('.review-inline-popover');
@@ -33,14 +28,21 @@ type MaskState = {
   hidden: Set<string>;
   passages: MemoryPassage[];
   busyId: string | null;
+  activeKey: string | null;
+  showGroups: boolean;
 };
-const empty: MaskState = { selected: new Set(), hidden: new Set(), passages: [], busyId: null };
+const empty: MaskState = {
+  selected: new Set(),
+  hidden: new Set(),
+  passages: [],
+  busyId: null,
+  activeKey: null,
+  showGroups: true,
+};
 const maskKey = new PluginKey<MaskState>('review-mask');
 function maskExtension(
   reveal: (id: string) => void,
-  evaluate: (id: string, value: Difficulty) => void,
   readOnly = false,
-  setPriority?: (id: string, value: Priority) => void,
   setHint?: (id: string, hint: string) => void,
 ) {
   return Extension.create({
@@ -71,6 +73,11 @@ function maskExtension(
               });
               let index = 0;
               const groupNumbers = new Map<string, number>();
+              const groupMembers = new Map<string, number>();
+              for (const passage of value.passages) {
+                if (passage.groupId)
+                  groupMembers.set(passage.groupId, (groupMembers.get(passage.groupId) || 0) + 1);
+              }
               for (const [id, range] of ranges) {
                 const passage = passagesById.get(id);
                 if (!passage) continue;
@@ -79,27 +86,41 @@ function maskExtension(
                 const number = groupNumbers.get(groupKey)!;
                 if (!value.selected.has(id)) continue;
                 const hidden = value.hidden.has(id);
+                const grouped =
+                  value.showGroups &&
+                  passage.groupId &&
+                  (groupMembers.get(passage.groupId) || 0) > 1;
+                const tone = grouped ? groupTone(passage.groupId!) : -1;
+                const active = value.activeKey === groupKey;
                 for (const segment of range.segments)
                   decorations.push(
-                    Decoration.inline(
-                      segment.from,
-                      segment.to,
-                      hidden
-                        ? {
-                            class: 'review-hidden',
-                            'aria-hidden': 'true',
-                          }
-                        : { class: 'review-revealed' },
-                    ),
+                    Decoration.inline(segment.from, segment.to, {
+                      class: [
+                        hidden ? 'review-hidden' : 'review-revealed',
+                        grouped ? 'review-grouped review-tone-' + tone : '',
+                        active ? 'review-group-active' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' '),
+                      ...(hidden ? { 'aria-hidden': 'true' } : {}),
+                      ...(grouped ? { 'data-review-group': groupKey } : {}),
+                    }),
                   );
                 decorations.push(
                   Decoration.widget(
                     hidden ? range.from : range.to,
                     () => {
                       const root = document.createElement('span');
-                      root.className = 'review-inline-tools';
+                      root.className = [
+                        'review-inline-tools',
+                        grouped ? 'review-grouped-tools review-tone-' + tone : '',
+                        active ? 'review-group-active' : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' ');
                       root.contentEditable = 'false';
                       root.dataset.passageId = id;
+                      if (grouped) root.dataset.reviewGroup = groupKey;
                       if (hidden) {
                         const button = document.createElement('button');
                         button.type = 'button';
@@ -126,6 +147,14 @@ function maskExtension(
                         });
                         root.append(details);
                         return { details, summary };
+                      }
+                      if (grouped) {
+                        const chip = document.createElement('span');
+                        chip.className = 'review-group-chip';
+                        chip.title = `Groupe ${number} · ${groupMembers.get(passage.groupId!)} occurrences liées`;
+                        chip.setAttribute('aria-label', chip.title);
+                        chip.textContent = `↔${number}`;
+                        root.append(chip);
                       }
                       if (passage.hint || (!readOnly && setHint)) {
                         const canEdit = !readOnly && Boolean(setHint);
@@ -218,55 +247,11 @@ function maskExtension(
                         }
                         details.append(panel);
                       }
-                      if (!hidden && !readOnly) {
-                        const label = document.createElement('label');
-                        label.className = 'review-inline-select review-evaluation';
-                        const caption = document.createElement('span');
-                        caption.textContent = 'Difficulté';
-                        const select = document.createElement('select');
-                        select.setAttribute('aria-label', `Difficulté du passage ${number}`);
-                        select.disabled = value.busyId !== null;
-                        for (const [key, text] of Object.entries(difficultyLabels)) {
-                          const option = document.createElement('option');
-                          option.value = key;
-                          option.textContent = key === 'unrated' ? 'Évaluer' : text;
-                          select.append(option);
-                        }
-                        select.value = passage.difficulty;
-                        select.addEventListener('change', () => {
-                          if (select.value !== passage.difficulty)
-                            evaluate(id, select.value as Difficulty);
-                        });
-                        label.append(caption, select);
-                        root.append(label);
-                      }
-                      if (!hidden && setPriority) {
-                        const label = document.createElement('label');
-                        label.className = 'review-inline-select review-priority';
-                        const caption = document.createElement('span');
-                        caption.textContent = 'Priorité';
-                        const select = document.createElement('select');
-                        select.setAttribute('aria-label', `Priorité du passage ${number}`);
-                        select.disabled = value.busyId !== null;
-                        for (const [key, text] of Object.entries(priorityLabels)) {
-                          const option = document.createElement('option');
-                          option.value = key;
-                          option.textContent = text;
-                          select.append(option);
-                        }
-                        select.value = passage.priority;
-                        select.addEventListener('change', () => {
-                          if (select.value !== passage.priority)
-                            setPriority(id, select.value as Priority);
-                        });
-                        label.append(caption, select);
-                        root.append(label);
-                      }
                       return root;
                     },
                     {
                       side: hidden ? -1 : 1,
-                      key: `${id}/${hidden}/${passage.difficulty}/${value.busyId}/${passage.hint}/${passage.priority}/${number}`,
+                      key: `${id}/${hidden}/${value.busyId}/${passage.hint}/${number}/${tone}/${active}`,
                       stopEvent: () => true,
                     },
                   ),
@@ -286,33 +271,33 @@ export function StudyDocument({
   selected,
   hidden,
   onReveal,
-  onDifficulty,
   busyId,
   readOnly = false,
-  onPriority,
   onHint,
+  onSelect,
+  activeKey = null,
+  showGroups = true,
 }: {
   document: DocumentRecord;
   passages: MemoryPassage[];
   selected: string[];
   hidden: string[];
   onReveal: (id: string) => void;
-  onDifficulty: (id: string, difficulty: Difficulty) => void;
   busyId: string | null;
   readOnly?: boolean;
-  onPriority?: (id: string, value: Priority) => void;
   onHint?: (id: string, hint: string) => void;
+  onSelect?: (id: string) => void;
+  activeKey?: string | null;
+  showGroups?: boolean;
 }) {
-  const callbacks = useRef({ onReveal, onDifficulty, onPriority, onHint });
-  callbacks.current = { onReveal, onDifficulty, onPriority, onHint };
+  const callbacks = useRef({ onReveal, onHint, onSelect });
+  callbacks.current = { onReveal, onHint, onSelect };
   const editor = useEditor({
     extensions: [
       ...editorExtensions(),
       maskExtension(
         (id) => callbacks.current.onReveal(id),
-        (id, difficulty) => callbacks.current.onDifficulty(id, difficulty),
-        readOnly && !onPriority,
-        onPriority ? (id, value) => callbacks.current.onPriority?.(id, value) : undefined,
+        readOnly,
         onHint ? (id, hint) => callbacks.current.onHint?.(id, hint) : undefined,
       ),
     ],
@@ -320,6 +305,14 @@ export function StudyDocument({
     editable: false,
     editorProps: { attributes: { 'aria-label': 'Document de révision', role: 'document' } },
   });
+  // Preserve scroll position and the current question when an index or priority
+  // changes the document revision. Replacing the whole React editor would jump.
+  const contentVersion = useRef(doc.revision);
+  useEffect(() => {
+    if (!editor || doc.revision === contentVersion.current) return;
+    contentVersion.current = doc.revision;
+    editor.commands.setContent(doc.content, { emitUpdate: false });
+  }, [editor, doc.revision, doc.content]);
   useLayoutEffect(() => {
     if (!editor) return;
     const active = window.document.activeElement;
@@ -328,31 +321,24 @@ export function StudyDocument({
         ? active.closest<HTMLElement>('[data-passage-id]')
         : null;
     const hintFocused = active instanceof HTMLElement && Boolean(active.closest('.review-hint'));
-    const priorityFocused =
-      active instanceof HTMLElement && Boolean(active.closest('.review-priority'));
     editor.view.dispatch(
       editor.state.tr.setMeta(maskKey, {
         selected: new Set(selected),
         hidden: new Set(hidden),
         passages,
         busyId,
+        activeKey,
+        showGroups,
       } satisfies MaskState),
     );
     if (focused) {
       const root = [...editor.view.dom.querySelectorAll<HTMLElement>('[data-passage-id]')].find(
         (el) => el.dataset.passageId === focused.dataset.passageId,
       );
-      root
-        ?.querySelector<HTMLElement>(
-          hintFocused
-            ? '.review-hint summary'
-            : priorityFocused
-              ? '.review-priority select'
-              : '.review-evaluation select',
-        )
-        ?.focus();
+      if (hintFocused)
+        root?.querySelector<HTMLElement>('.review-hint summary')?.focus({ preventScroll: true });
     }
-  }, [editor, selected.join(','), hidden.join(','), passages, busyId]);
+  }, [editor, selected.join(','), hidden.join(','), passages, busyId, activeKey, showGroups]);
   useEffect(() => {
     if (!editor) return;
     const close = (event: PointerEvent) => {
@@ -372,8 +358,36 @@ export function StudyDocument({
       window.removeEventListener('scroll', place, true);
     };
   }, [editor]);
+  const paperRef = useRef<HTMLElement>(null);
+  function groupFromTarget(event: ReactPointerEvent<HTMLElement>) {
+    const el =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>('[data-review-group]')
+        : null;
+    return el?.dataset.reviewGroup || null;
+  }
+  function setHoveredGroup(id: string | null) {
+    const root = paperRef.current;
+    if (!root) return;
+    for (const item of root.querySelectorAll<HTMLElement>('[data-review-group]')) {
+      item.classList.toggle('review-group-hovered', Boolean(id) && item.dataset.reviewGroup === id);
+    }
+  }
   return (
     <article
+      ref={paperRef}
+      onClick={(event) => {
+        const el =
+          event.target instanceof Element
+            ? event.target.closest<HTMLElement>('[data-memory-id]')
+            : null;
+        const id = el?.dataset.memoryId;
+        if (id && selected.includes(id) && !hidden.includes(id)) callbacks.current.onSelect?.(id);
+      }}
+      onPointerOver={(event) => {
+        if (showGroups && event.pointerType !== 'touch') setHoveredGroup(groupFromTarget(event));
+      }}
+      onPointerLeave={() => setHoveredGroup(null)}
       className="review-paper document-page"
       aria-label={doc.title}
       style={{

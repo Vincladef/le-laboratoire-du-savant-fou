@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import type { Page } from '@playwright/test';
 import { readdir, readFile } from 'node:fs/promises';
-import { navigation, filterReview } from './navigation';
+import { navigation, filterReview, gradeReview } from './navigation';
 async function ensureAI(page: Page) {
   if (!(await page.getByRole('region', { name: 'Assistant IA', exact: true }).isVisible()))
     await page.getByRole('button', { name: 'Ouvrir l’assistant IA' }).click();
@@ -327,18 +327,24 @@ test('partage : lecture anonyme, révision, copie après connexion ou inscriptio
   await expect(guest.locator('[contenteditable=true]')).toHaveCount(0);
   await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
   await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
-  await expect(guest.getByLabel('Difficulté du passage 1', { exact: true })).toBeVisible();
-  await guest.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('hard');
+  await expect(guest.getByRole('complementary', { name: 'Évaluation du passage 1' })).toBeVisible();
+  await gradeReview(guest, 1, 'hard');
   await expect(guest.getByLabel('Priorité du passage 1', { exact: true })).toBeVisible();
-  const priorityBounds = await guest.getByLabel('Priorité du passage 1', { exact: true }).boundingBox();
-  expect(priorityBounds && priorityBounds.x >= 0 && priorityBounds.x + priorityBounds.width <= 390).toBe(true);
+  const priorityBounds = await guest
+    .getByLabel('Priorité du passage 1', { exact: true })
+    .boundingBox();
+  expect(
+    priorityBounds && priorityBounds.x >= 0 && priorityBounds.x + priorityBounds.width <= 390,
+  ).toBe(true);
   await guest.getByLabel('Priorité du passage 1', { exact: true }).selectOption('high');
   await guest.getByRole('button', { name: 'Recommencer la révision' }).click();
   await expect(guest.getByRole('button', { name: 'Révéler le passage 1' })).toBeVisible();
   await guest.reload();
   await guest.getByRole('button', { name: 'Réviser', exact: true }).click();
   await guest.getByRole('button', { name: 'Révéler le passage 1' }).click();
-  await expect(guest.getByLabel('Difficulté du passage 1', { exact: true })).toHaveValue('hard');
+  await expect(
+    guest.getByRole('button', { name: 'Évaluer difficile le passage 1' }),
+  ).toHaveAttribute('aria-pressed', 'true');
   await expect(guest.getByLabel('Priorité du passage 1', { exact: true })).toHaveValue('high');
   await filterReview(guest, 'difficulty', ['easy']);
   await expect(guest.locator('.review-revealed')).toHaveCount(0);
@@ -502,7 +508,7 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
   await expect(page.getByLabel('Filtrer par priorité')).toBeVisible();
   await expect(page.locator('.review-evaluations, .review-rating-bar')).toHaveCount(0);
   await page.getByRole('button', { name: 'Révéler le passage 1', exact: true }).click();
-  await page.getByLabel('Difficulté du passage 1', { exact: true }).selectOption('easy');
+  await gradeReview(page, 1, 'easy');
   await expect
     .poll(async () => {
       const rows = await (await page.request.get(`/api/documents/${id}/anchors`)).json();
@@ -510,7 +516,7 @@ test('confort : zoom stable, retour à l’écriture, partage à jour et évalua
     })
     .toBe('easy');
   await page.getByRole('button', { name: 'Révéler le passage 2', exact: true }).click();
-  await page.getByLabel('Difficulté du passage 2', { exact: true }).selectOption('medium');
+  await gradeReview(page, 2, 'medium');
   await expect(page.locator('.review-context')).toContainText('2 / 2 réponses révélées');
   await page.getByRole('button', { name: 'Recommencer la révision' }).click();
   await expect(page.locator('.review-reveal')).toHaveCount(2);

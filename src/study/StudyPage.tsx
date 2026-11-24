@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ChevronDown, Pencil, RotateCcw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, Pencil, RotateCcw, Link2, Focus } from 'lucide-react';
 import { api, ApiError, json } from '../lib/api';
 import {
   priorityLabels,
@@ -15,6 +15,7 @@ import {
 import type { DocumentRecord, DocumentSummary, FolderRecord } from '../shared/document';
 import { reviewGroups } from '../shared/review-groups';
 import { StudyDocument } from './StudyDocument';
+import { ReviewInspector } from './ReviewInspector';
 import './review.css';
 
 type Props = { user: { id: string } };
@@ -90,6 +91,22 @@ export function StudyPage({ user }: Props) {
     difficulty: ['easy', 'medium', 'hard', 'unrated'],
   });
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [activeKey, setActiveKey] = useState<string | null>(null);
+  const [focusMode, setFocusMode] = useState(false);
+  const [showGroups, setShowGroups] = useState(() => {
+    try {
+      return localStorage.getItem('bouche-review-groups-' + user.id) !== 'false';
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('bouche-review-groups-' + user.id, String(showGroups));
+    } catch {
+      /* The document remains usable if storage is unavailable. */
+    }
+  }, [showGroups, user.id]);
   const [error, setError] = useState(''),
     [message, setMessage] = useState('');
   const [pending, setPending] = useState<Pending | null>(null),
@@ -132,9 +149,11 @@ export function StudyPage({ user }: Props) {
     setError('');
     setMessage('');
     setPending(null);
+    setActiveKey(null);
   }, [id]);
   useEffect(() => {
     setRevealed(new Set());
+    setActiveKey(null);
   }, [id, filters.priority, filters.difficulty]);
   const groups = query.data ? reviewGroups(query.data.document.content) : null;
   const groupKey = (passageId: string) => groups?.keys.get(passageId) || passageId;
@@ -150,27 +169,101 @@ export function StudyPage({ user }: Props) {
   const hidden = selectedIds.filter((id) => !revealed.has(groupKey(id)));
   const hiddenGroups = selected.filter((p) => !revealed.has(groupKey(p.id))).length;
   const reveal = (passageId: string) => {
-    setRevealed((s) => new Set([...s, groupKey(passageId)]));
+    const key = groupKey(passageId);
+    setRevealed((s) => new Set([...s, key]));
+    setActiveKey(key);
   };
+  const activeIndex = selected.findIndex((p) => groupKey(p.id) === activeKey);
+  const activePassage =
+    activeIndex >= 0 && activeKey && revealed.has(activeKey) ? selected[activeIndex] : null;
+  // A fixed mobile dock must never cover the answer that opened it.
+  useEffect(() => {
+    if (!activePassage) return;
+    const frame = requestAnimationFrame(() => {
+      const dock = document.querySelector<HTMLElement>('.review-inspector');
+      const mark = [...document.querySelectorAll<HTMLElement>('.review-inline-tools')].find(
+        (node) => node.dataset.passageId === activePassage.id,
+      );
+      if (!dock || !mark || innerWidth >= 1300) return;
+      const markBox = mark.getBoundingClientRect();
+      const dockBox = dock.getBoundingClientRect();
+      if (markBox.bottom >= dockBox.top - 14)
+        mark.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeKey, activePassage?.id]);
+
+  const displayNumber = (key: string) => (groups ? [...groups.members.keys()].indexOf(key) + 1 : 1);
+  function navigateQuestion(index: number) {
+    const target = selected[index];
+    if (!target) return;
+    const key = groupKey(target.id);
+    setActiveKey(revealed.has(key) ? key : null);
+    requestAnimationFrame(() => {
+      const all = [...document.querySelectorAll<HTMLElement>('.review-inline-tools')];
+      const mark = all.find((el) => el.dataset.passageId === target.id);
+      const focus = mark?.querySelector<HTMLElement>('.review-reveal') || mark;
+      focus?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      focus?.focus({ preventScroll: true });
+    });
+  }
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
+      const inGrader = Boolean(target.closest('.review-inspector'));
       if (
         e.ctrlKey ||
         e.metaKey ||
         e.altKey ||
         target.isContentEditable ||
-        ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON', 'A', 'SUMMARY'].includes(target.tagName)
+        ['INPUT', 'SELECT', 'TEXTAREA', 'A', 'SUMMARY'].includes(target.tagName) ||
+        (target.tagName === 'BUTTON' && !inGrader)
       )
         return;
-      if (e.code === 'Space' && hidden[0]) {
+      if (e.code === 'Space' && target.tagName !== 'BUTTON' && hidden[0]) {
         e.preventDefault();
         reveal(hidden[0]);
+      } else if (
+        activePassage &&
+        !sending.current &&
+        ['Digit1', 'Digit2', 'Digit3'].includes(e.code)
+      ) {
+        e.preventDefault();
+        const grade: Record<string, Difficulty> = {
+          Digit1: 'hard',
+          Digit2: 'medium',
+          Digit3: 'easy',
+        };
+        const difficulty = grade[e.code];
+        if (difficulty !== activePassage.difficulty)
+          void saveDifficulty({
+            kind: 'difficulty',
+            id: activePassage.id,
+            difficulty,
+            difficultyRevision: activePassage.difficultyRevision,
+          });
+      } else if (
+        e.key.toLowerCase() === 'n' &&
+        activeIndex >= 0 &&
+        activeIndex < selected.length - 1
+      ) {
+        e.preventDefault();
+        navigateQuestion(activeIndex + 1);
+      } else if (e.key.toLowerCase() === 'p' && activeIndex > 0) {
+        e.preventDefault();
+        navigateQuestion(activeIndex - 1);
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [hidden.join(',')]);
+  }, [
+    hidden.join(','),
+    activeKey,
+    activeIndex,
+    activePassage?.difficulty,
+    activePassage?.difficultyRevision,
+    selectedIds.join(','),
+  ]);
   async function saveDifficulty(change: PendingDifficulty) {
     if (sending.current) return;
     sending.current = true;
@@ -208,9 +301,8 @@ export function StudyPage({ user }: Props) {
       );
       setPending(null);
       setMessage('Difficulté enregistrée.');
-      requestAnimationFrame(() =>
-        document.querySelector<HTMLButtonElement>('.review-reveal')?.focus({ preventScroll: true }),
-      );
+      // Keep the contextual grader available. Moving focus back to the document
+      // after every rating interrupts rapid revision and breaks keyboard access.
     } catch (e) {
       setError((e as Error).message);
       if (e instanceof ApiError && [404, 409].includes(e.status)) {
@@ -321,7 +413,7 @@ export function StudyPage({ user }: Props) {
     }
   }
   return (
-    <main className="review-shell">
+    <main className={'review-shell' + (focusMode ? ' is-focus-mode' : '')}>
       <header className="review-heading">
         <Link
           className="icon-button"
@@ -331,6 +423,19 @@ export function StudyPage({ user }: Props) {
           <ArrowLeft size={19} />
         </Link>
         <h1>Réviser</h1>
+        {id && (
+          <button
+            type="button"
+            className="review-focus-toggle"
+            aria-pressed={focusMode}
+            aria-label={focusMode ? 'Quitter le mode concentration' : 'Mode concentration'}
+            title={focusMode ? 'Quitter le mode concentration' : 'Mode concentration'}
+            onClick={() => setFocusMode((v) => !v)}
+          >
+            <Focus size={16} aria-hidden="true" />
+            <span>{focusMode ? 'Quitter la concentration' : 'Concentration'}</span>
+          </button>
+        )}
         {id && (
           <Link className="button subtle review-edit" to={`/document/${id}`}>
             <Pencil size={15} /> Modifier le document
@@ -386,11 +491,25 @@ export function StudyPage({ user }: Props) {
           onChange={(difficulty) => setFilters((f) => ({ ...f, difficulty }))}
         />
         <button
+          type="button"
+          className="review-groups-toggle"
+          aria-pressed={showGroups}
+          aria-label={
+            showGroups ? 'Masquer les couleurs des groupes' : 'Afficher les couleurs des groupes'
+          }
+          title="Afficher ou masquer les repères des trous liés"
+          onClick={() => setShowGroups((value) => !value)}
+        >
+          <Link2 size={15} aria-hidden="true" />
+          <span>Groupes</span>
+        </button>
+        <button
           className="icon-button"
           aria-label="Recommencer la révision"
           title="Recommencer la révision"
           onClick={() => {
             setRevealed(new Set());
+            setActiveKey(null);
           }}
         >
           <RotateCcw size={18} />
@@ -433,56 +552,94 @@ export function StudyPage({ user }: Props) {
                 : 'Aucun trou ne correspond aux filtres.'}
             </span>
             <span className="review-keyboard-help">
-              Cliquez sur un trou pour le révéler · Espace : suivant
+              Espace : révéler · 1, 2, 3 : évaluer · N/P : naviguer
             </span>
             <span role="status" className="review-save-feedback">
               {busyId ? 'Enregistrement…' : message}
             </span>
+          </div>
+          <div
+            className="review-progress-track"
+            role="progressbar"
+            aria-label="Progression de la révision"
+            aria-valuenow={selected.length - hiddenGroups}
+            aria-valuemin={0}
+            aria-valuemax={selected.length}
+          >
+            <span
+              style={{
+                width:
+                  (selected.length
+                    ? ((selected.length - hiddenGroups) / selected.length) * 100
+                    : 0) + '%',
+              }}
+            />
           </div>
           {query.data.passages.some((p) => p.status === 'needs_review') && (
             <p className="review-notice">
               Certains passages modifiés restent visibles. Vous pouvez les valider dans l’éditeur.
             </p>
           )}
-          <StudyDocument
-            key={`${id}/${query.data.document.revision}`}
-            document={query.data.document}
-            passages={query.data.passages}
-            selected={selectedIds}
-            hidden={hidden}
-            onReveal={reveal}
-            busyId={busyId}
-            onDifficulty={(passageId, difficulty) => {
-              const p = query.data.passages.find((p) => p.id === passageId);
-              if (p)
-                void saveDifficulty({
-                  kind: 'difficulty',
-                  id: p.id,
-                  difficulty,
-                  difficultyRevision: p.difficultyRevision,
-                });
-            }}
-            onPriority={(passageId, priority) => {
-              const p = query.data.passages.find((p) => p.id === passageId);
-              if (p)
-                void savePriority({
-                  kind: 'priority',
-                  id: p.id,
-                  priority,
-                  revision: p.revision,
-                });
-            }}
-            onHint={(passageId, hint) => {
-              const p = query.data.passages.find((p) => p.id === passageId);
-              if (p)
-                void saveHint({
-                  kind: 'hint',
-                  id: p.id,
-                  hint,
-                  revision: p.revision,
-                });
-            }}
-          />
+          <div className={'review-workspace' + (activePassage ? ' has-inspector' : '')}>
+            <StudyDocument
+              key={id}
+              document={query.data.document}
+              passages={query.data.passages}
+              selected={selectedIds}
+              hidden={hidden}
+              onReveal={reveal}
+              busyId={busyId}
+              activeKey={activeKey}
+              showGroups={showGroups}
+              onSelect={(passageId) => {
+                const key = groupKey(passageId);
+                if (revealed.has(key)) setActiveKey(key);
+              }}
+              onHint={(passageId, hint) => {
+                const p = query.data.passages.find((p) => p.id === passageId);
+                if (p)
+                  void saveHint({
+                    kind: 'hint',
+                    id: p.id,
+                    hint,
+                    revision: p.revision,
+                  });
+              }}
+            />
+            {activePassage && (
+              <ReviewInspector
+                passage={activePassage}
+                number={displayNumber(activeKey!)}
+                position={activeIndex + 1}
+                total={selected.length}
+                groupCount={groups?.members.get(activeKey!)?.length || 1}
+                busy={Boolean(busyId)}
+                onDifficulty={(difficulty) =>
+                  void saveDifficulty({
+                    kind: 'difficulty',
+                    id: activePassage.id,
+                    difficulty,
+                    difficultyRevision: activePassage.difficultyRevision,
+                  })
+                }
+                onPriority={(priority) =>
+                  void savePriority({
+                    kind: 'priority',
+                    id: activePassage.id,
+                    priority,
+                    revision: activePassage.revision,
+                  })
+                }
+                onPrevious={activeIndex > 0 ? () => navigateQuestion(activeIndex - 1) : undefined}
+                onNext={
+                  activeIndex < selected.length - 1
+                    ? () => navigateQuestion(activeIndex + 1)
+                    : undefined
+                }
+                onClose={() => setActiveKey(null)}
+              />
+            )}
+          </div>
         </>
       )}
       {!id && !docs.isPending && !docs.data?.length && !docs.error && (
