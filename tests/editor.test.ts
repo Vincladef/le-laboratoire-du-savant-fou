@@ -3,7 +3,15 @@ import { it, expect, vi } from 'vitest';
 import { Editor } from '@tiptap/core';
 import { editorExtensions, insertPageBreak } from '../src/editor/extensions';
 import { extractAnchors, type RichNode } from '../src/shared/document';
-import { createPassage, modifyPassage } from '../src/editor/memory-commands';
+import {
+  createPassage,
+  createLinkedPassage,
+  linkPassages,
+  modifyPassage,
+  unlinkPassage,
+} from '../src/editor/memory-commands';
+import { copyWithNewAnchors } from '../src/shared/document';
+import { reviewGroups } from '../src/shared/review-groups';
 import { reidentifyPastedSlice } from '../src/editor/extensions';
 it('insère un saut de page sans remplacer une image sélectionnée', () => {
   const editor = new Editor({
@@ -185,5 +193,41 @@ it('conserve l’identité lors d’un couper-coller complet dans le même édit
   editor.view.dispatch(editor.state.tr.replaceSelection(pasted));
   expect(extractAnchors(editor.getJSON() as RichNode)[0].id).toBe(id);
   expect(editor.getHTML()).toContain('<strong>');
+  editor.destroy();
+});
+
+it('lie deux occurrences, conserve leurs identités et permet une dissociation', () => {
+  const editor = new Editor({
+    element: document.createElement('div'),
+    extensions: editorExtensions(),
+    content: {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: '1789 et encore 1789' }] }],
+    },
+  });
+  editor.commands.setTextSelection({ from: 1, to: 5 });
+  const first = createPassage(editor, 'Bastille', 'high');
+  const text = editor.getText();
+  const i = text.lastIndexOf('1789');
+  editor.commands.setTextSelection({ from: i + 1, to: i + 5 });
+  const second = createLinkedPassage(editor, first);
+  let passages = extractAnchors(editor.getJSON() as RichNode);
+  expect(passages.map((p) => p.id)).toEqual([first, second]);
+  expect(passages.map((p) => p.groupId)).toEqual([first, first]);
+  expect(reviewGroups(editor.getJSON() as RichNode).members.get(first)).toEqual([first, second]);
+  modifyPassage(editor, second, { hint: 'Nouvelle aide', priority: 'low' });
+  expect(extractAnchors(editor.getJSON() as RichNode).map((p) => p.hint)).toEqual([
+    'Nouvelle aide',
+    'Nouvelle aide',
+  ]);
+  const copied = extractAnchors(copyWithNewAnchors(editor.getJSON() as RichNode));
+  expect(copied[0].groupId).toBe(copied[1].groupId);
+  expect(copied[0].groupId).not.toBe(first);
+  unlinkPassage(editor, second);
+  passages = extractAnchors(editor.getJSON() as RichNode);
+  expect(passages[1].groupId).toBeUndefined();
+  linkPassages(editor, first, second);
+  expect(extractAnchors(editor.getJSON() as RichNode).every((p) => p.groupId === first)).toBe(true);
+  expect(editor.getText()).toBe(text);
   editor.destroy();
 });

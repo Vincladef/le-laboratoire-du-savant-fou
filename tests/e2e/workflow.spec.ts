@@ -80,9 +80,17 @@ test('inscription, écriture riche, versions, DOCX, PDF et persistance après re
   await page.getByLabel('Interligne', { exact: true }).selectOption('2');
   await page.getByRole('button', { name: 'Centrer', exact: true }).click();
   await expect(editor.locator('p')).toHaveCSS('text-align', 'center');
-  // Explicitly collapse the formatting selection at the document end across browsers.
+  // Place a collapsed caret after the rich selection; browser shortcut behavior varies.
   await editor.focus();
-  await editor.press('ControlOrMeta+End');
+  await editor.evaluate((element) => {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    range.collapse(false);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    document.dispatchEvent(new Event('selectionchange'));
+  });
   await editor.press('Enter');
   await page.getByLabel('Style de paragraphe').selectOption('h2');
   await page.keyboard.type('Les résultats');

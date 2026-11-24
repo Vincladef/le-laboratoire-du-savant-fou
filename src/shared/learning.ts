@@ -21,6 +21,7 @@ export type MemoryPassage = {
   id: string;
   documentId: string;
   quote: string;
+  groupId?: string;
   hint: string;
   priority: Priority;
   difficulty: Difficulty;

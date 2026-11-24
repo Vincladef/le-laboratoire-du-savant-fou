@@ -47,6 +47,13 @@ import {
   type ClozeMarkerSettings,
 } from './cloze-markers';
 import { useAutosave, type Snapshot } from './useAutosave';
+import {
+  DEFAULT_EDITOR_SHORTCUTS,
+  shortcutFromEvent,
+  shortcutLabel,
+  validateShortcuts,
+  type EditorShortcuts,
+} from '../shared/editor-preferences';
 import { DOCX_LIMITS } from './format-limits';
 import { SharePanel } from './SharePanel';
 import { MemoryTools } from './MemoryTools';
@@ -118,6 +125,35 @@ function DocumentEditor({
   clozeSettingsRef.current = clozeSettings;
   const [clozeDraft, setClozeDraft] = useState<ClozeMarkerSettings>(clozeSettings);
   const [clozeError, setClozeError] = useState('');
+  const [shortcuts, setShortcuts] = useState<EditorShortcuts>(DEFAULT_EDITOR_SHORTCUTS);
+  const [shortcutDraft, setShortcutDraft] = useState<EditorShortcuts>(DEFAULT_EDITOR_SHORTCUTS);
+  useEffect(() => {
+    let active = true;
+    void api<{ markers: ClozeMarkerSettings; shortcuts: EditorShortcuts } | null>(
+      '/editor/preferences',
+    )
+      .then((remote) => {
+        if (
+          !remote ||
+          !active ||
+          validateClozeMarkers(remote.markers) ||
+          validateShortcuts(remote.shortcuts)
+        )
+          return;
+        setClozeSettings(remote.markers);
+        clozeSettingsRef.current = remote.markers;
+        setClozeDraft(remote.markers);
+        setShortcuts(remote.shortcuts);
+        setShortcutDraft(remote.shortcuts);
+        saveClozeMarkers(ownerId, remote.markers);
+      })
+      .catch(() => {
+        // Offline editing retains previously saved local marker preferences.
+      });
+    return () => {
+      active = false;
+    };
+  }, [ownerId]);
   const [restoreEpoch, setRestoreEpoch] = useState(0);
   const [printing, setPrinting] = useState<RichNode | null>(null);
   const cursors = useRef(original.viewState?.cursors || ({} as Record<string, number>));
@@ -148,7 +184,9 @@ function DocumentEditor({
   const [sharing, setSharing] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [find, setFind] = useState(false);
-  const [modal, setModal] = useState<'page' | 'import' | 'export' | 'help' | 'cloze-markers' | null>(null);
+  const [modal, setModal] = useState<
+    'page' | 'import' | 'export' | 'help' | 'cloze-markers' | null
+  >(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   useEffect(() => {
@@ -472,6 +510,7 @@ function DocumentEditor({
         setAiOpen(true);
         setHistory(false);
       }}
+      shortcuts={shortcuts}
     >
       {(memory) => (
         <div className="editor-shell">
@@ -555,11 +594,12 @@ function DocumentEditor({
                   <button
                     onClick={() => {
                       setClozeDraft({ ...clozeSettings });
+                      setShortcutDraft({ ...shortcuts });
                       setClozeError('');
                       setModal('cloze-markers');
                     }}
                   >
-                    <Settings2 size={16} /> Balises des trous
+                    <Settings2 size={16} /> Balises et raccourcis
                   </button>
                   <button onClick={() => setModal('help')}>Aide et raccourcis</button>
                   <label className="zoom-control">
@@ -871,28 +911,36 @@ function DocumentEditor({
           {printing && <PrintDocument content={printing} layout={layout} />}
           <style>{`@media print { @page { size: ${layout.format} ${layout.landscape ? 'landscape' : 'portrait'}; margin: ${layout.margin}mm; } }`}</style>
           {modal === 'cloze-markers' && (
-            <Modal title="Balises des textes à trous" onClose={() => setModal(null)}>
+            <Modal title="Balises et raccourcis des trous" onClose={() => setModal(null)}>
               <p className="muted small">
-                Entourez un passage avec ces caractères pour créer automatiquement un trou.
-                Le texte reste modifiable et ses paramètres de mémorisation sont conservés.
+                Entourez un passage avec ces caractères pour créer automatiquement un trou. Le texte
+                reste modifiable et ses paramètres de mémorisation sont conservés.
               </p>
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
-                  const error = validateClozeMarkers(clozeDraft);
+                  const error =
+                    validateClozeMarkers(clozeDraft) || validateShortcuts(shortcutDraft);
                   if (error) {
                     setClozeError(error);
                     return;
                   }
-                  try {
-                    saveClozeMarkers(ownerId, clozeDraft);
-                    clozeSettingsRef.current = { ...clozeDraft };
-                    setClozeSettings({ ...clozeDraft });
-                    setClozeError('');
-                    setModal(null);
-                  } catch (error) {
-                    setClozeError((error as Error).message);
-                  }
+                  void (async () => {
+                    try {
+                      await api('/editor/preferences', {
+                        method: 'PUT',
+                        body: json({ markers: clozeDraft, shortcuts: shortcutDraft }),
+                      });
+                      saveClozeMarkers(ownerId, clozeDraft);
+                      clozeSettingsRef.current = { ...clozeDraft };
+                      setClozeSettings({ ...clozeDraft });
+                      setShortcuts({ ...shortcutDraft });
+                      setClozeError('');
+                      setModal(null);
+                    } catch (error) {
+                      setClozeError((error as Error).message);
+                    }
+                  })();
                 }}
               >
                 <div className="cloze-marker-fields">
@@ -922,25 +970,71 @@ function DocumentEditor({
                   </label>
                 </div>
                 <p className="muted small">
-                  Exemple : <code>{clozeDraft.opening}photosynthèse{clozeDraft.closing}</code>
+                  Exemple :{' '}
+                  <code>
+                    {clozeDraft.opening}photosynthèse{clozeDraft.closing}
+                  </code>
                 </p>
                 <p className="muted small">
-                  Les balises sont retirées après la conversion. Les trous existants ne changent pas.
-                  Pour conserver des balises littérales, précédez la balise d’ouverture d’un antislash.
+                  Les balises sont retirées après la conversion. Les trous existants ne changent
+                  pas. Pour conserver des balises littérales, précédez la balise d’ouverture d’un
+                  antislash.
                 </p>
-                {clozeError && <p className="alert error" role="alert">{clozeError}</p>}
+                <h3>Raccourcis personnalisables</h3>
+                <p className="muted small">
+                  Cliquez sur une combinaison puis appuyez sur les touches souhaitées. Les
+                  raccourcis sont synchronisés avec votre compte.
+                </p>
+                <div className="cloze-marker-fields">
+                  {(
+                    [
+                      ['create', 'Créer un trou'],
+                      ['link', 'Lier au dernier trou'],
+                      ['edit', 'Modifier le trou'],
+                    ] as const
+                  ).map(([action, title]) => (
+                    <label key={action}>
+                      {title}
+                      <input
+                        type="text"
+                        aria-label={'Raccourci : ' + title}
+                        readOnly
+                        value={shortcutLabel(shortcutDraft[action])}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Escape') {
+                            event.currentTarget.blur();
+                            return;
+                          }
+                          event.preventDefault();
+                          const shortcut = shortcutFromEvent(event.nativeEvent);
+                          if (!shortcut) return;
+                          setShortcutDraft((previous) => ({ ...previous, [action]: shortcut }));
+                          setClozeError('');
+                        }}
+                      />
+                    </label>
+                  ))}
+                </div>
+                {clozeError && (
+                  <p className="alert error" role="alert">
+                    {clozeError}
+                  </p>
+                )}
                 <div className="modal-actions">
                   <button
                     className="button"
                     type="button"
                     onClick={() => {
                       setClozeDraft({ ...DEFAULT_CLOZE_MARKERS });
+                      setShortcutDraft({ ...DEFAULT_EDITOR_SHORTCUTS });
                       setClozeError('');
                     }}
                   >
                     Réinitialiser
                   </button>
-                  <button className="button primary" type="submit">Enregistrer</button>
+                  <button className="button primary" type="submit">
+                    Enregistrer
+                  </button>
                 </div>
               </form>
             </Modal>
@@ -1147,7 +1241,15 @@ function DocumentEditor({
             <Modal title="Écrire dans Bouche-trou" onClose={() => setModal(null)}>
               <ul className="help-list">
                 <li>
-                  <code>{clozeSettings.opening}texte{clozeSettings.closing}</code> Créer un trou directement en écrivant
+                  <code>
+                    {clozeSettings.opening}texte{clozeSettings.closing}
+                  </code>{' '}
+                  Créer un trou directement en écrivant
+                </li>
+                <li>
+                  <kbd>{shortcutLabel(shortcuts.create)}</kbd> Créer un trou ;
+                  <kbd>{shortcutLabel(shortcuts.link)}</kbd> lier au dernier trou ;
+                  <kbd>{shortcutLabel(shortcuts.edit)}</kbd> modifier le trou
                 </li>
                 <li>
                   <kbd>Ctrl / ⌘ + B</kbd> Gras ; <kbd>I</kbd> italique ; <kbd>U</kbd> souligné

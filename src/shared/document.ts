@@ -134,7 +134,12 @@ export function validateDocument(value: unknown): RichNode {
       const ma = m.attrs || {};
       if (m.type === 'link' && (typeof ma.href !== 'string' || !isSafeLink(ma.href)))
         throw new Error('Lien non autorisé.');
-      if (m.type === 'memoryAnchor' && (!validId(ma.id) || (ma.sourceId && !validId(ma.sourceId))))
+      if (
+        m.type === 'memoryAnchor' &&
+        (!validId(ma.id) ||
+          (ma.sourceId && !validId(ma.sourceId)) ||
+          (ma.groupId && !validId(ma.groupId)))
+      )
         throw new Error('Identité de passage invalide.');
       if (m.type === 'memoryAnchor' && !['text', 'inlineMath', 'hardBreak'].includes(node.type))
         throw new Error('Une annotation de passage doit porter sur un contenu textuel.');
@@ -304,6 +309,7 @@ export function assetIds(node: RichNode): string[] {
 export type Anchor = {
   id: string;
   sourceId?: string;
+  groupId?: string;
   quote: string;
   slices: RichNode[];
   hint?: string;
@@ -326,6 +332,7 @@ export function extractAnchors(node: RichNode): Anchor[] {
         const anchor: Anchor = result.get(id) || {
           id,
           sourceId: mark.attrs?.sourceId,
+          groupId: mark.attrs?.groupId || undefined,
           quote: '',
           slices: [],
           hint: mark.attrs?.hint ?? undefined,
@@ -338,7 +345,8 @@ export function extractAnchors(node: RichNode): Anchor[] {
           anchor.hint !== (mark.attrs?.hint ?? undefined) ||
           anchor.priority !== (mark.attrs?.priority ?? undefined) ||
           anchor.initialDifficulty !== (mark.attrs?.initialDifficulty ?? undefined) ||
-          anchor.sourceId !== mark.attrs?.sourceId
+          anchor.sourceId !== mark.attrs?.sourceId ||
+          anchor.groupId !== (mark.attrs?.groupId || undefined)
         )
           throw new Error('Les fragments d’un passage portent des métadonnées différentes.');
         anchor.quote +=
@@ -374,12 +382,20 @@ export type DocumentRecord = {
 export function copyWithNewAnchors(content: RichNode): RichNode {
   const copy = structuredClone(content);
   const identities = new Map<string, string>();
+  const groups = new Map<string, string>();
   const visit = (node: RichNode) => {
     for (const mark of node.marks || [])
       if (mark.type === 'memoryAnchor') {
         const sourceId = mark.attrs!.id;
         if (!identities.has(sourceId)) identities.set(sourceId, crypto.randomUUID());
-        mark.attrs = { ...mark.attrs, id: identities.get(sourceId), sourceId };
+        const oldGroup = mark.attrs?.groupId as string | undefined;
+        if (oldGroup && !groups.has(oldGroup)) groups.set(oldGroup, crypto.randomUUID());
+        mark.attrs = {
+          ...mark.attrs,
+          id: identities.get(sourceId),
+          sourceId,
+          ...(oldGroup ? { groupId: groups.get(oldGroup) } : {}),
+        };
       }
     node.content?.forEach(visit);
   };

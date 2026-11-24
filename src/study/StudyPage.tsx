@@ -13,12 +13,18 @@ import {
   type ReviewFilters,
 } from '../shared/learning';
 import type { DocumentRecord, DocumentSummary, FolderRecord } from '../shared/document';
+import { reviewGroups } from '../shared/review-groups';
 import { StudyDocument } from './StudyDocument';
 import './review.css';
 
 type Props = { user: { id: string } };
 type ReviewDocument = { document: DocumentRecord; passages: MemoryPassage[] };
-type PendingDifficulty = { kind: 'difficulty'; id: string; difficulty: Difficulty; difficultyRevision: number };
+type PendingDifficulty = {
+  kind: 'difficulty';
+  id: string;
+  difficulty: Difficulty;
+  difficultyRevision: number;
+};
 type PendingPriority = { kind: 'priority'; id: string; priority: Priority; revision: number };
 type PendingHint = { kind: 'hint'; id: string; hint: string; revision: number };
 type Pending = PendingDifficulty | PendingPriority | PendingHint;
@@ -130,10 +136,21 @@ export function StudyPage({ user }: Props) {
   useEffect(() => {
     setRevealed(new Set());
   }, [id, filters.priority, filters.difficulty]);
-  const selected = (query.data?.passages || []).filter((p) => matchesPassage(p, filters));
-  const hidden = selected.filter((p) => !revealed.has(p.id)).map((p) => p.id);
+  const groups = query.data ? reviewGroups(query.data.document.content) : null;
+  const groupKey = (passageId: string) => groups?.keys.get(passageId) || passageId;
+  const selected: MemoryPassage[] = [];
+  const seenGroups = new Set<string>();
+  for (const passage of query.data?.passages || []) {
+    const key = groupKey(passage.id);
+    if (seenGroups.has(key)) continue;
+    seenGroups.add(key);
+    if (matchesPassage(passage, filters)) selected.push(passage);
+  }
+  const selectedIds = selected.flatMap((p) => groups?.members.get(groupKey(p.id)) || [p.id]);
+  const hidden = selectedIds.filter((id) => !revealed.has(groupKey(id)));
+  const hiddenGroups = selected.filter((p) => !revealed.has(groupKey(p.id))).length;
   const reveal = (passageId: string) => {
-    setRevealed((s) => new Set([...s, passageId]));
+    setRevealed((s) => new Set([...s, groupKey(passageId)]));
   };
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -162,22 +179,31 @@ export function StudyPage({ user }: Props) {
     setMessage('');
     setPending(change);
     try {
-      const updated = await api<Pick<MemoryPassage, 'id' | 'difficulty' | 'difficultyRevision'>>(
-        `/anchors/${change.id}/difficulty`,
-        {
-          method: 'PATCH',
-          body: json({
-            difficulty: change.difficulty,
-            difficultyRevision: change.difficultyRevision,
-          }),
-        },
-      );
+      const updated = await api<
+        Pick<MemoryPassage, 'id' | 'difficulty' | 'difficultyRevision'> & {
+          memberIds: string[];
+        }
+      >(`/anchors/${change.id}/difficulty`, {
+        method: 'PATCH',
+        body: json({
+          difficulty: change.difficulty,
+          difficultyRevision: change.difficultyRevision,
+        }),
+      });
       client.setQueryData<ReviewDocument>(
         key,
         (current) =>
           current && {
             ...current,
-            passages: current.passages.map((p) => (p.id === updated.id ? { ...p, ...updated } : p)),
+            passages: current.passages.map((p) =>
+              updated.memberIds.includes(p.id)
+                ? {
+                    ...p,
+                    difficulty: updated.difficulty,
+                    difficultyRevision: updated.difficultyRevision,
+                  }
+                : p,
+            ),
           },
       );
       setPending(null);
@@ -207,6 +233,7 @@ export function StudyPage({ user }: Props) {
       const updated = await api<{
         document: DocumentRecord;
         passage: Pick<MemoryPassage, 'id' | 'priority' | 'revision'>;
+        passages?: Pick<MemoryPassage, 'id' | 'priority' | 'revision'>[];
       }>(`/anchors/${change.id}/priority`, {
         method: 'PATCH',
         body: json({ priority: change.priority, revision: change.revision }),
@@ -218,7 +245,14 @@ export function StudyPage({ user }: Props) {
             ...current,
             document: updated.document,
             passages: current.passages.map((p) =>
-              p.id === updated.passage.id ? { ...p, ...updated.passage } : p,
+              (updated.passages || [updated.passage]).find((member) => member.id === p.id)
+                ? {
+                    ...p,
+                    ...(updated.passages || [updated.passage]).find(
+                      (member) => member.id === p.id,
+                    )!,
+                  }
+                : p,
             ),
           },
       );
@@ -248,6 +282,7 @@ export function StudyPage({ user }: Props) {
       const updated = await api<{
         document: DocumentRecord;
         passage: Pick<MemoryPassage, 'id' | 'hint' | 'revision'>;
+        passages?: Pick<MemoryPassage, 'id' | 'hint' | 'revision'>[];
       }>(`/anchors/${change.id}/hint`, {
         method: 'PATCH',
         body: json({ hint: change.hint, revision: change.revision }),
@@ -259,7 +294,14 @@ export function StudyPage({ user }: Props) {
             ...current,
             document: updated.document,
             passages: current.passages.map((p) =>
-              p.id === updated.passage.id ? { ...p, ...updated.passage } : p,
+              (updated.passages || [updated.passage]).find((member) => member.id === p.id)
+                ? {
+                    ...p,
+                    ...(updated.passages || [updated.passage]).find(
+                      (member) => member.id === p.id,
+                    )!,
+                  }
+                : p,
             ),
           },
       );
@@ -387,7 +429,7 @@ export function StudyPage({ user }: Props) {
           <div className="review-context">
             <span>
               {selected.length
-                ? `${selected.length - hidden.length} / ${selected.length} réponses révélées`
+                ? `${selected.length - hiddenGroups} / ${selected.length} réponses révélées`
                 : 'Aucun trou ne correspond aux filtres.'}
             </span>
             <span className="review-keyboard-help">
@@ -406,7 +448,7 @@ export function StudyPage({ user }: Props) {
             key={`${id}/${query.data.document.revision}`}
             document={query.data.document}
             passages={query.data.passages}
-            selected={selected.map((p) => p.id)}
+            selected={selectedIds}
             hidden={hidden}
             onReveal={reveal}
             busyId={busyId}

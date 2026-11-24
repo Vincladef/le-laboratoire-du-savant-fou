@@ -99,7 +99,7 @@ export const profiles = lab.table(
     role: roleEnum('role').notNull().default('free'),
     legacyVersionLimit: integer('legacy_version_limit').notNull().default(0),
     preferences: jsonb('preferences')
-      .$type<{ theme?: string; timezone?: string; lastDocumentId?: string }>()
+      .$type<{ theme?: string; timezone?: string; lastDocumentId?: string; editor?: unknown }>()
       .notNull()
       .default({}),
     createdAt: created(),

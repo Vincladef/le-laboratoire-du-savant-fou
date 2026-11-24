@@ -70,11 +70,14 @@ function maskExtension(
                 } else ranges.set(id, { ...segment, segments: [segment] });
               });
               let index = 0;
+              const groupNumbers = new Map<string, number>();
               for (const [id, range] of ranges) {
-                const number = ++index;
-                if (!value.selected.has(id)) continue;
                 const passage = passagesById.get(id);
                 if (!passage) continue;
+                const groupKey = passage.groupId || id;
+                if (!groupNumbers.has(groupKey)) groupNumbers.set(groupKey, ++index);
+                const number = groupNumbers.get(groupKey)!;
+                if (!value.selected.has(id)) continue;
                 const hidden = value.hidden.has(id);
                 for (const segment of range.segments)
                   decorations.push(
@@ -126,28 +129,42 @@ function maskExtension(
                       }
                       if (passage.hint || (!readOnly && setHint)) {
                         const canEdit = !readOnly && Boolean(setHint);
-                        const { details, summary } = popup(passage.hint ? '?' : '+ Indice', 'review-hint');
-                        if (!passage.hint) details.classList.add('review-hint-empty');
+                        const { details, summary } = popup('?', 'review-hint');
                         summary.setAttribute(
                           'aria-label',
                           passage.hint
-                            ? `Afficher l’indice du passage ${number}`
-                            : `Ajouter un indice au passage ${number}`,
+                            ? 'Afficher l’indice du passage ' + number
+                            : 'Ajouter un indice au passage ' + number,
                         );
+                        summary.title = 'Indice';
                         const panel = document.createElement('span');
                         panel.className = 'review-inline-popover review-hint-panel';
+                        const note = document.createElement('span');
+                        note.textContent = passage.hint;
+                        note.setAttribute('role', 'note');
+                        if (passage.hint) panel.append(note);
                         if (canEdit) {
+                          const edit = document.createElement('button');
+                          edit.type = 'button';
+                          edit.className = 'review-hint-edit';
+                          edit.textContent = 'Modifier';
+                          edit.setAttribute('aria-label', 'Modifier l’indice du passage ' + number);
+                          if (passage.hint) panel.append(edit);
+                          const form = document.createElement('span');
+                          form.className = 'review-hint-form';
+                          form.hidden = Boolean(passage.hint);
                           const label = document.createElement('label');
                           label.textContent = 'Indice';
                           const textarea = document.createElement('textarea');
                           textarea.rows = 2;
                           textarea.maxLength = 1000;
                           textarea.value = passage.hint;
-                          textarea.placeholder = 'Un mot-clé ou une piste pour retrouver la réponse';
-                          textarea.setAttribute('aria-label', `Indice du passage ${number}`);
+                          textarea.placeholder =
+                            'Un mot-clé ou une piste pour retrouver la réponse';
+                          textarea.setAttribute('aria-label', 'Indice du passage ' + number);
                           textarea.disabled = value.busyId !== null;
                           label.append(textarea);
-                          panel.append(label);
+                          form.append(label);
                           const actions = document.createElement('span');
                           actions.className = 'review-hint-actions';
                           const save = document.createElement('button');
@@ -179,15 +196,25 @@ function maskExtension(
                             });
                             actions.append(remove);
                           }
-                          panel.append(actions);
-                          details.addEventListener('toggle', () => {
-                            if (details.open) textarea.focus({ preventScroll: true });
+                          form.append(actions);
+                          panel.append(form);
+                          edit.addEventListener('click', () => {
+                            note.hidden = true;
+                            edit.hidden = true;
+                            form.hidden = false;
+                            textarea.focus({ preventScroll: true });
+                            placeReviewPopup(details);
                           });
-                        } else {
-                          const hint = document.createElement('span');
-                          hint.textContent = passage.hint;
-                          hint.setAttribute('role', 'note');
-                          panel.append(hint);
+                          details.addEventListener('toggle', () => {
+                            if (details.open && !passage.hint)
+                              textarea.focus({ preventScroll: true });
+                            if (!details.open && passage.hint) {
+                              note.hidden = false;
+                              edit.hidden = false;
+                              form.hidden = true;
+                              textarea.value = passage.hint;
+                            }
+                          });
                         }
                         details.append(panel);
                       }

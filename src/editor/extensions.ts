@@ -12,10 +12,15 @@ import Mathematics from '@tiptap/extension-mathematics';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Fragment, Slice, type Node as PMNode } from '@tiptap/pm/model';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { clozeMarkerExtension, DEFAULT_CLOZE_MARKERS, type ClozeMarkerSettings } from './cloze-markers';
+import {
+  clozeMarkerExtension,
+  DEFAULT_CLOZE_MARKERS,
+  type ClozeMarkerSettings,
+} from './cloze-markers';
 
 export function reidentifyPastedSlice(slice: Slice): Slice {
   const ids = new Map<string, string>();
+  const groups = new Map<string, string>();
   function map(fragment: Fragment): Fragment {
     const children: PMNode[] = [];
     fragment.forEach((node) => {
@@ -23,7 +28,14 @@ export function reidentifyPastedSlice(slice: Slice): Slice {
         if (mark.type.name !== 'memoryAnchor') return mark;
         const source = mark.attrs.id;
         if (!ids.has(source)) ids.set(source, crypto.randomUUID());
-        return mark.type.create({ ...mark.attrs, id: ids.get(source), sourceId: source });
+        const groupId = mark.attrs.groupId as string | null;
+        if (groupId && !groups.has(groupId)) groups.set(groupId, crypto.randomUUID());
+        return mark.type.create({
+          ...mark.attrs,
+          id: ids.get(source),
+          sourceId: source,
+          groupId: groupId ? groups.get(groupId) : null,
+        });
       });
       children.push(node.isText ? node.mark(marks) : node.copy(map(node.content)).mark(marks));
     });
@@ -45,6 +57,7 @@ export const MemoryAnchor = Mark.create<{ clipboard?: MemoryClipboard }>({
     return {
       id: { default: null, parseHTML: (el) => el.getAttribute('data-memory-id') },
       sourceId: { default: null, parseHTML: (el) => el.getAttribute('data-memory-source') },
+      groupId: { default: null, parseHTML: (el) => el.getAttribute('data-memory-group') },
       hint: { default: null, parseHTML: (el) => el.getAttribute('data-memory-hint') },
       priority: { default: null, parseHTML: (el) => el.getAttribute('data-memory-priority') },
       initialDifficulty: {
@@ -62,6 +75,7 @@ export const MemoryAnchor = Mark.create<{ clipboard?: MemoryClipboard }>({
       {
         'data-memory-id': HTMLAttributes.id,
         'data-memory-source': HTMLAttributes.sourceId,
+        'data-memory-group': HTMLAttributes.groupId,
         'data-memory-hint': HTMLAttributes.hint,
         'data-memory-priority': HTMLAttributes.priority,
         'data-memory-initial-difficulty': HTMLAttributes.initialDifficulty,

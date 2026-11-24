@@ -11,12 +11,20 @@ import {
   type ClozeMarkerSettings,
 } from '../src/editor/cloze-markers';
 import { extractAnchors, type RichNode } from '../src/shared/document';
+import {
+  shortcutFromEvent,
+  validateShortcuts,
+  DEFAULT_EDITOR_SHORTCUTS,
+} from '../src/shared/editor-preferences';
 
 function makeEditor(text = '', settings?: { current: ClozeMarkerSettings }) {
   return new Editor({
     element: document.createElement('div'),
     extensions: editorExtensions(undefined, settings),
-    content: { type: 'doc', content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }] },
+    content: {
+      type: 'doc',
+      content: [{ type: 'paragraph', content: text ? [{ type: 'text', text }] : [] }],
+    },
   });
 }
 function pasteText(editor: Editor, text: string) {
@@ -29,7 +37,10 @@ describe('balises des trous', () => {
   it('analyse plusieurs trous et ignore les balises échappées et incomplètes', () => {
     const text = String.raw`Un <<chat>>, un <<chien>> et \<<texte littéral>> puis <<incomplet`;
     const pairs = findClozeMarkerPairs(text, DEFAULT_CLOZE_MARKERS);
-    expect(pairs.map((pair) => text.slice(pair.contentStart, pair.contentEnd))).toEqual(['chat', 'chien']);
+    expect(pairs.map((pair) => text.slice(pair.contentStart, pair.contentEnd))).toEqual([
+      'chat',
+      'chien',
+    ]);
     expect(findClozeMarkerPairs('<<  >>', DEFAULT_CLOZE_MARKERS)).toEqual([]);
     expect(findClozeMarkerPairs('<<extérieur <<intérieur>>', DEFAULT_CLOZE_MARKERS)).toEqual([]);
   });
@@ -37,9 +48,18 @@ describe('balises des trous', () => {
     const editor = makeEditor('Les <<chats>');
     editor.commands.setTextSelection(editor.state.doc.content.size - 1);
     const from = editor.state.selection.from;
-    const plugin = editor.state.plugins.find((p) => p.props.handleTextInput && p.spec.appendTransaction);
+    const plugin = editor.state.plugins.find(
+      (p) => p.props.handleTextInput && p.spec.appendTransaction,
+    );
     expect(plugin).toBeDefined();
-    const handled = plugin!.props.handleTextInput!.call(plugin!, editor.view, from, from, '>', () => editor.state.tr);
+    const handled = plugin!.props.handleTextInput!.call(
+      plugin!,
+      editor.view,
+      from,
+      from,
+      '>',
+      () => editor.state.tr,
+    );
     expect(handled).toBe(true);
     expect(editor.getText()).toBe('Les chats');
     expect(extractAnchors(editor.getJSON() as RichNode)).toMatchObject([
@@ -65,14 +85,16 @@ describe('balises des trous', () => {
       extensions: editorExtensions(),
       content: {
         type: 'doc',
-        content: [{
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: 'La <<', marks: [{ type: 'bold' }] },
-            { type: 'text', text: 'photosynthèse', marks: [{ type: 'italic' }] },
-            { type: 'text', text: '>>' },
-          ],
-        }],
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: 'La <<', marks: [{ type: 'bold' }] },
+              { type: 'text', text: 'photosynthèse', marks: [{ type: 'italic' }] },
+              { type: 'text', text: '>>' },
+            ],
+          },
+        ],
       },
     });
     editor.commands.setTextSelection(editor.state.doc.content.size - 1);
@@ -90,14 +112,16 @@ describe('balises des trous', () => {
       extensions: editorExtensions(),
       content: {
         type: 'doc',
-        content: [{
-          type: 'paragraph',
-          content: [
-            { type: 'text', text: '<<' },
-            { type: 'text', text: 'existant', marks: [{ type: 'memoryAnchor', attrs: { id } }] },
-            { type: 'text', text: '>>' },
-          ],
-        }],
+        content: [
+          {
+            type: 'paragraph',
+            content: [
+              { type: 'text', text: '<<' },
+              { type: 'text', text: 'existant', marks: [{ type: 'memoryAnchor', attrs: { id } }] },
+              { type: 'text', text: '>>' },
+            ],
+          },
+        ],
       },
     });
     editor.commands.setTextSelection(editor.state.doc.content.size - 1);
@@ -113,7 +137,10 @@ describe('balises des trous', () => {
     expect(extractAnchors(editor.getJSON() as RichNode).map((a) => a.quote)).toEqual(['oiseaux']);
     settings.current = { opening: '{{', closing: '}}' };
     pasteText(editor, ' Puis {{hiboux}}.');
-    expect(extractAnchors(editor.getJSON() as RichNode).map((a) => a.quote)).toEqual(['oiseaux', 'hiboux']);
+    expect(extractAnchors(editor.getJSON() as RichNode).map((a) => a.quote)).toEqual([
+      'oiseaux',
+      'hiboux',
+    ]);
     editor.destroy();
   });
   it('valide les paramètres et les conserve par compte', () => {
@@ -125,4 +152,26 @@ describe('balises des trous', () => {
     expect(readClozeMarkers(ownerId)).toEqual({ opening: '{{', closing: '}}' });
     expect(readClozeMarkers(crypto.randomUUID())).toEqual(DEFAULT_CLOZE_MARKERS);
   });
+});
+
+it('capte les raccourcis et refuse les collisions avec le navigateur', () => {
+  expect(validateShortcuts(DEFAULT_EDITOR_SHORTCUTS)).toBeNull();
+  expect(
+    shortcutFromEvent({ key: 'K', ctrlKey: true, metaKey: false, shiftKey: true, altKey: false }),
+  ).toBe('Mod-Shift-k');
+  expect(
+    shortcutFromEvent({
+      key: 'Enter',
+      ctrlKey: false,
+      metaKey: false,
+      shiftKey: false,
+      altKey: true,
+    }),
+  ).toBe('Alt-Enter');
+  expect(validateShortcuts({ create: 'Mod-s', link: 'Mod-Shift-l', edit: 'Alt-Enter' })).toContain(
+    'réservé',
+  );
+  expect(
+    validateShortcuts({ create: 'Alt-Enter', link: 'Alt-Enter', edit: 'Mod-Shift-l' }),
+  ).toContain('différente');
 });
