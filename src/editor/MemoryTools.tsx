@@ -60,6 +60,15 @@ export function MemoryTools({
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const popover = useRef<HTMLDivElement>(null);
   const lastCreatedId = useRef<string | null>(null);
+  const pointerSelection = useRef<{ from: number; to: number } | null>(null);
+  function preserveLinkSelection(event: React.PointerEvent<HTMLButtonElement>) {
+    const { from, to, empty } = editor.state.selection;
+    if (!empty) pointerSelection.current = { from, to };
+    // On touch screens the default pointer action may collapse the editor
+    // selection before click fires, unlike desktop mousedown.
+    if (event.pointerType === 'touch') event.preventDefault();
+  }
+
   const shortcutsRef = useRef(shortcuts);
   shortcutsRef.current = shortcuts;
   const live = useEditorState({
@@ -116,7 +125,6 @@ export function MemoryTools({
     setPriority(a.priority ?? p?.priority ?? 'medium');
     setDifficulty(p?.difficulty ?? a.initialDifficulty ?? 'unrated');
     setActive(id);
-    lastCreatedId.current = id;
   }
   function create() {
     setError('');
@@ -132,18 +140,58 @@ export function MemoryTools({
   function createLinked() {
     setError('');
     try {
-      const base = lastCreatedId.current || live.anchors.at(-1)?.id;
-      if (!base) throw new Error('Créez ou sélectionnez d’abord un trou de référence.');
-      const selected = editor.state.selection.$from
-        .marks()
-        .find((m) => m.type.name === 'memoryAnchor');
-      if (selected && selected.attrs.id !== base) {
-        linkPassages(editor, base, selected.attrs.id);
-      } else {
-        const to = editor.state.selection.to;
-        lastCreatedId.current = createLinkedPassage(editor, base);
-        editor.chain().focus().setTextSelection(to).unsetMark('memoryAnchor').run();
+      const preserved = pointerSelection.current;
+      pointerSelection.current = null;
+      if (
+        preserved &&
+        (editor.state.selection.from !== preserved.from ||
+          editor.state.selection.to !== preserved.to)
+      ) {
+        editor.commands.setTextSelection(preserved);
       }
+      const { from, to, empty } = editor.state.selection;
+      if (empty) throw new Error('Sélectionnez d’abord le texte du nouveau trou.');
+      // A selection containing only an already-marked passage means 'associate'.
+      // Reading $from.marks() is unsafe on a mark boundary: it may refer to the
+      // previous hole even though the new text itself has no annotation.
+      let selectedId: string | null = null;
+      let wholeMarkedSelection = true;
+      editor.state.doc.nodesBetween(from, to, (node, pos) => {
+        if (!node.isInline || pos >= to || pos + node.nodeSize <= from) return;
+        if (!node.isText && node.type.name !== 'inlineMath') return;
+        const mark = node.marks.find((m) => m.type.name === 'memoryAnchor');
+        if (!mark || (selectedId && selectedId !== mark.attrs.id)) wholeMarkedSelection = false;
+        if (mark) selectedId = mark.attrs.id;
+      });
+      const targetId = wholeMarkedSelection ? selectedId : null;
+      const anchors = extractAnchors(editor.getJSON() as RichNode);
+      const last = lastCreatedId.current;
+      let base = last && anchors.some((a) => a.id === last) && last !== targetId ? last : null;
+      if (!base) {
+        if (targetId) {
+          const index = anchors.findIndex((a) => a.id === targetId);
+          base =
+            [...anchors.slice(0, index)].reverse().find((a) => a.id !== targetId)?.id ||
+            anchors.find((a) => a.id !== targetId)?.id ||
+            null;
+        } else {
+          base = anchors.at(-1)?.id || null;
+        }
+      }
+      if (!base)
+        throw new Error(
+          targetId
+            ? 'Il faut au moins deux trous pour les associer.'
+            : 'Créez d’abord un premier trou, puis sélectionnez le texte à lui lier.',
+        );
+      if (targetId) {
+        linkPassages(editor, base, targetId);
+      } else {
+        const end = editor.state.selection.to;
+        createLinkedPassage(editor, base);
+        editor.chain().focus().setTextSelection(end).unsetMark('memoryAnchor').run();
+      }
+      lastCreatedId.current = base;
       setActive(null);
     } catch (e) {
       setError((e as Error).message);
@@ -379,6 +427,7 @@ export function MemoryTools({
                 aria-label="Lier la sélection au dernier trou"
                 title={'Lier au dernier trou (' + shortcutLabel(shortcuts.link) + ')'}
                 onMouseDown={(e) => e.preventDefault()}
+                onPointerDown={preserveLinkSelection}
                 disabled={live.empty}
                 onClick={createLinked}
               >
@@ -437,7 +486,12 @@ export function MemoryTools({
             <Plus size={16} />
             Texte à trous
           </button>
-          <button onMouseDown={(e) => e.preventDefault()} onClick={createLinked}>
+          <button
+            onMouseDown={(e) => e.preventDefault()}
+            onPointerDown={preserveLinkSelection}
+            disabled={!live.anchors.length}
+            onClick={createLinked}
+          >
             Lier au dernier trou
           </button>
           <button onMouseDown={(e) => e.preventDefault()} onClick={onAI}>

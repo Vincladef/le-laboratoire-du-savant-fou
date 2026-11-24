@@ -1,6 +1,17 @@
 import type { Editor } from '@tiptap/core';
 import type { Difficulty, Priority } from '../shared/learning';
 import { extractAnchors, type RichNode } from '../shared/document';
+/** Validate a genuinely new annotation, never a fragment already masked. */
+function validateNewPassageSelection(editor: Editor, linking = false) {
+  const { from, to, empty } = editor.state.selection;
+  if (empty || !editor.state.doc.textBetween(from, to, '\n', '\ufffc').trim())
+    throw new Error(
+      linking
+        ? 'Sélectionnez le texte à transformer en trou lié.'
+        : 'Sélectionnez le passage à mémoriser.',
+    );
+  return { from, to };
+}
 export function createPassage(
   editor: Editor,
   hint: string,
@@ -8,9 +19,7 @@ export function createPassage(
   initialDifficulty: Difficulty = 'unrated',
   groupId: string | null = null,
 ) {
-  const { from, to, empty } = editor.state.selection;
-  if (empty || !editor.state.doc.textBetween(from, to, '\n', '\ufffc').trim())
-    throw new Error('Sélectionnez le passage à mémoriser.');
+  const { from, to } = validateNewPassageSelection(editor, true);
   let overlap = false,
     unsupported = false,
     count = 0;
@@ -126,17 +135,55 @@ export function linkPassages(editor: Editor, sourceId: string, targetId: string)
   return { groupId, memberCount: linked.size };
 }
 
+/** One editor transaction: either the new mark and its source are linked, or
+ * neither is modified. This is important for autosave and keyboard/touch input.
+ */
 export function createLinkedPassage(editor: Editor, sourceId: string) {
   const source = extractAnchors(editor.getJSON() as RichNode).find((a) => a.id === sourceId);
-  if (!source) throw new Error('Le trou de référence a disparu.');
-  const target = createPassage(
-    editor,
-    source.hint || '',
-    source.priority || 'medium',
-    source.initialDifficulty || 'unrated',
+  if (!source) throw new Error('Le trou de référence a disparu. Rechargez le document.');
+  const { from, to } = validateNewPassageSelection(editor, true);
+  let overlap = false,
+    unsupported = false,
+    count = 0;
+  editor.state.doc.nodesBetween(from, to, (node, pos, parent) => {
+    if (!node.isInline || pos + node.nodeSize <= from || pos >= to) return;
+    if (node.marks.some((m) => m.type.name === 'memoryAnchor')) overlap = true;
+    if (parent && !parent.type.allowsMarkType(editor.schema.marks.memoryAnchor)) unsupported = true;
+    if (node.isText || node.type.name === 'inlineMath') count++;
+  });
+  if (overlap)
+    throw new Error(
+      'Ce texte contient déjà un trou. Sélectionnez-le pour l’associer, ou choisissez du texte neuf.',
+    );
+  if (unsupported || !count)
+    throw new Error('Sélectionnez du texte éditable pour créer le trou lié.');
+  const groupId = source.groupId || source.id;
+  const id = crypto.randomUUID();
+  const tr = editor.state.tr;
+  if (!source.groupId) {
+    editor.state.doc.descendants((node, pos) => {
+      const mark = node.marks.find(
+        (m) => m.type.name === 'memoryAnchor' && m.attrs.id === source.id,
+      );
+      if (!mark) return;
+      tr.removeMark(pos, pos + node.nodeSize, mark);
+      tr.addMark(pos, pos + node.nodeSize, mark.type.create({ ...mark.attrs, groupId }));
+    });
+  }
+  tr.addMark(
+    from,
+    to,
+    editor.schema.marks.memoryAnchor.create({
+      id,
+      sourceId: null,
+      groupId,
+      hint: source.hint || '',
+      priority: source.priority || 'medium',
+      initialDifficulty: source.initialDifficulty || 'unrated',
+    }),
   );
-  linkPassages(editor, sourceId, target);
-  return target;
+  editor.view.dispatch(tr);
+  return id;
 }
 
 export function unlinkPassage(editor: Editor, id: string) {
