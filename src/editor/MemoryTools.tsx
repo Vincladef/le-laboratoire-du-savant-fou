@@ -501,7 +501,8 @@ export function MemoryTools({
               (a) =>
                 a.id !== active &&
                 a.quote.trim() === live.anchors.find((p) => p.id === active)?.quote.trim() &&
-                a.groupId !== live.anchors.find((p) => p.id === active)?.groupId,
+                (a.groupId || a.id) !==
+                  (live.anchors.find((p) => p.id === active)?.groupId || active),
             ) && (
               <button
                 type="button"

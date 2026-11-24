@@ -480,4 +480,13 @@ test('trous liés : une seule question, révélation simultanée, réglages comm
   expect(rows.map((p: any) => p.difficulty)).toEqual(['hard', 'hard']);
   await page.goto('/study/' + id);
   await expect(page.locator('.review-context')).toContainText('0 / 2 réponses révélées');
+  await page.goto('/document/' + id);
+  await editor.locator('[data-memory-id]').first().click();
+  await expect(
+    page.getByRole('button', { name: 'Associer les occurrences identiques' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Associer les occurrences identiques' }).click();
+  await saved(page);
+  await page.goto('/study/' + id);
+  await expect(page.locator('.review-context')).toContainText('0 / 1 réponses révélées');
 });
